@@ -31,11 +31,23 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [playerReady, setPlayerReady] = useState(false);
 
-  // Flags to prevent echo loops
-  const isRemoteSyncRef = useRef<boolean>(false);
-  const lastKnownVideoIdRef = useRef<string>(videoId);
+  // Dynamic refs to avoid stale closures in YouTube callbacks
+  const userRoleRef = useRef<Role>(userRole);
+  userRoleRef.current = userRole;
+
+  const onLocalPlayRef = useRef(onLocalPlay);
+  onLocalPlayRef.current = onLocalPlay;
+
+  const onLocalPauseRef = useRef(onLocalPause);
+  onLocalPauseRef.current = onLocalPause;
+
   const syncStateRef = useRef<SyncStatePayload | null>(syncState);
   syncStateRef.current = syncState;
+
+  const lastKnownVideoIdRef = useRef<string>(videoId);
+
+  // Timestamp threshold to ignore programmatic player events
+  const ignoreStateChangesUntilRef = useRef<number>(0);
 
   // Initialize YouTube IFrame API script
   useEffect(() => {
@@ -70,30 +82,29 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
           onStateChange: (event: any) => {
             if (!isMounted) return;
 
-            // If state change was triggered by our remote sync, don't emit back
-            if (isRemoteSyncRef.current) {
-              isRemoteSyncRef.current = false;
+            // Ignore state changes caused by programmatic updates from remote sync
+            if (Date.now() < ignoreStateChangesUntilRef.current) {
               return;
             }
 
-            // Only HOST or MODERATOR actions should emit to server
-            const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
+            // Always check latest role via ref to avoid stale closure
+            const canControl = userRoleRef.current === 'HOST' || userRoleRef.current === 'MODERATOR';
 
             // YT.PlayerState.PLAYING = 1, PAUSED = 2
             if (event.data === window.YT.PlayerState.PLAYING) {
               if (canControl) {
                 const currentTime = playerRef.current?.getCurrentTime() || 0;
-                onLocalPlay(currentTime);
+                onLocalPlayRef.current(currentTime);
               } else {
-                // Participant tried to play, reconcile with server state
+                // Participant clicked play: snap back to server authoritative state
                 reconcileWithServer();
               }
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               if (canControl) {
                 const currentTime = playerRef.current?.getCurrentTime() || 0;
-                onLocalPause(currentTime);
+                onLocalPauseRef.current(currentTime);
               } else {
-                // Participant tried to pause, reconcile with server state
+                // Participant clicked pause: snap back to server authoritative state
                 reconcileWithServer();
               }
             }
@@ -136,7 +147,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
     if (videoId !== lastKnownVideoIdRef.current) {
       lastKnownVideoIdRef.current = videoId;
-      isRemoteSyncRef.current = true;
+      ignoreStateChangesUntilRef.current = Date.now() + 1000;
       try {
         playerRef.current.loadVideoById(videoId);
       } catch (err) {
@@ -154,34 +165,46 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     // Load new video if changed
     if (targetVideoId !== lastKnownVideoIdRef.current) {
       lastKnownVideoIdRef.current = targetVideoId;
-      isRemoteSyncRef.current = true;
+      ignoreStateChangesUntilRef.current = Date.now() + 1000;
       playerRef.current.loadVideoById(targetVideoId);
     }
 
-    // Calculate effective target time factoring elapsed time if playing
-    let targetTime = currentTime;
-    if (playState === 'playing') {
-      const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
-      targetTime = currentTime + elapsed;
+    // If PAUSED on server, strictly enforce pause without any elapsed time addition
+    if (playState === 'paused') {
+      const currentYtState = playerRef.current.getPlayerState();
+      const localTime = playerRef.current.getCurrentTime() || 0;
+
+      // If drifted by more than 1.5s from the pause point, seek to pause point
+      if (Math.abs(localTime - currentTime) > 1.5) {
+        ignoreStateChangesUntilRef.current = Date.now() + 1000;
+        playerRef.current.seekTo(currentTime, true);
+      }
+
+      if (currentYtState !== window.YT?.PlayerState?.PAUSED) {
+        ignoreStateChangesUntilRef.current = Date.now() + 1000;
+        playerRef.current.pauseVideo();
+      }
+      return;
     }
+
+    // If PLAYING on server, calculate effective target time factoring elapsed time
+    const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
+    const targetTime = currentTime + elapsed;
 
     const localTime = playerRef.current.getCurrentTime() || 0;
     const drift = Math.abs(localTime - targetTime);
 
     // If drift is significant (> 1.5 seconds), seek
     if (drift > 1.5) {
-      isRemoteSyncRef.current = true;
+      ignoreStateChangesUntilRef.current = Date.now() + 1000;
       playerRef.current.seekTo(targetTime, true);
     }
 
-    // Match play/pause state
+    // Match playing state
     const currentYtState = playerRef.current.getPlayerState();
-    if (playState === 'playing' && currentYtState !== window.YT?.PlayerState?.PLAYING) {
-      isRemoteSyncRef.current = true;
+    if (currentYtState !== window.YT?.PlayerState?.PLAYING) {
+      ignoreStateChangesUntilRef.current = Date.now() + 1000;
       playerRef.current.playVideo();
-    } else if (playState === 'paused' && currentYtState !== window.YT?.PlayerState?.PAUSED) {
-      isRemoteSyncRef.current = true;
-      playerRef.current.pauseVideo();
     }
   };
 
@@ -190,7 +213,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     reconcileWithServer();
   }, [syncState, playerReady]);
 
-  // Periodic progress tracker and drift guard
+  // Periodic progress tracker and drift guard (ONLY active while PLAYING)
   useEffect(() => {
     const timer = setInterval(() => {
       if (!playerReady || !playerRef.current) return;
@@ -200,12 +223,17 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         const dur = playerRef.current.getDuration() || 0;
         onCurrentTimeChange(time, dur);
 
-        // Drift check if playing
-        if (syncStateRef.current && syncStateRef.current.playState === 'playing') {
-          const elapsed = Math.max(0, (Date.now() - syncStateRef.current.updatedAt) / 1000);
-          const expected = syncStateRef.current.currentTime + elapsed;
+        const currentSync = syncStateRef.current;
+        // ONLY perform drift correction if server is in playing state AND not in programmatic debounce
+        if (
+          currentSync &&
+          currentSync.playState === 'playing' &&
+          Date.now() > ignoreStateChangesUntilRef.current
+        ) {
+          const elapsed = Math.max(0, (Date.now() - currentSync.updatedAt) / 1000);
+          const expected = currentSync.currentTime + elapsed;
           if (Math.abs(time - expected) > 2.5) {
-            isRemoteSyncRef.current = true;
+            ignoreStateChangesUntilRef.current = Date.now() + 1000;
             playerRef.current.seekTo(expected, true);
           }
         }

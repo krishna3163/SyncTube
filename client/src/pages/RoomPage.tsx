@@ -56,6 +56,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [newVideoUrl, setNewVideoUrl] = useState<string>('');
+  const currentTimeRef = useRef<number>(0);
 
   const addActivity = useCallback((text: string, type: ActivityItem['type']) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -158,17 +159,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   }, [roomId, username, userId, onLeaveRoom, onNotify, addActivity]);
 
   // Actions
-  const handlePlay = useCallback(() => {
-    emitPlay(currentTime);
+  const handlePlay = useCallback((time?: number) => {
+    const target = typeof time === 'number' ? time : currentTimeRef.current;
+    emitPlay(target);
     addActivity('You played the video.', 'playback');
-  }, [currentTime, addActivity]);
+  }, [addActivity]);
 
-  const handlePause = useCallback(() => {
-    emitPause(currentTime);
+  const handlePause = useCallback((time?: number) => {
+    const target = typeof time === 'number' ? time : currentTimeRef.current;
+    emitPause(target);
     addActivity('You paused the video.', 'playback');
-  }, [currentTime, addActivity]);
+  }, [addActivity]);
 
   const handleSeek = useCallback((time: number) => {
+    currentTimeRef.current = time;
     emitSeek(time);
     addActivity(`You seeked to ${Math.floor(time)}s.`, 'playback');
   }, [addActivity]);
@@ -197,6 +201,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   }, []);
 
   const handleTimeChange = useCallback((time: number, dur: number) => {
+    currentTimeRef.current = time;
     setCurrentTime(time);
     setDuration(dur);
   }, []);

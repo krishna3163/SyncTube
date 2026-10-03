@@ -204,10 +204,11 @@ export class Room {
   }
 
   public toSyncStatePayload(): SyncStatePayload {
+    const time = this.playState === 'paused' ? this.currentTime : this.getEffectiveCurrentTime();
     return {
       videoId: this.videoId,
       playState: this.playState,
-      currentTime: Math.round(this.getEffectiveCurrentTime() * 100) / 100,
+      currentTime: Math.round(time * 100) / 100,
       updatedAt: this.updatedAt,
     };
   }
