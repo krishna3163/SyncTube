@@ -44,15 +44,15 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     const initPlayer = () => {
       if (!isMounted || !window.YT || !window.YT.Player) return;
 
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
+      if (!containerRef.current) return;
+      containerRef.current.innerHTML = '<div class="video-iframe"></div>';
+      const slot = containerRef.current.firstElementChild as HTMLElement;
 
-      playerRef.current = new window.YT.Player('youtube-player-slot', {
+      playerRef.current = new window.YT.Player(slot, {
         height: '100%',
         width: '100%',
         videoId: videoId,
+        host: 'https://www.youtube.com',
         playerVars: {
           autoplay: 0,
           controls: 1,
@@ -217,7 +217,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   return (
     <div className="video-wrapper" ref={containerRef}>
-      <div id="youtube-player-slot" className="video-iframe" />
+      <div className="video-iframe" />
     </div>
   );
 };
