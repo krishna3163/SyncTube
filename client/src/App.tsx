@@ -35,32 +35,32 @@ export function App() {
     }
   }, []);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = React.useCallback((message: string, type: 'success' | 'error' = 'success') => {
     const id = `${Date.now()}_${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4000);
-  };
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = React.useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
 
-  const handleEnterRoom = (targetRoomId: string, user: string) => {
+  const handleEnterRoom = React.useCallback((targetRoomId: string, user: string) => {
     setRoomId(targetRoomId);
     setUsername(user);
     sessionStorage.setItem('synctube_username', user);
     // Update URL query string without reloading
     const newUrl = `${window.location.pathname}?room=${targetRoomId}`;
     window.history.pushState({ path: newUrl }, '', newUrl);
-  };
+  }, []);
 
-  const handleLeaveRoom = () => {
+  const handleLeaveRoom = React.useCallback(() => {
     setRoomId(null);
     const newUrl = window.location.pathname;
     window.history.pushState({ path: newUrl }, '', newUrl);
-  };
+  }, []);
 
   return (
     <div>

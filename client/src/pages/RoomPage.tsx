@@ -66,6 +66,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     ]);
   }, []);
 
+  // Stable callback refs
+  const onNotifyRef = useRef(onNotify);
+  onNotifyRef.current = onNotify;
+
+  const onLeaveRoomRef = useRef(onLeaveRoom);
+  onLeaveRoomRef.current = onLeaveRoom;
+
+  const addActivityRef = useRef(addActivity);
+  addActivityRef.current = addActivity;
+
   // Connect socket and register listeners
   useEffect(() => {
     socket.connect();
@@ -73,17 +83,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const onConnect = () => {
       setConnectionStatus('connected');
       emitJoinRoom(roomId, username, userId);
-      addActivity('Connected to room session.', 'joined');
+      addActivityRef.current('Connected to room session.', 'joined');
     };
 
     const onDisconnect = () => {
       setConnectionStatus('disconnected');
-      addActivity('Disconnected from server.', 'error');
+      addActivityRef.current('Disconnected from server.', 'error');
     };
 
     const onConnectError = () => {
       setConnectionStatus('disconnected');
-      onNotify('Failed to connect to real-time server.', 'error');
     };
 
     const onSyncState = (data: SyncStatePayload) => {
@@ -96,37 +105,39 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       if (data.userId === userId) {
         setUserRole(data.role);
       }
-      addActivity(`${data.username} joined as ${data.role.toLowerCase()}`, 'joined');
+      addActivityRef.current(`${data.username} joined as ${data.role.toLowerCase()}`, 'joined');
     };
 
     const onUserLeft = (data: UserLeftPayload) => {
       setParticipants(data.participants);
-      addActivity(`${data.username} left the room.`, 'left');
+      addActivityRef.current(`${data.username} left the room.`, 'left');
     };
 
     const onRoleAssigned = (data: RoleAssignedPayload) => {
       setParticipants(data.participants);
       if (data.userId === userId) {
         setUserRole(data.role);
-        onNotify(`Your role was updated to ${data.role}`, 'success');
+        onNotifyRef.current(`Your role was updated to ${data.role}`, 'success');
       }
-      addActivity(`${data.username} was assigned role ${data.role}`, 'role');
+      addActivityRef.current(`${data.username} was assigned role ${data.role}`, 'role');
     };
 
     const onParticipantRemoved = (data: ParticipantRemovedPayload) => {
       setParticipants(data.participants);
       if (data.userId === userId) {
-        onNotify('You were removed from this room by the host.', 'error');
-        onLeaveRoom();
+        onNotifyRef.current('You were removed from this room by the host.', 'error');
+        onLeaveRoomRef.current();
       } else {
-        addActivity('A participant was removed by the host.', 'removed');
+        addActivityRef.current('A participant was removed by the host.', 'removed');
       }
     };
 
     const onError = (err: ErrorPayload) => {
-      onNotify(`[${err.code}] ${err.message}`, 'error');
-      if (err.code === 'FORBIDDEN' && err.message.toLowerCase().includes('removed')) {
-        setTimeout(onLeaveRoom, 1500);
+      onNotifyRef.current(`[${err.code}] ${err.message}`, 'error');
+      if (err.code === 'NOT_FOUND') {
+        setTimeout(() => onLeaveRoomRef.current(), 1500);
+      } else if (err.code === 'FORBIDDEN' && err.message.toLowerCase().includes('removed')) {
+        setTimeout(() => onLeaveRoomRef.current(), 1500);
       }
     };
 
@@ -156,7 +167,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('error', onError);
       emitLeaveRoom(roomId);
     };
-  }, [roomId, username, userId, onLeaveRoom, onNotify, addActivity]);
+  }, [roomId, username, userId]);
 
   // Actions
   const handlePlay = useCallback((time?: number) => {
