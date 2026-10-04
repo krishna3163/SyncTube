@@ -48,6 +48,9 @@ export const getApiUrl = (): string => {
     if (!isLocalhost && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
       return '';
     }
+    if (!isLocalhost && !envUrl && hostname.includes('vercel.app')) {
+      return 'https://synctube-2ar4.onrender.com';
+    }
   }
   return envUrl || '';
 };
