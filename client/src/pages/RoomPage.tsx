@@ -330,10 +330,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         username: userSettings.name || username,
         role: userRole,
         videoId,
+        avatarId: userSettings.avatarId,
         lastVisited: Date.now(),
       });
     }
-  }, [roomId, username, userSettings.name, userRole, videoId]);
+  }, [roomId, username, userSettings.name, userSettings.avatarId, userRole, videoId]);
 
   // Connect socket and register listeners
   useEffect(() => {

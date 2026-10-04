@@ -48,22 +48,30 @@ export const getApiUrl = (): string => {
 };
 
 export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => {
-  const [createUsername, setCreateUsername] = useState('');
+  // Saved user profile from localStorage
+  const savedSettings = (() => {
+    try {
+      const saved = localStorage.getItem('synctube_user_settings');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const initialName = savedSettings?.name || '';
+  const [createUsername, setCreateUsername] = useState(initialName);
   const [createVideoUrl, setCreateVideoUrl] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const [joinUsername, setJoinUsername] = useState('');
+  const [joinUsername, setJoinUsername] = useState(initialName);
   const [joinRoomCode, setJoinRoomCode] = useState('');
+
+  // Current active user to filter history
+  const activeUsername = (createUsername || joinUsername || initialName || '').trim();
 
   // Selected Profile Avatar ID
   const [selectedAvatarId, setSelectedAvatarId] = useState<string>(() => {
-    const saved = localStorage.getItem('synctube_user_settings');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.avatarId) return parsed.avatarId;
-      } catch {}
-    }
+    if (savedSettings?.avatarId) return savedSettings.avatarId;
     return localStorage.getItem('synctube_avatar_id') || 'tanjiro';
   });
 
@@ -71,15 +79,15 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
 
-  // Stored watch parties in browser
+  // Stored watch parties in browser (filtered by user)
   const [storedParties, setStoredParties] = useState<StoredWatchParty[]>([]);
 
   useEffect(() => {
-    setStoredParties(getStoredParties());
-  }, []);
+    setStoredParties(getStoredParties(activeUsername || undefined));
+  }, [activeUsername]);
 
-  const refreshParties = () => {
-    setStoredParties(getStoredParties());
+  const refreshParties = (userToFilter?: string) => {
+    setStoredParties(getStoredParties(userToFilter || activeUsername || undefined));
   };
 
   // Check if URL has ?room=ABC123
@@ -150,7 +158,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
         avatarId: selectedAvatarId,
         lastVisited: Date.now(),
       });
-      refreshParties();
+      refreshParties(createUsername.trim());
       onNotify(`Room ${data.roomId} created!`, 'success');
       onEnterRoom(data.roomId, createUsername.trim(), true);
     } catch (err) {
@@ -191,7 +199,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
         avatarId: selectedAvatarId,
         lastVisited: Date.now(),
       });
-      refreshParties();
+      refreshParties(joinUsername.trim());
 
       onEnterRoom(normalizedRoom, joinUsername.trim(), false);
     } catch (err) {
@@ -241,14 +249,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
 
   const handleRemoveParty = (roomId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updated = removeStoredParty(roomId);
+    const updated = removeStoredParty(roomId, activeUsername || undefined);
     setStoredParties(updated);
     onNotify(`Removed Room ${roomId} from history.`, 'success');
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Clear all stored watch party history in this browser?')) {
-      clearStoredParties();
+    const confirmPrompt = activeUsername
+      ? `Clear watch party history for "${activeUsername}"?`
+      : 'Clear all stored watch party history in this browser?';
+    if (window.confirm(confirmPrompt)) {
+      clearStoredParties(activeUsername || undefined);
       setStoredParties([]);
       onNotify('Watch party history cleared.', 'success');
     }
@@ -539,7 +550,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
           <div className="stored-parties-header">
             <div className="stored-parties-title-wrap">
               <RotateCcw size={19} color="var(--accent)" />
-              <h2 className="stored-parties-title">Your Watch Party History</h2>
+              <h2 className="stored-parties-title">
+                {activeUsername ? `${activeUsername}'s Watch Party History` : 'Your Watch Party History'}
+              </h2>
               <span className="stored-parties-count">{storedParties.length} saved</span>
             </div>
 
@@ -559,7 +572,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
           {storedParties.length === 0 ? (
             <div className="stored-parties-empty">
               <Tv size={32} color="var(--text-muted)" style={{ opacity: 0.6, marginBottom: '0.5rem' }} />
-              <p className="empty-text">No watch parties saved in this browser yet.</p>
+              <p className="empty-text">
+                {activeUsername
+                  ? `No watch parties saved for "${activeUsername}" yet.`
+                  : 'No watch parties saved in this browser yet.'}
+              </p>
               <p className="empty-subtext">
                 Create a new room or join an existing session above and it will be saved here automatically for quick rejoining!
               </p>
