@@ -39,7 +39,7 @@ async function bootstrap() {
 
   const io = new Server(server, {
     cors: {
-      origin: allowedOrigins,
+      origin: isAllowedOrigin,
       methods: ['GET', 'POST'],
       credentials: true,
     },

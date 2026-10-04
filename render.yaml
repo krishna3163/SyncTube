@@ -2,7 +2,7 @@ services:
   - type: web
     name: youtube-watch-party-api
     runtime: node
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build:server
     startCommand: npm start
     healthCheckPath: /health
     envVars:
