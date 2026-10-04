@@ -10,10 +10,12 @@ import {
   Send,
   HelpCircle,
   CheckCircle2,
-  XCircle,
+  SkipForward,
 } from 'lucide-react';
 import { PendingActionRequest, Role } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
+import { AnimeAvatarDisplay } from './AnimeAvatar.js';
+import { getParticipantCharacterId } from '../utils/characterMemory.js';
 
 interface ActionRequestsPanelProps {
   pendingRequests: PendingActionRequest[];
@@ -21,10 +23,10 @@ interface ActionRequestsPanelProps {
   currentUserId: string;
   currentTime: number;
   onRequestAction: (
-    type: 'play' | 'pause' | 'seek' | 'change_video',
-    data?: { time?: number; videoId?: string }
+    type: 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video',
+    data?: { time?: number; videoId?: string; title?: string; duration?: string; channel?: string }
   ) => void;
-  onRespondRequest: (requestId: string, approved: boolean) => void;
+  onRespondRequest: (requestId: string, approved: boolean, mode?: 'now' | 'next') => void;
 }
 
 export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
@@ -39,10 +41,17 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
   const [videoInput, setVideoInput] = useState('');
   const [seekSeconds, setSeekSeconds] = useState<string>(Math.floor(currentTime).toString());
 
-  const handleRequestVideo = (e: React.FormEvent) => {
+  const handleRequestVideoNow = (e: React.FormEvent) => {
     e.preventDefault();
     if (!videoInput.trim()) return;
     onRequestAction('change_video', { videoId: videoInput.trim() });
+    setVideoInput('');
+  };
+
+  const handleRequestVideoNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!videoInput.trim()) return;
+    onRequestAction('request_next_video', { videoId: videoInput.trim() });
     setVideoInput('');
   };
 
@@ -76,12 +85,20 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
             Requested to <strong>Seek</strong> to {formatTime(req.data?.time || 0)}
           </span>
         );
+      case 'request_next_video':
+        return (
+          <span className="req-desc">
+            <SkipForward size={14} className="req-type-icon next-icon" />
+            Requested to queue as <strong>Next Video</strong>:{' '}
+            <strong className="req-video-title">{req.data?.title || req.data?.videoId}</strong>
+          </span>
+        );
       case 'change_video':
         return (
           <span className="req-desc">
             <Tv size={14} className="req-type-icon video-icon" />
-            Requested to <strong>Change Video</strong> to{' '}
-            <code className="req-video-code">{req.data?.videoId}</code>
+            Requested to <strong>Play Now</strong>:{' '}
+            <strong className="req-video-title">{req.data?.title || req.data?.videoId}</strong>
           </span>
         );
       default:
@@ -106,7 +123,7 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
         <div className="participant-request-box">
           <div className="request-box-heading">
             <HelpCircle size={14} />
-            <span>Need a change? Ask the Host/Mod to approve:</span>
+            <span>Need a change? Ask Host/Mod to approve:</span>
           </div>
 
           <div className="quick-request-buttons">
@@ -128,28 +145,42 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
             </button>
           </div>
 
-          {/* Request Video Change */}
-          <form onSubmit={handleRequestVideo} className="request-field-form">
+          {/* Request Video Change / Play Next */}
+          <div className="request-video-section" style={{ marginTop: '0.6rem' }}>
             <input
               type="text"
               className="chat-input"
-              style={{ fontSize: '0.82rem' }}
+              style={{ fontSize: '0.82rem', width: '100%', marginBottom: '0.35rem' }}
               placeholder="Paste YouTube URL or ID..."
               value={videoInput}
               onChange={(e) => setVideoInput(e.target.value)}
             />
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={!videoInput.trim()}
-              title="Request this video to be played"
-            >
-              <Send size={13} />
-            </button>
-          </form>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={!videoInput.trim()}
+                onClick={handleRequestVideoNext}
+                title="Request this video to play next in playlist"
+                style={{ flex: 1, fontSize: '0.78rem', justifyContent: 'center' }}
+              >
+                <SkipForward size={13} /> Request Next
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!videoInput.trim()}
+                onClick={handleRequestVideoNow}
+                title="Request to switch video immediately"
+                style={{ flex: 1, fontSize: '0.78rem', justifyContent: 'center' }}
+              >
+                <Send size={13} /> Play Now
+              </button>
+            </div>
+          </div>
 
           {/* Request Seek */}
-          <form onSubmit={handleRequestSeek} className="request-field-form" style={{ marginTop: '0.4rem' }}>
+          <form onSubmit={handleRequestSeek} className="request-field-form" style={{ marginTop: '0.6rem' }}>
             <input
               type="number"
               min="0"
@@ -187,12 +218,22 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
           <div className="requests-list">
             {pendingRequests.map((req) => {
               const isMine = req.requesterId === currentUserId;
+              const isVideoReq = req.type === 'change_video' || req.type === 'request_next_video';
+
               return (
                 <div key={req.id} className="request-card-item">
                   <div className="request-card-header">
-                    <span className="request-requester">
-                      {req.requesterName} {isMine && <span className="req-you-tag">(You)</span>}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', minWidth: 0 }}>
+                      <AnimeAvatarDisplay
+                        username={req.requesterName}
+                        avatarId={getParticipantCharacterId(req.requesterName, req.requesterId, req.requesterAvatarId)}
+                        size={24}
+                        showTooltip
+                      />
+                      <span className="request-requester">
+                        {req.requesterName} {isMine && <span className="req-you-tag">(You)</span>}
+                      </span>
+                    </div>
                     <span className="request-time">
                       {new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -202,15 +243,37 @@ export const ActionRequestsPanel: React.FC<ActionRequestsPanelProps> = ({
 
                   {/* Actions: Approve / Reject for Host & Moderator */}
                   {isPrivileged ? (
-                    <div className="request-card-actions">
-                      <button
-                        type="button"
-                        className="btn btn-approve btn-sm"
-                        onClick={() => onRespondRequest(req.id, true)}
-                        title="Approve and execute this action"
-                      >
-                        <Check size={14} /> Approve
-                      </button>
+                    <div className="request-card-actions" style={{ flexWrap: 'wrap', gap: '0.4rem' }}>
+                      {isVideoReq ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-approve btn-sm"
+                            onClick={() => onRespondRequest(req.id, true, 'next')}
+                            title="Add to top of playlist as next video"
+                          >
+                            <SkipForward size={13} /> Add Next
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => onRespondRequest(req.id, true, 'now')}
+                            title="Play this video immediately"
+                          >
+                            <Play size={13} /> Play Now
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-approve btn-sm"
+                          onClick={() => onRespondRequest(req.id, true)}
+                          title="Approve and execute this action"
+                        >
+                          <Check size={14} /> Approve
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         className="btn btn-reject btn-sm"

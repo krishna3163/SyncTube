@@ -412,5 +412,143 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     expect(rxData.emoji).toBe('🔥');
     expect(rxData.username).toBe('Bob');
   });
+
+  it('synchronizes and broadcasts participant avatarId on join and avatar update', async () => {
+    roomManager.createRoom('AVAT01');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    const joinPromise = new Promise<any>((resolve) => {
+      hostSocket.on('user_joined', (data) => {
+        if (data.username === 'TanjiroFan') resolve(data);
+      });
+    });
+
+    hostSocket.emit('join_room', { roomId: 'AVAT01', username: 'HostUser', userId: 'user-host', avatarId: 'naruto' });
+    guestSocket.emit('join_room', { roomId: 'AVAT01', username: 'TanjiroFan', userId: 'user-guest', avatarId: 'tanjiro' });
+
+    const joinData = await joinPromise;
+    expect(joinData.avatarId).toBe('tanjiro');
+    const guestInList = joinData.participants.find((p: any) => p.userId === 'user-guest');
+    expect(guestInList?.avatarId).toBe('tanjiro');
+
+    // Update avatar
+    const updatePromise = new Promise<any>((resolve) => {
+      hostSocket.once('participant_avatar_updated', (data) => resolve(data));
+    });
+
+    guestSocket.emit('update_avatar', { avatarId: 'gojo' });
+    const updateData = await updatePromise;
+    expect(updateData.userId).toBe('user-guest');
+    expect(updateData.avatarId).toBe('gojo');
+  });
+
+  it('attaches requesterAvatarId to action requests', async () => {
+    roomManager.createRoom('AVAT02');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'AVAT02', username: 'HostUser', userId: 'user-host' });
+    guestSocket.emit('join_room', { roomId: 'AVAT02', username: 'ViewerOne', userId: 'user-viewer', avatarId: 'nezuko' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const reqPromise = new Promise<any>((resolve) => {
+      hostSocket.once('action_requested', (data) => resolve(data.request));
+    });
+
+    guestSocket.emit('request_action', { type: 'play' });
+    const request = await reqPromise;
+    expect(request.requesterName).toBe('ViewerOne');
+    expect(request.requesterAvatarId).toBe('nezuko');
+  });
+
+  it('allows any participant to vote on a playlist item and toggle votes', async () => {
+    const room = roomManager.createRoom('VOTE01');
+    room.addToPlaylist({
+      id: 'pl_item_1',
+      videoId: 'M7lc1UVf-VE',
+      title: 'YouTube Developer Video',
+      votes: [],
+    });
+
+    const hostSocket = await createClient();
+    const viewerSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'VOTE01', username: 'HostA', userId: 'user-host' });
+    viewerSocket.emit('join_room', { roomId: 'VOTE01', username: 'ViewerB', userId: 'user-viewer' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Viewer votes on the item
+    const votePromise1 = new Promise<any>((resolve) => {
+      hostSocket.once('playlist_update', (data) => resolve(data.playlist));
+    });
+
+    viewerSocket.emit('playlist_vote', { itemId: 'pl_item_1' });
+    const playlist1 = await votePromise1;
+    const item1 = playlist1.find((i: any) => i.id === 'pl_item_1');
+    expect(item1.votes).toContain('user-viewer');
+    expect(item1.votes.length).toBe(1);
+
+    // Viewer toggles vote off
+    const votePromise2 = new Promise<any>((resolve) => {
+      hostSocket.once('playlist_update', (data) => resolve(data.playlist));
+    });
+
+    viewerSocket.emit('playlist_vote', { itemId: 'pl_item_1' });
+    const playlist2 = await votePromise2;
+    const item2 = playlist2.find((i: any) => i.id === 'pl_item_1');
+    expect(item2.votes).not.toContain('user-viewer');
+    expect(item2.votes.length).toBe(0);
+  });
+
+  it('handles request_next_video and adds to top of playlist on host approval', async () => {
+    roomManager.createRoom('REQ01');
+    const hostSocket = await createClient();
+    const viewerSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'REQ01', username: 'HostUser', userId: 'user-host' });
+    viewerSocket.emit('join_room', { roomId: 'REQ01', username: 'ViewerNext', userId: 'user-viewer' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Viewer requests video to play next
+    const reqPromise = new Promise<any>((resolve) => {
+      hostSocket.once('action_requested', (data) => resolve(data.request));
+    });
+
+    viewerSocket.emit('request_action', {
+      type: 'request_next_video',
+      data: {
+        videoId: 'dQw4w9WgXcQ',
+        title: 'Never Gonna Give You Up',
+        duration: '3:33',
+        channel: 'Rick Astley',
+      },
+    });
+
+    const request = await reqPromise;
+    expect(request.type).toBe('request_next_video');
+    expect(request.data.videoId).toBe('dQw4w9WgXcQ');
+
+    // Host approves request
+    const playlistPromise = new Promise<any>((resolve) => {
+      viewerSocket.once('playlist_update', (data) => resolve(data.playlist));
+    });
+
+    hostSocket.emit('respond_action_request', {
+      requestId: request.id,
+      approved: true,
+      mode: 'next',
+    });
+
+    const updatedPlaylist = await playlistPromise;
+    expect(updatedPlaylist.length).toBeGreaterThan(0);
+    expect(updatedPlaylist[0].videoId).toBe('dQw4w9WgXcQ');
+    expect(updatedPlaylist[0].title).toBe('Never Gonna Give You Up');
+    expect(updatedPlaylist[0].addedBy).toBe('ViewerNext');
+  });
 });
+
 

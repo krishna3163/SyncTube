@@ -4,6 +4,7 @@ export const JoinRoomSchema = z.object({
   roomId: z.string().trim().min(1).max(32),
   username: z.string().trim().min(1).max(50),
   userId: z.string().trim().min(1).max(100).optional(),
+  avatarId: z.string().trim().max(50).optional(),
 });
 
 export const LeaveRoomSchema = z.object({
@@ -34,6 +35,9 @@ export const RemoveParticipantSchema = z.object({
 export const PlaylistAddSchema = z.object({
   videoId: z.string().trim().min(1).max(256),
   title: z.string().trim().max(200).optional(),
+  duration: z.string().trim().max(50).optional(),
+  channel: z.string().trim().max(100).optional(),
+  thumbnail: z.string().trim().max(500).optional(),
 });
 
 export const PlaylistRemoveSchema = z.object({
@@ -49,12 +53,23 @@ export const PlaylistMoveTopSchema = z.object({
   itemId: z.string().trim().min(1).max(100),
 });
 
+export const PlaylistVoteSchema = z.object({
+  itemId: z.string().trim().min(1).max(100),
+});
+
+export const PlaylistShuffleSchema = z.object({}).optional();
+
+export const PlaylistClearSchema = z.object({}).optional();
+
 export const ActionRequestSchema = z.object({
-  type: z.enum(['play', 'pause', 'seek', 'change_video']),
+  type: z.enum(['play', 'pause', 'seek', 'change_video', 'request_next_video']),
   data: z
     .object({
       time: z.number().nonnegative().optional(),
       videoId: z.string().trim().max(256).optional(),
+      title: z.string().trim().max(200).optional(),
+      duration: z.string().trim().max(50).optional(),
+      channel: z.string().trim().max(100).optional(),
     })
     .optional(),
 });
@@ -62,6 +77,7 @@ export const ActionRequestSchema = z.object({
 export const RespondActionRequestSchema = z.object({
   requestId: z.string().trim().min(1).max(100),
   approved: z.boolean(),
+  mode: z.enum(['now', 'next']).optional(),
 });
 
 export const ReplyToSchema = z.object({
@@ -89,5 +105,9 @@ export const SendReactionSchema = z.object({
 
 export const SendSoundEffectSchema = z.object({
   soundId: z.enum(['applause', 'airhorn', 'cheer', 'nani', 'wow', 'boom']),
+});
+
+export const UpdateAvatarSchema = z.object({
+  avatarId: z.string().trim().min(1).max(50),
 });
 

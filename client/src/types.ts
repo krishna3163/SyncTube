@@ -6,6 +6,7 @@ export interface ParticipantPublic {
   userId: string;
   username: string;
   role: Role;
+  avatarId?: string;
 }
 
 export interface SyncStatePayload {
@@ -19,6 +20,7 @@ export interface UserJoinedPayload {
   username: string;
   userId: string;
   role: Role;
+  avatarId?: string;
   participants: ParticipantPublic[];
 }
 
@@ -49,7 +51,10 @@ export interface ActivityItem {
   id: string;
   time: string;
   text: string;
-  type: 'joined' | 'left' | 'playback' | 'role' | 'removed' | 'error';
+  type: 'joined' | 'left' | 'playback' | 'role' | 'removed' | 'error' | 'playlist' | 'request_approved' | 'video_requested';
+  username?: string;
+  userId?: string;
+  avatarId?: string;
 }
 
 export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
@@ -58,19 +63,28 @@ export interface PlaylistItem {
   id: string;
   videoId: string;
   title?: string;
+  channel?: string;
+  duration?: string;
+  thumbnail?: string;
   addedBy?: string;
+  addedByAvatarId?: string;
+  votes?: string[];
 }
 
-export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video';
+export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video';
 
 export interface PendingActionRequest {
   id: string;
   requesterId: string;
   requesterName: string;
+  requesterAvatarId?: string;
   type: ActionRequestType;
   data?: {
     time?: number;
     videoId?: string;
+    title?: string;
+    duration?: string;
+    channel?: string;
   };
   createdAt: number;
 }

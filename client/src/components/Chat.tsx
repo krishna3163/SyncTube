@@ -3,6 +3,7 @@ import { Send, Smile, Reply, X } from 'lucide-react';
 import { ChatMessage, ChatReplyPreview, Role } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { EmojiPicker } from './EmojiPicker.js';
+import { getParticipantCharacterId, rememberParticipantCharacter } from '../utils/characterMemory.js';
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -113,7 +114,7 @@ export const Chat: React.FC<ChatProps> = ({
                     {isFirst ? (
                       <AnimeAvatarDisplay
                         username={msg.username}
-                        avatarId={msg.avatarId}
+                        avatarId={getParticipantCharacterId(msg.username, msg.userId, msg.avatarId)}
                         size={34}
                         showTooltip
                       />
@@ -241,7 +242,7 @@ export const Chat: React.FC<ChatProps> = ({
                     {isFirst ? (
                       <AnimeAvatarDisplay
                         username={msg.username}
-                        avatarId={msg.avatarId || currentUserAvatarId}
+                        avatarId={currentUserAvatarId || getParticipantCharacterId(msg.username, msg.userId, msg.avatarId)}
                         size={34}
                         showTooltip
                       />

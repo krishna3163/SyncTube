@@ -34,6 +34,7 @@ import {
 import { StoredWatchParty, UserSettings } from '../types.js';
 import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
+import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 
 interface HomePageProps {
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
@@ -169,6 +170,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
 
       const data = await res.json();
       saveUserAvatar(createUsername.trim(), selectedAvatarId);
+      rememberParticipantCharacter(createUsername.trim(), undefined, selectedAvatarId);
       saveStoredParty({
         roomId: data.roomId,
         username: createUsername.trim(),
@@ -223,6 +225,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
       }
 
       saveUserAvatar(joinUsername.trim(), selectedAvatarId);
+      rememberParticipantCharacter(joinUsername.trim(), undefined, selectedAvatarId);
       saveStoredParty({
         roomId: normalizedRoom,
         username: joinUsername.trim(),
@@ -247,6 +250,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
     if (party.avatarId) {
       setSelectedAvatarId(party.avatarId);
       saveUserAvatar(userToUse, party.avatarId);
+      rememberParticipantCharacter(userToUse, undefined, party.avatarId);
     }
 
     try {
@@ -840,9 +844,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>Search and queue any YouTube video without leaving the app.</p>
               </div>
               <div className="feature-item-card">
-                <span className="feature-emoji">🔊</span>
-                <h4 style={{ margin: '0.3rem 0 0.1rem 0', fontSize: '0.9rem' }}>Party Soundboard</h4>
-                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>Synchronized applause, airhorn, cheer, and anime effects.</p>
+                <span className="feature-emoji">🎭</span>
+                <h4 style={{ margin: '0.3rem 0 0.1rem 0', fontSize: '0.9rem' }}>Anime Identity</h4>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>Consistent anime character, remembered across viewers, chat, and requests.</p>
               </div>
               <div className="feature-item-card">
                 <span className="feature-emoji">📱</span>

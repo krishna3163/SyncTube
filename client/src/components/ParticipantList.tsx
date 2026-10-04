@@ -2,6 +2,7 @@ import React from 'react';
 import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
 import { ParticipantPublic, Role } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
+import { getParticipantCharacterId } from '../utils/characterMemory.js';
 
 interface ParticipantListProps {
   participants: ParticipantPublic[];
@@ -80,7 +81,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                 >
                   <AnimeAvatarDisplay
                     username={p.username}
-                    avatarId={isCurrentUser ? currentUserAvatarId : undefined}
+                    avatarId={p.avatarId || getParticipantCharacterId(p.username, p.userId)}
                     size={32}
                     showTooltip
                   />

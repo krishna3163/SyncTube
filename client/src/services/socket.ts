@@ -26,8 +26,8 @@ export const socket: Socket = io(getSocketUrl(), {
   reconnectionDelay: 1000,
 });
 
-export const emitJoinRoom = (roomId: string, username: string, userId: string) => {
-  socket.emit('join_room', { roomId, username, userId });
+export const emitJoinRoom = (roomId: string, username: string, userId: string, avatarId?: string) => {
+  socket.emit('join_room', { roomId, username, userId, avatarId });
 };
 
 export const emitLeaveRoom = (roomId: string) => {
@@ -62,8 +62,26 @@ export const emitHostSyncPulse = (time: number) => {
   socket.emit('host_sync_pulse', { time });
 };
 
-export const emitPlaylistAdd = (videoId: string, title?: string) => {
-  socket.emit('playlist_add', { videoId, title });
+export const emitPlaylistAdd = (
+  videoId: string,
+  title?: string,
+  duration?: string,
+  channel?: string,
+  thumbnail?: string
+) => {
+  socket.emit('playlist_add', { videoId, title, duration, channel, thumbnail });
+};
+
+export const emitPlaylistVote = (itemId: string) => {
+  socket.emit('playlist_vote', { itemId });
+};
+
+export const emitPlaylistShuffle = () => {
+  socket.emit('playlist_shuffle', {});
+};
+
+export const emitPlaylistClear = () => {
+  socket.emit('playlist_clear', {});
 };
 
 export const emitPlaylistRemove = (itemId: string) => {
@@ -79,14 +97,14 @@ export const emitPlaylistMoveTop = (itemId: string) => {
 };
 
 export const emitRequestAction = (
-  type: 'play' | 'pause' | 'seek' | 'change_video',
-  data?: { time?: number; videoId?: string }
+  type: 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video',
+  data?: { time?: number; videoId?: string; title?: string; duration?: string; channel?: string }
 ) => {
   socket.emit('request_action', { type, data });
 };
 
-export const emitRespondActionRequest = (requestId: string, approved: boolean) => {
-  socket.emit('respond_action_request', { requestId, approved });
+export const emitRespondActionRequest = (requestId: string, approved: boolean, mode?: 'now' | 'next') => {
+  socket.emit('respond_action_request', { requestId, approved, mode });
 };
 
 export const emitSendChat = (text: string, userColor?: string, avatarId?: string, replyTo?: any) => {
@@ -99,6 +117,10 @@ export const emitToggleMessageReaction = (messageId: string, emoji: string) => {
 
 export const emitSendReaction = (emoji: string) => {
   socket.emit('send_reaction', { emoji });
+};
+
+export const emitUpdateAvatar = (avatarId: string) => {
+  socket.emit('update_avatar', { avatarId });
 };
 
 

@@ -14,11 +14,15 @@ import {
   emitPlaylistRemove,
   emitPlaylistReorder,
   emitPlaylistMoveTop,
+  emitPlaylistVote,
+  emitPlaylistShuffle,
+  emitPlaylistClear,
   emitRequestAction,
   emitRespondActionRequest,
   emitSendChat,
   emitToggleMessageReaction,
   emitSendReaction,
+  emitUpdateAvatar,
   startTimeSync,
 } from '../services/socket.js';
 import {
@@ -53,11 +57,11 @@ import { Chat } from '../components/Chat.js';
 import { ActionRequestsPanel } from '../components/ActionRequestsPanel.js';
 import { ReactionOverlay } from '../components/ReactionOverlay.js';
 import { FloatingReactions } from '../components/FloatingReactions.js';
-import { Soundboard } from '../components/Soundboard.js';
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 import { InviteModal } from '../components/InviteModal.js';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
+import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X } from 'lucide-react';
 
 interface RoomPageProps {
@@ -166,15 +170,23 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // User Settings state
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
     const saved = localStorage.getItem('synctube_user_settings');
+    let parsed: any = null;
     if (saved) {
       try {
-        return JSON.parse(saved);
+        parsed = JSON.parse(saved);
       } catch {}
     }
+    const initialAvatar =
+      parsed?.avatarId ||
+      localStorage.getItem('synctube_avatar_id') ||
+      getParticipantCharacterId(username) ||
+      'luffy';
+
     return {
-      name: username || 'BrightStinkbug',
-      color: '#2f618f',
-      rememberMe: true,
+      name: parsed?.name || username || 'BrightStinkbug',
+      color: parsed?.color || '#2f618f',
+      rememberMe: parsed?.rememberMe ?? true,
+      avatarId: initialAvatar,
     };
   });
 
@@ -201,13 +213,34 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Playlist starts empty — server is the source of truth
   const [playlist, setPlaylist] = useState<PlaylistItem[]>([]);
 
-  const addActivity = useCallback((text: string, type: ActivityItem['type']) => {
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    setActivities((prev) => [
-      { id: `${Date.now()}_${Math.random()}`, time, text, type },
-      ...prev.slice(0, 49),
-    ]);
+  // Re-render when any participant character updates
+  const [, setCharacterVersion] = useState(0);
+  useEffect(() => {
+    return subscribeCharacterUpdates(() => setCharacterVersion((v) => v + 1));
   }, []);
+
+  const addActivity = useCallback(
+    (
+      text: string,
+      type: ActivityItem['type'],
+      meta?: { username?: string; userId?: string; avatarId?: string }
+    ) => {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setActivities((prev) => [
+        {
+          id: `${Date.now()}_${Math.random()}`,
+          time,
+          text,
+          type,
+          username: meta?.username,
+          userId: meta?.userId,
+          avatarId: meta?.avatarId,
+        },
+        ...prev.slice(0, 49),
+      ]);
+    },
+    []
+  );
 
   const ytPlayerRef = useRef<YouTubePlayerHandle>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -315,8 +348,19 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
     const onConnect = () => {
       setConnectionStatus('connected');
-      emitJoinRoom(roomId, userSettings.name || username, userId);
-      addActivityRef.current('Connected to room session.', 'joined');
+      const activeAvatar =
+        userSettings.avatarId ||
+        localStorage.getItem('synctube_avatar_id') ||
+        getParticipantCharacterId(userSettings.name || username) ||
+        'luffy';
+
+      rememberParticipantCharacter(userSettings.name || username, userId, activeAvatar);
+      emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar);
+      addActivityRef.current('Connected to room session.', 'joined', {
+        username: userSettings.name || username,
+        userId,
+        avatarId: activeAvatar,
+      });
     };
 
     const onDisconnect = () => {
@@ -334,19 +378,40 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     };
 
     const onUserJoined = (data: UserJoinedPayload) => {
+      data.participants?.forEach((p) => {
+        if (p.avatarId) {
+          rememberParticipantCharacter(p.username, p.userId, p.avatarId);
+        }
+      });
+      if (data.avatarId) {
+        rememberParticipantCharacter(data.username, data.userId, data.avatarId);
+      }
       setParticipants(data.participants);
       if (data.userId === userId) {
         setUserRole(data.role);
       }
-      addActivityRef.current(`${data.username} joined as ${data.role.toLowerCase()}`, 'joined');
+      addActivityRef.current(`${data.username} joined the room`, 'joined', {
+        username: data.username,
+        userId: data.userId,
+        avatarId: data.avatarId,
+      });
     };
 
     const onUserLeft = (data: UserLeftPayload) => {
+      data.participants?.forEach((p) => {
+        rememberParticipantCharacter(p.username, p.userId, p.avatarId);
+      });
       setParticipants(data.participants);
-      addActivityRef.current(`${data.username} left the room.`, 'left');
+      addActivityRef.current(`${data.username} left the room.`, 'left', {
+        username: data.username,
+        userId: data.userId,
+      });
     };
 
     const onRoleAssigned = (data: RoleAssignedPayload) => {
+      data.participants?.forEach((p) => {
+        rememberParticipantCharacter(p.username, p.userId, p.avatarId);
+      });
       setParticipants(data.participants);
       const myParticipant = data.participants.find((p) => p.userId === userId);
       if (myParticipant) {
@@ -355,7 +420,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       if (data.userId === userId) {
         onNotifyRef.current(`Your role was updated to ${data.role}`, 'success');
       }
-      addActivityRef.current(`${data.username} was assigned role ${data.role}`, 'role');
+      addActivityRef.current(`${data.username} was assigned role ${data.role}`, 'role', {
+        username: data.username,
+        userId: data.userId,
+      });
     };
 
     const onParticipantRemoved = (data: ParticipantRemovedPayload) => {
@@ -389,16 +457,30 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
     // pending_requests_sync: full pending action request list on join
     const onPendingRequestsSync = (data: { requests: PendingActionRequest[] }) => {
+      data.requests?.forEach((r) => {
+        rememberParticipantCharacter(r.requesterName, r.requesterId, r.requesterAvatarId);
+      });
       setPendingRequests(data.requests);
     };
 
     // action_requested: new request from a participant
     const onActionRequested = (data: { request: PendingActionRequest }) => {
+      rememberParticipantCharacter(data.request.requesterName, data.request.requesterId, data.request.requesterAvatarId);
       setPendingRequests((prev) => [...prev.filter((r) => r.id !== data.request.id), data.request]);
       if (userRoleRef.current === 'HOST' || userRoleRef.current === 'MODERATOR') {
-        onNotifyRef.current(`${data.request.requesterName} requested to ${data.request.type.replace('_', ' ')}`, 'success');
+        const actionLabel = data.request.type === 'request_next_video' ? 'play next video' : data.request.type.replace('_', ' ');
+        onNotifyRef.current(`${data.request.requesterName} requested to ${actionLabel}`, 'success');
       }
-      addActivityRef.current(`${data.request.requesterName} requested: ${data.request.type.replace('_', ' ')}`, 'playback');
+      const isVideoReq = data.request.type === 'request_next_video' || data.request.type === 'change_video';
+      const actType = isVideoReq ? 'video_requested' : 'playback';
+      const actText = isVideoReq
+        ? `${data.request.requesterName} requested a video`
+        : `${data.request.requesterName} requested: ${data.request.type.replace('_', ' ')}`;
+      addActivityRef.current(actText, actType, {
+        username: data.request.requesterName,
+        userId: data.request.requesterId,
+        avatarId: data.request.requesterAvatarId,
+      });
     };
 
     // action_request_resolved: request approved or rejected
@@ -412,14 +494,33 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         }
       }
       addActivityRef.current(
-        `Request to ${data.request.type.replace('_', ' ')} was ${data.approved ? 'approved' : 'rejected'} by ${data.resolvedBy}`,
-        'playback'
+        data.approved
+          ? `${data.request.requesterName}'s request was approved`
+          : `Request from ${data.request.requesterName} was rejected`,
+        data.approved ? 'request_approved' : 'playback',
+        {
+          username: data.request.requesterName,
+          userId: data.request.requesterId,
+          avatarId: data.request.requesterAvatarId,
+        }
       );
     };
 
     // chat_message: real-time incoming chat message
     const onChatMessage = (data: ChatMessage) => {
+      rememberParticipantCharacter(data.username, data.userId, data.avatarId);
       setChatMessages((prev) => [...prev.slice(-99), data]);
+    };
+
+    // participant_avatar_updated: user updated profile character
+    const onAvatarUpdated = (data: { userId: string; username: string; avatarId: string; participants: ParticipantPublic[] }) => {
+      rememberParticipantCharacter(data.username, data.userId, data.avatarId);
+      data.participants?.forEach((p) => {
+        if (p.avatarId) {
+          rememberParticipantCharacter(p.username, p.userId, p.avatarId);
+        }
+      });
+      setParticipants(data.participants);
     };
 
     // message_reaction_updated: real-time reaction toggle on a chat message
@@ -481,6 +582,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('user_left', onUserLeft);
     socket.on('role_assigned', onRoleAssigned);
     socket.on('participant_removed', onParticipantRemoved);
+    socket.on('participant_avatar_updated', onAvatarUpdated);
     socket.on('error', onError);
 
     const stopTimeSync = startTimeSync();
@@ -508,23 +610,32 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('user_left', onUserLeft);
       socket.off('role_assigned', onRoleAssigned);
       socket.off('participant_removed', onParticipantRemoved);
+      socket.off('participant_avatar_updated', onAvatarUpdated);
       socket.off('error', onError);
       emitLeaveRoom(roomId);
     };
-  }, [roomId, username, userId, userSettings.name]);
+  }, [roomId, username, userId, userSettings.name, userSettings.avatarId]);
 
   // Actions
   const handlePlay = useCallback((time?: number) => {
     const target = typeof time === 'number' ? time : currentTimeRef.current;
     emitPlay(target);
-    addActivity('You played the video.', 'playback');
-  }, [addActivity]);
+    addActivity(`${username} started the video`, 'playback', {
+      username,
+      userId,
+      avatarId: userSettings.avatarId,
+    });
+  }, [addActivity, username, userId, userSettings.avatarId]);
 
   const handlePause = useCallback((time?: number) => {
     const target = typeof time === 'number' ? time : currentTimeRef.current;
     emitPause(target);
-    addActivity('You paused the video.', 'playback');
-  }, [addActivity]);
+    addActivity(`${username} paused the video`, 'playback', {
+      username,
+      userId,
+      avatarId: userSettings.avatarId,
+    });
+  }, [addActivity, username, userId, userSettings.avatarId]);
 
   const handleSeek = useCallback((time: number) => {
     currentTimeRef.current = time;
@@ -577,14 +688,40 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   };
 
   // Playlist handlers — all mutations go through server (server is source of truth)
-  const handleAddToPlaylist = (targetVideoId: string) => {
+  const handleAddToPlaylist = (
+    targetVideoId: string,
+    title?: string,
+    duration?: string,
+    channel?: string,
+    thumbnail?: string
+  ) => {
     if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
-      onNotify('Only hosts and moderators can add videos.', 'error');
+      onNotify('Only hosts and moderators can add videos directly.', 'error');
       return;
     }
-    emitPlaylistAdd(targetVideoId);
-    addActivity(`Added video ${targetVideoId} to playlist`, 'playback');
+    emitPlaylistAdd(targetVideoId, title, duration, channel, thumbnail);
+    addActivity(`${username} added a video to playlist`, 'playlist', {
+      username,
+      userId,
+      avatarId: userSettings.avatarId,
+    });
     onNotify('Video added to playlist!', 'success');
+  };
+
+  const handleVoteItem = (itemId: string) => {
+    emitPlaylistVote(itemId);
+  };
+
+  const handleShufflePlaylist = () => {
+    if (userRole !== 'HOST' && userRole !== 'MODERATOR') return;
+    emitPlaylistShuffle();
+    addActivity('Playlist was shuffled', 'playlist');
+  };
+
+  const handleClearPlaylist = () => {
+    if (userRole !== 'HOST' && userRole !== 'MODERATOR') return;
+    emitPlaylistClear();
+    addActivity('Playlist was cleared', 'playlist');
   };
 
   const handlePlayItem = (targetVideoId: string, itemId: string) => {
@@ -664,6 +801,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     } else {
       localStorage.removeItem('synctube_user_settings');
     }
+    if (settings.avatarId) {
+      rememberParticipantCharacter(settings.name || username, userId, settings.avatarId);
+      emitUpdateAvatar(settings.avatarId);
+    }
     onNotify('User settings saved!', 'success');
   };
 
@@ -679,19 +820,32 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Participant Action Requests & Approvals
   const handleRequestAction = useCallback(
-    (type: ActionRequestType, data?: { time?: number; videoId?: string }) => {
+    (
+      type: ActionRequestType,
+      data?: { time?: number; videoId?: string; title?: string; duration?: string; channel?: string }
+    ) => {
       emitRequestAction(type, data);
+      const actionLabel = type === 'request_next_video' ? 'play next video' : type.replace('_', ' ');
       onNotify('Request submitted to Host/Moderators!', 'success');
-      addActivity(`You requested to ${type.replace('_', ' ')}`, 'playback');
+      const isVideoReq = type === 'request_next_video' || type === 'change_video';
+      const actType = isVideoReq ? 'video_requested' : 'playback';
+      const actText = type === 'request_next_video'
+        ? `${username} requested a video`
+        : `You requested to ${actionLabel}`;
+      addActivity(actText, actType, {
+        username,
+        userId,
+        avatarId: userSettings.avatarId,
+      });
     },
-    [onNotify, addActivity]
+    [onNotify, addActivity, username, userId, userSettings.avatarId]
   );
 
   const handleRespondRequest = useCallback(
-    (requestId: string, approved: boolean) => {
-      emitRespondActionRequest(requestId, approved);
+    (requestId: string, approved: boolean, mode?: 'now' | 'next') => {
+      emitRespondActionRequest(requestId, approved, mode);
       if (approved) {
-        onNotify('Request approved!', 'success');
+        onNotify(mode === 'next' ? 'Request approved and queued as Next Up!' : 'Request approved!', 'success');
       } else {
         onNotify('Request rejected.', 'error');
       }
@@ -936,12 +1090,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 playlist={playlist}
                 currentVideoId={videoId}
                 userRole={userRole}
+                currentUserId={userId}
                 onAddToPlaylist={handleAddToPlaylist}
                 onPlayItem={handlePlayItem}
                 onNextVideo={handleNextVideo}
                 onRemoveItem={handleRemovePlaylistItem}
                 onMoveToTop={handleMoveToTop}
                 onReorderPlaylist={handleReorderPlaylist}
+                onVoteItem={handleVoteItem}
+                onShuffle={handleShufflePlaylist}
+                onClear={handleClearPlaylist}
                 onOpenSearch={() => setIsSearchModalOpen(true)}
               />
             )}
@@ -993,9 +1151,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       {/* Floating Animated Emojis & Live Reaction Dock */}
       <FloatingReactions socket={socket} username={username} />
 
-      {/* Synchronized Watch Party Soundboard */}
-      <Soundboard socket={socket} onNotify={onNotify} />
-
       {/* In-App YouTube Search Modal */}
       <YouTubeSearchModal
         isOpen={isSearchModalOpen}
@@ -1003,7 +1158,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         userRole={userRole}
         onPlayVideo={(newVid) => emitChangeVideo(newVid)}
         onAddToPlaylist={handleAddToPlaylist}
-        onRequestAction={(type, vid) => handleRequestAction(type, { videoId: vid })}
+        onRequestAction={(type, data) => handleRequestAction(type, data)}
         onNotify={onNotify}
       />
 

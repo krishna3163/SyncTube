@@ -4,7 +4,29 @@ export interface ServerPlaylistItem {
   id: string;
   videoId: string;
   title: string;
+  channel?: string;
+  duration?: string;
+  thumbnail?: string;
   addedBy?: string;
+  addedByAvatarId?: string;
+  votes?: string[];
+}
+
+const DEFAULT_AVATARS = [
+  'naruto', 'goku', 'sailor', 'pikachu',
+  'luffy', 'levi', 'zerotwo', 'rem',
+  'itachi', 'gojo', 'nezuko', 'hinata',
+  'kakashi', 'mikasa', 'tanjiro', 'erza'
+];
+
+function getDefaultAvatarForUsername(username: string): string {
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = ((hash << 5) - hash) + username.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % DEFAULT_AVATARS.length;
+  return DEFAULT_AVATARS[index];
 }
 
 export class Room {
@@ -33,10 +55,21 @@ export class Room {
     return this.removedUserIds.has(userId);
   }
 
-  public addParticipant(userId: string, socketId: string, username: string, isCreator: boolean = false): Participant {
+  public addParticipant(
+    userId: string,
+    socketId: string,
+    username: string,
+    isCreator: boolean = false,
+    avatarId?: string
+  ): Participant {
     if (this.isRemoved(userId)) {
       throw new Error('User has been removed from this room');
     }
+
+    const effectiveAvatarId =
+      avatarId && avatarId.trim() !== ''
+        ? avatarId.trim()
+        : (this.participants.get(userId)?.avatarId || getDefaultAvatarForUsername(username));
 
     // Check if user already exists (e.g. reconnect or new socket)
     const existing = this.participants.get(userId);
@@ -44,6 +77,7 @@ export class Room {
       this.socketToUserId.delete(existing.socketId);
       existing.socketId = socketId;
       existing.username = username; // update display name if changed
+      existing.avatarId = effectiveAvatarId;
       this.socketToUserId.set(socketId, userId);
       return existing;
     }
@@ -61,6 +95,7 @@ export class Room {
       socketId,
       username,
       role,
+      avatarId: effectiveAvatarId,
       joinedAt: Date.now(),
     };
 
@@ -204,9 +239,19 @@ export class Room {
   }
 
   // ── Playlist mutations ────────────────────────────────────
-  public addToPlaylist(item: ServerPlaylistItem): void {
-    // Prevent duplicate video IDs
-    if (!this.playlist.find((i) => i.id === item.id)) {
+  public addToPlaylist(item: ServerPlaylistItem, atTop: boolean = false): void {
+    if (!item.votes) item.votes = [];
+    const existingIdx = this.playlist.findIndex((i) => i.id === item.id || i.videoId === item.videoId);
+    if (existingIdx >= 0) {
+      if (atTop && existingIdx > 0) {
+        const [existing] = this.playlist.splice(existingIdx, 1);
+        this.playlist.unshift(existing);
+      }
+      return;
+    }
+    if (atTop) {
+      this.playlist.unshift(item);
+    } else {
       this.playlist.push(item);
     }
   }
@@ -229,11 +274,38 @@ export class Room {
     this.playlist.unshift(item);
   }
 
+  public votePlaylistItem(itemId: string, userId: string): boolean {
+    const item = this.playlist.find((i) => i.id === itemId);
+    if (!item) return false;
+    if (!Array.isArray(item.votes)) {
+      item.votes = [];
+    }
+    const idx = item.votes.indexOf(userId);
+    if (idx >= 0) {
+      item.votes.splice(idx, 1);
+    } else {
+      item.votes.push(userId);
+    }
+    return true;
+  }
+
+  public shufflePlaylist(): void {
+    for (let i = this.playlist.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.playlist[i], this.playlist[j]] = [this.playlist[j], this.playlist[i]];
+    }
+  }
+
+  public clearPlaylist(): void {
+    this.playlist = [];
+  }
+
   public getAllParticipants(): ParticipantPublic[] {
     return Array.from(this.participants.values()).map((p) => ({
       userId: p.userId,
       username: p.username,
       role: p.role,
+      avatarId: p.avatarId,
     }));
   }
 

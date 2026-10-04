@@ -17,7 +17,8 @@
     "start": "npm run start -w server",
     "test": "npm run test -w server && npm run test -w client",
     "test:server": "npm run test -w server",
-    "test:client": "npm run test -w client"
+    "test:client": "npm run test -w client",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

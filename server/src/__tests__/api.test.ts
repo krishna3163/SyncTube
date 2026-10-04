@@ -78,5 +78,20 @@ describe('Express REST API Endpoints', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('required');
     });
+
+    it('returns direct video item when q is a YouTube URL or direct video ID', async () => {
+      const res = await request(app).get('/api/youtube/search?q=https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+      expect(res.status).toBe(200);
+      expect(res.body.results).toBeDefined();
+      expect(res.body.results.length).toBe(1);
+      expect(res.body.results[0].videoId).toBe('dQw4w9WgXcQ');
+    });
+
+    it('returns search results matching query or curated fallback without 500 error', async () => {
+      const res = await request(app).get('/api/youtube/search?q=Hans%20Zimmer');
+      expect(res.status).toBe(200);
+      expect(res.body.results).toBeDefined();
+      expect(res.body.results.length).toBeGreaterThan(0);
+    });
   });
 });

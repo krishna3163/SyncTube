@@ -1,0 +1,5 @@
+# SyncTube Robots.txt
+User-agent: *
+Allow: /
+
+Sitemap: https://synctube-2ar4.onrender.com/sitemap.xml

@@ -1,0 +1,36 @@
+rules:
+  - id: express-check-cors-credentials
+    patterns:
+      - pattern: cors({origin: true, credentials: true, ...})
+    message: "Permissive CORS with credentials can allow unauthorized cross-origin requests."
+    severity: WARNING
+    languages: [javascript, typescript]
+
+  - id: prevent-eval-and-function-constructor
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: Function(...)
+    message: "Avoid dynamic code execution with eval() or Function()."
+    severity: ERROR
+    languages: [javascript, typescript]
+
+  - id: react-dangerouslysetinnerhtml
+    pattern: |
+      <$EL dangerouslySetInnerHTML={...} />
+    message: "Avoid dangerouslySetInnerHTML to prevent Cross-Site Scripting (XSS)."
+    severity: WARNING
+    languages: [javascript, typescript]
+
+  - id: no-hardcoded-jwt-secrets
+    pattern-either:
+      - pattern: jwt.sign(..., "secret", ...)
+      - pattern: jwt.verify(..., "secret", ...)
+    message: "Do not use hardcoded secrets for JWT signing or verification."
+    severity: ERROR
+    languages: [javascript, typescript]
+
+  - id: node-prevent-child-process-exec
+    pattern: child_process.exec(...)
+    message: "exec() can lead to command injection. Use execFile() or spawn() with fixed arguments instead."
+    severity: WARNING
+    languages: [javascript, typescript]

@@ -3,6 +3,7 @@ import { RoomManager } from '../models/RoomManager.js';
 import { DatabaseService } from '../services/db.js';
 import { canPerformAction } from '../services/permissions.js';
 import { extractYouTubeId } from '../utils/youtube.js';
+import { serverSentry } from '../services/sentry.js';
 import {
   AssignRoleSchema,
   ChangeVideoSchema,
@@ -15,12 +16,16 @@ import {
   PlaylistRemoveSchema,
   PlaylistReorderSchema,
   PlaylistMoveTopSchema,
+  PlaylistVoteSchema,
+  PlaylistShuffleSchema,
+  PlaylistClearSchema,
   ActionRequestSchema,
   RespondActionRequestSchema,
   ChatMessageSchema,
   ToggleMessageReactionSchema,
   SendReactionSchema,
   SendSoundEffectSchema,
+  UpdateAvatarSchema,
 } from './schemas.js';
 import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
 
@@ -35,8 +40,11 @@ export function setupSocketHandlers(
   dbService?: DatabaseService
 ): void {
   io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
-    // Helper to send error to client
+    // Helper to send error to client with Sentry reporting
     const sendError = (code: 'FORBIDDEN' | 'NOT_FOUND' | 'BAD_REQUEST' | 'INTERNAL_ERROR', message: string) => {
+      if (code === 'INTERNAL_ERROR') {
+        serverSentry.captureMessage(`Socket Error [${code}]: ${message}`, 'error');
+      }
       socket.emit('error', { code, message });
     };
 
@@ -93,7 +101,7 @@ export function setupSocketHandlers(
         socket.data.userId = userId;
         socket.join(normalizedRoomId);
 
-        const participant = room.addParticipant(userId, socket.id, username);
+        const participant = room.addParticipant(userId, socket.id, username, false, parsed.data.avatarId);
 
         // Send current authoritative room state to the newly joined client
         socket.emit('sync_state', room.toSyncStatePayload());
@@ -107,6 +115,7 @@ export function setupSocketHandlers(
           username: participant.username,
           userId: participant.userId,
           role: participant.role,
+          avatarId: participant.avatarId,
           participants: room.getAllParticipants(),
         });
       } catch (err) {
@@ -385,7 +394,7 @@ export function setupSocketHandlers(
         const parsed = PlaylistAddSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_add payload.');
 
-        const { videoId, title } = parsed.data;
+        const { videoId, title, duration, channel, thumbnail } = parsed.data;
         const extracted = extractYouTubeId(videoId);
         if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
 
@@ -393,9 +402,62 @@ export function setupSocketHandlers(
           id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           videoId: extracted,
           title: title || `Video (${extracted})`,
+          duration: duration || '',
+          channel: channel || '',
+          thumbnail: thumbnail || `https://img.youtube.com/vi/${extracted}/hqdefault.jpg`,
           addedBy: participant.username,
+          addedByAvatarId: participant.avatarId,
+          votes: [],
         };
         room.addToPlaylist(item);
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 11b. PLAYLIST — VOTE (Any room participant can vote/upvote)
+    socket.on('playlist_vote', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = PlaylistVoteSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_vote payload.');
+
+        const success = room.votePlaylistItem(parsed.data.itemId, participant.userId);
+        if (success) {
+          io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+        }
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 11c. PLAYLIST — SHUFFLE
+    socket.on('playlist_shuffle', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can shuffle playlist.');
+
+        room.shufflePlaylist();
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 11d. PLAYLIST — CLEAR
+    socket.on('playlist_clear', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can clear playlist.');
+
+        room.clearPlaylist();
         io.to(room.id).emit('playlist_update', { playlist: room.playlist });
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
@@ -491,7 +553,7 @@ export function setupSocketHandlers(
       } catch {}
     });
 
-    // 15. PARTICIPANT ACTION REQUEST (Participant asks Admin/Mod to approve play/pause/seek/video change)
+    // 15. PARTICIPANT ACTION REQUEST (Participant asks Admin/Mod to approve play/pause/seek/video change/next video)
     socket.on('request_action', (rawPayload: unknown) => {
       try {
         const { room, participant } = getContext();
@@ -502,8 +564,8 @@ export function setupSocketHandlers(
 
         const { type, data } = parsed.data;
         let extractedVideoId: string | undefined = undefined;
-        if (type === 'change_video') {
-          if (!data?.videoId) return sendError('BAD_REQUEST', 'Missing videoId for change_video request.');
+        if (type === 'change_video' || type === 'request_next_video') {
+          if (!data?.videoId) return sendError('BAD_REQUEST', `Missing videoId for ${type} request.`);
           const extracted = extractYouTubeId(data.videoId);
           if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
           extractedVideoId = extracted;
@@ -513,11 +575,15 @@ export function setupSocketHandlers(
           id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           requesterId: participant.userId,
           requesterName: participant.username,
+          requesterAvatarId: participant.avatarId,
           type,
           data: data
             ? {
                 time: data.time,
                 videoId: extractedVideoId || data.videoId,
+                title: data.title,
+                duration: data.duration,
+                channel: data.channel,
               }
             : undefined,
           createdAt: Date.now(),
@@ -543,7 +609,7 @@ export function setupSocketHandlers(
         const parsed = RespondActionRequestSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid respond_action_request payload.');
 
-        const { requestId, approved } = parsed.data;
+        const { requestId, approved, mode } = parsed.data;
         const request = room.getPendingRequest(requestId);
         if (!request) return sendError('NOT_FOUND', 'Action request not found or already resolved.');
 
@@ -552,17 +618,36 @@ export function setupSocketHandlers(
         if (approved) {
           if (request.type === 'play') {
             room.play(request.data?.time);
+            io.to(room.id).emit('sync_state', room.toSyncStatePayload());
           } else if (request.type === 'pause') {
             room.pause(request.data?.time);
+            io.to(room.id).emit('sync_state', room.toSyncStatePayload());
           } else if (request.type === 'seek' && typeof request.data?.time === 'number') {
             room.seek(request.data.time);
+            io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+          } else if (request.type === 'request_next_video' || (request.type === 'change_video' && mode === 'next')) {
+            // Added to top of playlist as next up
+            if (request.data?.videoId) {
+              const newItem = {
+                id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                videoId: request.data.videoId,
+                title: request.data.title || `Video (${request.data.videoId})`,
+                duration: request.data.duration || '',
+                channel: request.data.channel || '',
+                thumbnail: `https://img.youtube.com/vi/${request.data.videoId}/hqdefault.jpg`,
+                addedBy: request.requesterName,
+                addedByAvatarId: request.requesterAvatarId,
+                votes: [],
+              };
+              room.addToPlaylist(newItem, true);
+              io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+            }
           } else if (request.type === 'change_video' && request.data?.videoId) {
             room.changeVideo(request.data.videoId);
+            io.to(room.id).emit('sync_state', room.toSyncStatePayload());
           }
 
-          io.to(room.id).emit('sync_state', room.toSyncStatePayload());
-
-          if (dbService) {
+          if (dbService && (request.type === 'play' || request.type === 'pause' || request.type === 'seek' || (request.type === 'change_video' && mode !== 'next'))) {
             dbService
               .saveRoom({
                 id: room.id,
@@ -610,7 +695,32 @@ export function setupSocketHandlers(
           reactions: {},
         };
 
+        if (parsed.data.avatarId) {
+          participant.avatarId = parsed.data.avatarId;
+        }
+
         io.to(room.id).emit('chat_message', message);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 17.2. UPDATE AVATAR
+    socket.on('update_avatar', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = UpdateAvatarSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid update_avatar payload.');
+
+        participant.avatarId = parsed.data.avatarId;
+        io.to(room.id).emit('participant_avatar_updated', {
+          userId: participant.userId,
+          username: participant.username,
+          avatarId: parsed.data.avatarId,
+          participants: room.getAllParticipants(),
+        });
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
       }

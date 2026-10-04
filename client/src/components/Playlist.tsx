@@ -5,27 +5,39 @@ import {
   Play,
   Trash2,
   ArrowUp,
-  ArrowDown,
   GripVertical,
   SkipForward,
-  ArrowLeft,
-  ArrowRight,
+  Shuffle,
+  ThumbsUp,
+  Search,
+  MoreVertical,
+  Copy,
   ExternalLink,
-  Lock,
 } from 'lucide-react';
 import { PlaylistItem, Role } from '../types.js';
-import { extractYouTubeId } from '../utils/youtube.js';
+import { AnimeAvatarDisplay } from './AnimeAvatar.js';
+import { getParticipantCharacterId } from '../utils/characterMemory.js';
 
 interface PlaylistProps {
   playlist: PlaylistItem[];
   currentVideoId: string;
   userRole: Role;
-  onAddToPlaylist: (videoId: string) => void;
+  currentUserId: string;
+  onAddToPlaylist: (
+    videoId: string,
+    title?: string,
+    duration?: string,
+    channel?: string,
+    thumbnail?: string
+  ) => void;
   onPlayItem: (videoId: string, itemId: string) => void;
-  onNextVideo: () => void;
+  onNextVideo?: () => void;
   onRemoveItem: (itemId: string) => void;
   onMoveToTop: (itemId: string) => void;
   onReorderPlaylist: (fromIndex: number, toIndex: number) => void;
+  onVoteItem: (itemId: string) => void;
+  onShuffle?: () => void;
+  onClear?: () => void;
   onOpenSearch?: () => void;
 }
 
@@ -33,38 +45,23 @@ export const Playlist: React.FC<PlaylistProps> = ({
   playlist,
   currentVideoId,
   userRole,
-  onAddToPlaylist,
+  currentUserId,
   onPlayItem,
   onNextVideo,
   onRemoveItem,
   onMoveToTop,
   onReorderPlaylist,
+  onVoteItem,
+  onShuffle,
+  onClear,
   onOpenSearch,
 }) => {
-  const [newVideoUrl, setNewVideoUrl] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [swipedItemId, setSwipedItemId] = useState<string | null>(null);
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
-
-  const touchStartXRef = useRef<number>(0);
-  const touchStartYRef = useRef<number>(0);
+  const [sortByVotes, setSortByVotes] = useState(false);
 
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canControl) return;
-    if (!newVideoUrl.trim()) return;
-
-    const extracted = extractYouTubeId(newVideoUrl.trim());
-    if (!extracted) {
-      alert('Please enter a valid YouTube video URL or ID.');
-      return;
-    }
-
-    onAddToPlaylist(extracted);
-    setNewVideoUrl('');
-  };
 
   // Drag and Drop handlers
   const handleDragStart = (index: number) => {
@@ -84,189 +81,287 @@ export const Playlist: React.FC<PlaylistProps> = ({
     setDraggedIndex(null);
   };
 
-  // Touch Swipe Handlers for mobile & tablet (Host/Mod only)
-  const handleTouchStart = (e: React.TouchEvent, itemId: string) => {
-    if (!canControl) return;
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-  };
+  // Filter playlist items by local search query
+  const filteredPlaylist = playlist.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const titleMatch = item.title?.toLowerCase().includes(q);
+    const channelMatch = item.channel?.toLowerCase().includes(q);
+    const idMatch = item.videoId.toLowerCase().includes(q);
+    const addedByMatch = item.addedBy?.toLowerCase().includes(q);
+    return titleMatch || channelMatch || idMatch || addedByMatch;
+  });
 
-  const handleTouchEnd = (e: React.TouchEvent, itemId: string) => {
-    if (!canControl) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+  const displayPlaylist = sortByVotes
+    ? [...filteredPlaylist].sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0))
+    : filteredPlaylist;
 
-    // Only recognize horizontal swipes
-    if (Math.abs(deltaX) > 60 && Math.abs(deltaY) < 50) {
-      if (deltaX > 60) {
-        // Left-to-right swipe: Remove from playlist
-        setSwipedItemId(itemId);
-        setSwipeDirection('right');
-        setTimeout(() => {
-          onRemoveItem(itemId);
-          setSwipedItemId(null);
-          setSwipeDirection(null);
-        }, 300);
-      } else if (deltaX < -60) {
-        // Right-to-left swipe: Move to top of playlist
-        setSwipedItemId(itemId);
-        setSwipeDirection('left');
-        setTimeout(() => {
-          onMoveToTop(itemId);
-          setSwipedItemId(null);
-          setSwipeDirection(null);
-        }, 300);
-      }
-    }
+  const handleCopyLink = (videoId: string) => {
+    navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${videoId}`);
+    setActiveMenuId(null);
   };
 
   return (
-    <div className="glass-panel sidebar-card playlist-card">
-      <div className="sidebar-title">
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ListMusic size={18} />
-          Playlist ({playlist.length})
-        </span>
+    <div className="glass-panel sidebar-card upnext-panel">
+      {/* Top Header Bar matching sample photo */}
+      <div className="upnext-header">
+        <div className="upnext-title-wrap">
+          <ListMusic size={20} className="upnext-icon" />
+          <span className="upnext-title">Up Next ({playlist.length})</span>
+        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        {/* Search in playlist */}
+        <div className="upnext-search-wrap">
+          <Search size={14} className="upnext-search-icon" />
+          <input
+            type="text"
+            className="upnext-search-input"
+            placeholder="Search in playlist..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Action Controls */}
+        <div className="upnext-actions">
           {onOpenSearch && (
             <button
               type="button"
-              className="btn btn-secondary next-video-btn"
+              className="btn btn-outline-gold upnext-add-btn"
               onClick={onOpenSearch}
-              title="Search YouTube & Add to Queue"
+              title="Search and add video to playlist"
             >
-              <ExternalLink size={13} />
-              <span>Search</span>
+              <Plus size={14} />
+              <span>Add Video</span>
             </button>
           )}
 
-          {playlist.length > 0 && canControl && (
+          {canControl && onShuffle && (
             <button
               type="button"
-              className="btn btn-secondary next-video-btn"
-              onClick={onNextVideo}
-              title="Play next video in queue"
+              className="btn btn-ghost upnext-btn-icon"
+              onClick={onShuffle}
+              title="Shuffle playlist"
             >
-              <SkipForward size={14} />
-              <span>Next</span>
+              <Shuffle size={14} />
+              <span className="hide-on-mobile">Shuffle</span>
             </button>
           )}
+
+          {canControl && onClear && playlist.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost upnext-btn-icon"
+              onClick={() => {
+                if (window.confirm('Clear all videos from playlist?')) {
+                  onClear();
+                }
+              }}
+              title="Clear playlist"
+            >
+              <Trash2 size={14} />
+              <span className="hide-on-mobile">Clear</span>
+            </button>
+          )}
+
+          {/* Toggle sort by votes */}
+          <button
+            type="button"
+            className={`btn btn-ghost upnext-btn-icon ${sortByVotes ? 'active-gold' : ''}`}
+            onClick={() => setSortByVotes(!sortByVotes)}
+            title={sortByVotes ? 'Sorted by Most Votes (click for normal order)' : 'Sort by Most Voted'}
+          >
+            <ThumbsUp size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Add to Playlist Form or View-Only Badge */}
-      {canControl ? (
-        <form onSubmit={handleAddSubmit} className="playlist-add-form">
-          <input
-            type="text"
-            className="input-field playlist-input"
-            placeholder="Paste YouTube link or ID..."
-            value={newVideoUrl}
-            onChange={(e) => setNewVideoUrl(e.target.value)}
-          />
-          <button type="submit" className="btn btn-primary playlist-add-btn" title="Add to playlist">
-            <Plus size={16} />
-            <span>Add</span>
-          </button>
-        </form>
-      ) : (
-        <div className="playlist-view-only-badge">
-          <Lock size={13} color="var(--accent-indigo)" />
-          <span>Queue is managed by Host & Moderators</span>
-        </div>
-      )}
-
-
-
-      {/* Playlist Items */}
-      <div className="playlist-items-list">
-        {playlist.length === 0 ? (
-          <div className="playlist-empty-state">
-            <ListMusic size={32} opacity={0.3} />
-            <p>No videos in playlist yet</p>
-            <span>Add YouTube links above to queue up videos!</span>
+      {/* Playlist Items List */}
+      <div className="upnext-items-list">
+        {displayPlaylist.length === 0 ? (
+          <div className="upnext-empty-state">
+            <ListMusic size={36} opacity={0.3} />
+            <p>{searchQuery ? 'No matching videos in playlist' : 'No videos in Up Next queue'}</p>
+            {onOpenSearch && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onOpenSearch}
+                style={{ marginTop: '0.6rem' }}
+              >
+                <Plus size={14} /> Add First Video
+              </button>
+            )}
           </div>
         ) : (
-          playlist.map((item, index) => {
+          displayPlaylist.map((item, index) => {
             const isPlaying = item.videoId === currentVideoId;
-            const isSwiping = swipedItemId === item.id;
+            const voteCount = item.votes?.length || 0;
+            const hasVoted = Boolean(item.votes?.includes(currentUserId));
+            const isMenuOpen = activeMenuId === item.id;
 
             return (
               <div
                 key={item.id}
-                draggable={canControl}
+                draggable={canControl && !sortByVotes}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
-                onTouchStart={(e) => handleTouchStart(e, item.id)}
-                onTouchEnd={(e) => handleTouchEnd(e, item.id)}
-                className={`playlist-item ${isPlaying ? 'current-playing' : ''} ${
-                  isSwiping ? (swipeDirection === 'right' ? 'swiping-right' : 'swiping-left') : ''
-                }`}
+                className={`upnext-item-row ${isPlaying ? 'is-playing-row' : ''}`}
               >
-                {/* Drag Handle */}
-                {canControl && (
-                  <div className="drag-handle" title="Drag up or down to reorder">
-                    <GripVertical size={16} />
-                  </div>
-                )}
-
-                {/* Thumbnail / Badge */}
-                <div className="playlist-item-thumb">
-                  <img
-                    src={`https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`}
-                    alt="Thumbnail"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                  {isPlaying && <span className="playing-badge">PLAYING</span>}
+                {/* Index Number */}
+                <div className="upnext-index-col">
+                  {canControl && !sortByVotes && (
+                    <span title="Drag to reorder" className="upnext-grip">
+                      <GripVertical size={13} />
+                    </span>
+                  )}
+                  <span className="upnext-index-num">{index + 1}</span>
                 </div>
 
-                {/* Details */}
-                <div className="playlist-item-info">
-                  <span className="playlist-item-title">{item.title || `Video (${item.videoId})`}</span>
-                  <span className="playlist-item-id">ID: {item.videoId}</span>
-                </div>
-
-                {/* Action Buttons: Host/Mod Only */}
-                {canControl && (
-                  <div className="playlist-item-actions">
-                    {!isPlaying && (
-                      <button
-                        type="button"
-                        className="btn-icon play-btn"
-                        onClick={() => onPlayItem(item.videoId, item.id)}
-                        title="Play this video now"
-                        aria-label="Play video"
-                      >
-                        <Play size={15} color="var(--accent-emerald)" fill="var(--accent-emerald)" />
-                      </button>
+                {/* Thumbnail with PLAYING overlay */}
+                <div className="upnext-thumb-col">
+                  <div className="upnext-thumb-wrapper">
+                    <img
+                      src={
+                        item.thumbnail ||
+                        `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`
+                      }
+                      alt={item.title || 'Video Thumbnail'}
+                      className="upnext-thumb-img"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`;
+                      }}
+                    />
+                    {isPlaying && (
+                      <div className="upnext-playing-overlay">
+                        <Play size={10} fill="currentColor" />
+                        <span>PLAYING</span>
+                      </div>
                     )}
-
-                    <button
-                      type="button"
-                      className="btn-icon move-top-btn"
-                      onClick={() => onMoveToTop(item.id)}
-                      title="Move to top of playlist (Swipe Left)"
-                      aria-label="Move to top"
-                    >
-                      <ArrowUp size={15} color="var(--accent-cyan)" />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn-icon remove-btn"
-                      onClick={() => onRemoveItem(item.id)}
-                      title="Remove from playlist (Swipe Right)"
-                      aria-label="Remove item"
-                    >
-                      <Trash2 size={15} color="var(--accent-rose)" />
-                    </button>
                   </div>
-                )}
+                </div>
+
+                {/* Title & Subtitle */}
+                <div className="upnext-info-col">
+                  <h4 className="upnext-video-title" title={item.title}>
+                    {item.title || `YouTube Video (${item.videoId})`}
+                  </h4>
+                  <div className="upnext-subtitle">
+                    {item.channel && <span className="upnext-channel">{item.channel}</span>}
+                    {item.duration && (
+                      <>
+                        <span className="upnext-dot">•</span>
+                        <span className="upnext-duration">{item.duration}</span>
+                      </>
+                    )}
+                    {item.addedBy && (
+                      <>
+                        <span className="upnext-dot">•</span>
+                        <span className="upnext-added-by">Added by {item.addedBy}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Actions: Avatar, Thumbs Up Vote, Play, Three-dot Menu */}
+                <div className="upnext-actions-col">
+                  {/* Avatar of submitter if available */}
+                  {item.addedBy && (
+                    <div className="upnext-avatar-wrap" title={`Added by ${item.addedBy}`}>
+                      <AnimeAvatarDisplay
+                        username={item.addedBy}
+                        avatarId={getParticipantCharacterId(item.addedBy, undefined, item.addedByAvatarId)}
+                        size={22}
+                      />
+                    </div>
+                  )}
+
+                  {/* Thumbs Up Vote Button (available to all users) */}
+                  <button
+                    type="button"
+                    className={`upnext-vote-btn ${hasVoted ? 'has-voted' : ''}`}
+                    onClick={() => onVoteItem(item.id)}
+                    title={hasVoted ? 'You upvoted this video (click to remove)' : 'Upvote this video'}
+                  >
+                    <ThumbsUp size={13} fill={hasVoted ? 'currentColor' : 'none'} />
+                    <span className="upnext-vote-count">{voteCount}</span>
+                  </button>
+
+                  {/* Quick Play Button (Host/Mod only) */}
+                  {canControl && (
+                    <button
+                      type="button"
+                      className="upnext-play-btn"
+                      onClick={() => onPlayItem(item.videoId, item.id)}
+                      title="Play this video now"
+                    >
+                      <Play size={14} fill="currentColor" />
+                    </button>
+                  )}
+
+                  {/* More options menu button */}
+                  <div className="upnext-menu-container">
+                    <button
+                      type="button"
+                      className="upnext-menu-trigger"
+                      onClick={() => setActiveMenuId(isMenuOpen ? null : item.id)}
+                      title="More options"
+                    >
+                      <MoreVertical size={15} />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div className="upnext-dropdown-menu">
+                        {canControl && (
+                          <button
+                            type="button"
+                            className="upnext-menu-item"
+                            onClick={() => {
+                              onMoveToTop(item.id);
+                              setActiveMenuId(null);
+                            }}
+                          >
+                            <ArrowUp size={14} color="var(--accent-cyan)" />
+                            <span>Move to Top</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="upnext-menu-item"
+                          onClick={() => handleCopyLink(item.videoId)}
+                        >
+                          <Copy size={14} />
+                          <span>Copy Video Link</span>
+                        </button>
+                        <a
+                          href={`https://www.youtube.com/watch?v=${item.videoId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="upnext-menu-item"
+                          onClick={() => setActiveMenuId(null)}
+                        >
+                          <ExternalLink size={14} />
+                          <span>Open on YouTube</span>
+                        </a>
+                        {canControl && (
+                          <button
+                            type="button"
+                            className="upnext-menu-item text-danger"
+                            onClick={() => {
+                              onRemoveItem(item.id);
+                              setActiveMenuId(null);
+                            }}
+                          >
+                            <Trash2 size={14} color="var(--accent-rose)" />
+                            <span>Remove from Queue</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })

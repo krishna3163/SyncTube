@@ -7,6 +7,7 @@ export interface Participant {
   socketId: string;
   username: string;
   role: Role;
+  avatarId?: string;
   joinedAt: number;
 }
 
@@ -29,6 +30,7 @@ export interface UserJoinedPayload {
   username: string;
   userId: string;
   role: Role;
+  avatarId?: string;
   participants: ParticipantPublic[];
 }
 
@@ -59,18 +61,23 @@ export interface ParticipantPublic {
   userId: string;
   username: string;
   role: Role;
+  avatarId?: string;
 }
 
-export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video';
+export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video';
 
 export interface PendingActionRequest {
   id: string;
   requesterId: string;
   requesterName: string;
+  requesterAvatarId?: string;
   type: ActionRequestType;
   data?: {
     time?: number;
     videoId?: string;
+    title?: string;
+    duration?: string;
+    channel?: string;
   };
   createdAt: number;
 }

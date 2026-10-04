@@ -5,6 +5,7 @@ import { createApp } from './app.js';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { setupSocketHandlers } from './socket/handler.js';
+import { serverSentry } from './services/sentry.js';
 
 dotenv.config();
 
@@ -30,11 +31,12 @@ async function bootstrap() {
       origin.includes('localhost') ||
       origin.includes('127.0.0.1') ||
       origin.endsWith('.vercel.app') ||
+      origin.endsWith('.onrender.com') ||
       /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin)
     ) {
       return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error('CORS origin rejected'), false);
   };
 
   const io = new Server(server, {
@@ -46,6 +48,17 @@ async function bootstrap() {
   });
 
   setupSocketHandlers(io, roomManager, dbService);
+
+  // Global uncaught crash handlers reporting to Sentry
+  process.on('unhandledRejection', (reason) => {
+    console.error('[Process Unhandled Rejection]:', reason);
+    serverSentry.captureException(reason);
+  });
+
+  process.on('uncaughtException', (err) => {
+    console.error('[Process Uncaught Exception]:', err);
+    serverSentry.captureException(err);
+  });
 
   server.listen(PORT, HOST, () => {
     console.log(`[Server] Watch Party backend running on http://${HOST}:${PORT}`);
@@ -67,5 +80,6 @@ async function bootstrap() {
 
 bootstrap().catch((err) => {
   console.error('[Server] Fatal startup error:', err);
+  serverSentry.captureException(err);
   process.exit(1);
 });
