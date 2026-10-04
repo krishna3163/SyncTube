@@ -1,4 +1,11 @@
-import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload } from '../types.js';
+import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest } from '../types.js';
+
+export interface ServerPlaylistItem {
+  id: string;
+  videoId: string;
+  title: string;
+  addedBy?: string;
+}
 
 export class Room {
   public readonly id: string;
@@ -7,12 +14,14 @@ export class Room {
   public currentTime: number;
   public updatedAt: number;
   public hostUserId: string | null = null;
+  public playlist: ServerPlaylistItem[] = [];
 
   private participants: Map<string, Participant> = new Map();
   private socketToUserId: Map<string, string> = new Map();
   private removedUserIds: Set<string> = new Set();
+  private pendingRequests: Map<string, PendingActionRequest> = new Map();
 
-  constructor(id: string, initialVideoId: string = 'dQw4w9WgXcQ') {
+  constructor(id: string, initialVideoId: string = 'LXb3EKWsInQ') {
     this.id = id;
     this.videoId = initialVideoId;
     this.playState = 'paused';
@@ -80,6 +89,7 @@ export class Room {
     if (!participant) return null;
 
     this.participants.delete(userId);
+    this.cleanupUserRequests(userId);
 
     // If host left, elect a new host if participants remain
     if (this.hostUserId === userId) {
@@ -97,6 +107,7 @@ export class Room {
     this.removedUserIds.add(userId);
     this.socketToUserId.delete(participant.socketId);
     this.participants.delete(userId);
+    this.cleanupUserRequests(userId);
 
     if (this.hostUserId === userId) {
       this.hostUserId = null;
@@ -105,6 +116,7 @@ export class Room {
 
     return participant;
   }
+
 
   public assignRole(targetUserId: string, newRole: Role): Participant | null {
     const participant = this.participants.get(targetUserId);
@@ -191,6 +203,32 @@ export class Room {
     this.updatedAt = Date.now();
   }
 
+  // ── Playlist mutations ────────────────────────────────────
+  public addToPlaylist(item: ServerPlaylistItem): void {
+    // Prevent duplicate video IDs
+    if (!this.playlist.find((i) => i.id === item.id)) {
+      this.playlist.push(item);
+    }
+  }
+
+  public removeFromPlaylist(itemId: string): void {
+    this.playlist = this.playlist.filter((i) => i.id !== itemId);
+  }
+
+  public reorderPlaylist(fromIndex: number, toIndex: number): void {
+    if (fromIndex < 0 || toIndex < 0) return;
+    if (fromIndex >= this.playlist.length || toIndex >= this.playlist.length) return;
+    const [moved] = this.playlist.splice(fromIndex, 1);
+    this.playlist.splice(toIndex, 0, moved);
+  }
+
+  public moveToTop(itemId: string): void {
+    const idx = this.playlist.findIndex((i) => i.id === itemId);
+    if (idx <= 0) return;
+    const [item] = this.playlist.splice(idx, 1);
+    this.playlist.unshift(item);
+  }
+
   public getAllParticipants(): ParticipantPublic[] {
     return Array.from(this.participants.values()).map((p) => ({
       userId: p.userId,
@@ -204,12 +242,39 @@ export class Room {
   }
 
   public toSyncStatePayload(): SyncStatePayload {
-    const time = this.playState === 'paused' ? this.currentTime : this.getEffectiveCurrentTime();
+    const isPaused = this.playState === 'paused';
+    const effectiveTime = isPaused ? this.currentTime : this.getEffectiveCurrentTime();
     return {
       videoId: this.videoId,
       playState: this.playState,
-      currentTime: Math.round(time * 100) / 100,
-      updatedAt: this.updatedAt,
+      currentTime: Math.round(effectiveTime * 100) / 100,
+      updatedAt: Date.now(),
     };
   }
+
+  // ── Action Request mutations ──────────────────────────────
+  public addPendingRequest(req: PendingActionRequest): void {
+    this.pendingRequests.set(req.id, req);
+  }
+
+  public getPendingRequest(id: string): PendingActionRequest | undefined {
+    return this.pendingRequests.get(id);
+  }
+
+  public removePendingRequest(id: string): boolean {
+    return this.pendingRequests.delete(id);
+  }
+
+  public getPendingRequests(): PendingActionRequest[] {
+    return Array.from(this.pendingRequests.values()).sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  private cleanupUserRequests(userId: string): void {
+    for (const [id, req] of this.pendingRequests.entries()) {
+      if (req.requesterId === userId) {
+        this.pendingRequests.delete(id);
+      }
+    }
+  }
 }
+

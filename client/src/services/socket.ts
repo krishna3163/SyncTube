@@ -5,12 +5,12 @@ const getSocketUrl = (): string => {
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL;
   }
-  // If in development and not specified, point to port 10000
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:10000';
+  if (typeof window !== 'undefined') {
+    return window.location.origin;
   }
-  return window.location.origin;
+  return 'http://127.0.0.1:10000';
 };
+
 
 export const socket: Socket = io(getSocketUrl(), {
   autoConnect: false,
@@ -50,4 +50,83 @@ export const emitAssignRole = (userId: string, role: Role) => {
 
 export const emitRemoveParticipant = (userId: string) => {
   socket.emit('remove_participant', { userId });
+};
+
+export const emitHostSyncPulse = (time: number) => {
+  socket.emit('host_sync_pulse', { time });
+};
+
+export const emitPlaylistAdd = (videoId: string, title?: string) => {
+  socket.emit('playlist_add', { videoId, title });
+};
+
+export const emitPlaylistRemove = (itemId: string) => {
+  socket.emit('playlist_remove', { itemId });
+};
+
+export const emitPlaylistReorder = (fromIndex: number, toIndex: number) => {
+  socket.emit('playlist_reorder', { fromIndex, toIndex });
+};
+
+export const emitPlaylistMoveTop = (itemId: string) => {
+  socket.emit('playlist_move_top', { itemId });
+};
+
+export const emitRequestAction = (
+  type: 'play' | 'pause' | 'seek' | 'change_video',
+  data?: { time?: number; videoId?: string }
+) => {
+  socket.emit('request_action', { type, data });
+};
+
+export const emitRespondActionRequest = (requestId: string, approved: boolean) => {
+  socket.emit('respond_action_request', { requestId, approved });
+};
+
+export const emitSendChat = (text: string, userColor?: string, avatarId?: string) => {
+  socket.emit('chat_message', { text, userColor, avatarId });
+};
+
+export const emitSendReaction = (emoji: string) => {
+  socket.emit('send_reaction', { emoji });
+};
+
+
+// NTP-style clock & latency tracker
+let estimatedOneWayLatencyMs = 25; // fallback 25ms
+let serverClockOffsetMs = 0;
+
+export const getNetworkLatency = () => ({
+  oneWayLatencyMs: estimatedOneWayLatencyMs,
+  serverClockOffsetMs,
+});
+
+export const startTimeSync = () => {
+  const ping = () => {
+    if (socket.connected) {
+      socket.emit('time_sync_ping', { clientTime: Date.now() });
+    }
+  };
+
+  const onPong = (data: { clientTime: number; serverTime: number }) => {
+    const now = Date.now();
+    const rtt = Math.max(2, now - data.clientTime);
+    const oneWay = rtt / 2;
+    const offset = (data.serverTime + oneWay) - now;
+
+    // Smooth exponential moving average to filter out network spikes
+    estimatedOneWayLatencyMs = Math.round(estimatedOneWayLatencyMs * 0.65 + oneWay * 0.35);
+    serverClockOffsetMs = Math.round(serverClockOffsetMs * 0.65 + offset * 0.35);
+  };
+
+  socket.on('time_sync_pong', onPong);
+
+  // Ping every 2 seconds for continuous precision calibration
+  const interval = setInterval(ping, 2000);
+  if (socket.connected) ping();
+
+  return () => {
+    clearInterval(interval);
+    socket.off('time_sync_pong', onPong);
+  };
 };

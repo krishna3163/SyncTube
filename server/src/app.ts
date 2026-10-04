@@ -11,7 +11,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
 
   const allowedOrigins = process.env.FRONTEND_URL
     ? [process.env.FRONTEND_URL, 'http://localhost:5173']
-    : '*';
+    : true;
 
   app.use(cors({
     origin: allowedOrigins,
@@ -34,7 +34,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   app.post('/api/rooms', async (req: Request, res: Response) => {
     try {
       const { initialVideoId } = req.body || {};
-      let videoId = 'dQw4w9WgXcQ';
+      let videoId = 'LXb3EKWsInQ';
 
       if (initialVideoId) {
         const parsed = extractYouTubeId(initialVideoId);
@@ -91,6 +91,81 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
       playState: room.playState,
       participantCount: room.getParticipantCount(),
     });
+  });
+
+  // Search YouTube videos endpoint
+  app.get('/api/youtube/search', async (req: Request, res: Response) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      if (!q) {
+        return res.status(400).json({ error: 'Query parameter q is required.' });
+      }
+
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+      const response = await fetch(searchUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      if (!response.ok) {
+        return res.status(502).json({ error: 'Failed to fetch search results from YouTube.' });
+      }
+
+      const html = await response.text();
+      const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
+      const videos: Array<{ videoId: string; title: string; duration: string; thumbnail: string }> = [];
+
+      if (match) {
+        try {
+          const data = JSON.parse(match[1]);
+          const findVideos = (obj: any) => {
+            if (!obj || typeof obj !== 'object' || videos.length >= 15) return;
+            if (obj.videoRenderer) {
+              const vr = obj.videoRenderer;
+              const vid = vr.videoId;
+              const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
+              const duration = vr.lengthText?.simpleText || '';
+              const thumbs = vr.thumbnail?.thumbnails || [];
+              const thumb = thumbs[thumbs.length - 1]?.url || `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
+              if (vid && title && !videos.some((v) => v.videoId === vid)) {
+                videos.push({ videoId: vid, title, duration, thumbnail: thumb });
+              }
+            }
+            if (Array.isArray(obj)) {
+              for (const item of obj) findVideos(item);
+            } else {
+              for (const key of Object.keys(obj)) findVideos(obj[key]);
+            }
+          };
+          findVideos(data);
+        } catch {
+          // ignore json parse error
+        }
+      }
+
+      if (videos.length === 0) {
+        const vidMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+        const seen = new Set<string>();
+        for (const m of vidMatches) {
+          const vid = m[1];
+          if (!seen.has(vid) && videos.length < 10) {
+            seen.add(vid);
+            videos.push({
+              videoId: vid,
+              title: `YouTube Video (${vid})`,
+              duration: '',
+              thumbnail: `https://img.youtube.com/vi/${vid}/hqdefault.jpg`,
+            });
+          }
+        }
+      }
+
+      res.status(200).json({ query: q, results: videos });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
   });
 
   // Serve static client build if it exists (e.g. monolithic or Render deployment)

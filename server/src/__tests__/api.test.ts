@@ -28,7 +28,7 @@ describe('Express REST API Endpoints', () => {
       const res = await request(app).post('/api/rooms').send({});
       expect(res.status).toBe(201);
       expect(res.body.roomId).toBeDefined();
-      expect(res.body.videoId).toBe('dQw4w9WgXcQ');
+      expect(res.body.videoId).toBe('LXb3EKWsInQ');
       expect(roomManager.hasRoom(res.body.roomId)).toBe(true);
     });
 
@@ -63,6 +63,20 @@ describe('Express REST API Endpoints', () => {
       const res = await request(app).get('/api/rooms/NONEXIST');
       expect(res.status).toBe(404);
       expect(res.body.exists).toBe(false);
+    });
+  });
+
+  describe('GET /api/youtube/search', () => {
+    it('returns 400 when query parameter q is missing', async () => {
+      const res = await request(app).get('/api/youtube/search');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('required');
+    });
+
+    it('returns 400 when query parameter q is empty whitespace', async () => {
+      const res = await request(app).get('/api/youtube/search?q=   ');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('required');
     });
   });
 });

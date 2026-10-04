@@ -1,110 +1,395 @@
-import React from 'react';
-import { Play, Pause, RotateCcw, RotateCw, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  RotateCw,
+  Lock,
+  SkipForward,
+  Maximize,
+  Minimize,
+  Sparkles,
+  Volume2,
+  VolumeX,
+  RefreshCw,
+  Bell,
+  Crown,
+  Shield,
+  User,
+  Settings2,
+  Subtitles,
+  Check,
+} from 'lucide-react';
 import { Role, PlayState } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
 
-interface PlaybackControlsProps {
+export interface PlaybackControlsProps {
   playState: PlayState;
   currentTime: number;
   duration: number;
   userRole: Role;
+  visible?: boolean;
   onPlay: () => void;
   onPause: () => void;
   onSeek: (time: number) => void;
+  onNextVideo?: () => void;
+  onToggleFullscreen?: () => void;
+  isFullscreen?: boolean;
+  ambientMode?: boolean;
+  onToggleAmbient?: () => void;
+  onToggleMute?: () => void;
+  onResync?: () => void;
+  isMuted?: boolean;
+  onSetQuality?: (quality: string) => void;
+  onToggleCaptions?: () => void;
+  currentQuality?: string;
+  isCaptionsOn?: boolean;
+  onRequestAction?: (
+    type: 'play' | 'pause' | 'seek' | 'change_video',
+    data?: { time?: number; videoId?: string }
+  ) => void;
+  onOpenRequestsTab?: () => void;
+  isDockMode?: boolean;
 }
+
+const QUALITIES = [
+  { label: 'Auto', value: 'auto' },
+  { label: '1080p HD', value: 'hd1080' },
+  { label: '720p HD', value: 'hd720' },
+  { label: '480p', value: 'large' },
+  { label: '360p', value: 'medium' },
+  { label: '240p', value: 'small' },
+];
 
 export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   playState,
   currentTime,
   duration,
   userRole,
+  visible = true,
   onPlay,
   onPause,
   onSeek,
+  onNextVideo,
+  onToggleFullscreen,
+  isFullscreen = false,
+  ambientMode = true,
+  onToggleAmbient,
+  onToggleMute,
+  onResync,
+  isMuted = false,
+  onSetQuality,
+  onToggleCaptions,
+  currentQuality = 'auto',
+  isCaptionsOn = false,
+  onRequestAction,
+  onOpenRequestsTab,
+  isDockMode = false,
 }) => {
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!canControl) return;
     const target = parseFloat(e.target.value);
-    onSeek(target);
+    if (canControl) {
+      onSeek(target);
+    } else if (onRequestAction) {
+      onRequestAction('seek', { time: target });
+    }
   };
 
   const handleJump = (delta: number) => {
-    if (!canControl) return;
     const nextTime = Math.max(0, Math.min(duration || 9999, currentTime + delta));
-    onSeek(nextTime);
+    if (canControl) {
+      onSeek(nextTime);
+    } else if (onRequestAction) {
+      onRequestAction('seek', { time: nextTime });
+    }
   };
 
+  const handlePlayPause = () => {
+    if (canControl) {
+      if (playState === 'playing') onPause();
+      else onPlay();
+    } else if (onRequestAction) {
+      if (playState === 'playing') onRequestAction('pause');
+      else onRequestAction('play');
+    }
+  };
+
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  const renderRoleBadge = () => {
+    if (userRole === 'HOST') {
+      return (
+        <span className="controls-role-badge host">
+          <Crown size={12} /> Host
+        </span>
+      );
+    }
+    if (userRole === 'MODERATOR') {
+      return (
+        <span className="controls-role-badge mod">
+          <Shield size={12} /> Moderator
+        </span>
+      );
+    }
+    return (
+      <span className="controls-role-badge viewer">
+        <User size={12} /> Viewer
+      </span>
+    );
+  };
+
+  const containerClass = isDockMode
+    ? 'controls-dock-panel'
+    : `controls-overlay ${visible ? 'controls-visible' : 'controls-hidden'}`;
+
   return (
-    <div className="controls-bar">
+    <div className={containerClass}>
+      {/* Timeline Slider with glowing progress */}
       <div className="timeline-container">
-        <span className="time-text">{formatTime(currentTime)}</span>
+        <span className="time-text current">{formatTime(currentTime)}</span>
         <input
           type="range"
           min={0}
           max={duration > 0 ? duration : 100}
           step={0.5}
           value={currentTime}
-          disabled={!canControl}
           onChange={handleSliderChange}
           className="timeline-slider"
           aria-label="Video timeline seek"
+          aria-valuemin={0}
+          aria-valuemax={duration > 0 ? duration : 100}
+          aria-valuenow={currentTime}
+          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
+          style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
+          title={canControl ? 'Seek to position' : 'Click to request seek position'}
         />
-        <span className="time-text">{formatTime(duration)}</span>
+        <span className="time-text total">{formatTime(duration)}</span>
       </div>
 
+      {/* Button controls row */}
       <div className="buttons-row">
+        {/* Playback Buttons Group */}
         <div className="playback-buttons">
-          {playState === 'playing' ? (
+          <button
+            type="button"
+            className="btn btn-primary control-btn-play"
+            onClick={handlePlayPause}
+            title={
+              canControl
+                ? playState === 'playing'
+                  ? 'Pause Video'
+                  : 'Play Video'
+                : playState === 'playing'
+                ? 'Request Host to Pause'
+                : 'Request Host to Play'
+            }
+            aria-label={playState === 'playing' ? 'Pause' : 'Play'}
+          >
+            {playState === 'playing' ? <Pause size={18} /> : <Play size={18} />}
+            <span>
+              {canControl
+                ? playState === 'playing'
+                  ? 'Pause'
+                  : 'Play'
+                : playState === 'playing'
+                ? 'Request Pause'
+                : 'Request Play'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary control-btn-jump"
+            onClick={() => handleJump(-10)}
+            title={canControl ? 'Jump back 10 seconds' : 'Request seek -10s'}
+            aria-label="Back 10 seconds"
+          >
+            <RotateCcw size={15} />
+            <span>-10s</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary control-btn-jump"
+            onClick={() => handleJump(10)}
+            title={canControl ? 'Jump forward 10 seconds' : 'Request seek +10s'}
+            aria-label="Forward 10 seconds"
+          >
+            <RotateCw size={15} />
+            <span>+10s</span>
+          </button>
+
+          {onNextVideo && canControl && (
             <button
-              className="btn btn-primary"
-              disabled={!canControl}
-              onClick={onPause}
-              title={canControl ? 'Pause Video' : 'Only Host/Moderator can pause'}
+              type="button"
+              className="btn btn-secondary control-btn-next"
+              onClick={onNextVideo}
+              title="Skip to next video in playlist"
+              aria-label="Next Video"
             >
-              <Pause size={18} />
-              Pause
-            </button>
-          ) : (
-            <button
-              className="btn btn-primary"
-              disabled={!canControl}
-              onClick={onPlay}
-              title={canControl ? 'Play Video' : 'Only Host/Moderator can play'}
-            >
-              <Play size={18} />
-              Play
+              <SkipForward size={16} />
+              <span>Next</span>
             </button>
           )}
 
-          <button
-            className="btn btn-secondary"
-            disabled={!canControl}
-            onClick={() => handleJump(-10)}
-            title="Jump back 10 seconds"
-          >
-            <RotateCcw size={16} />
-            -10s
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            disabled={!canControl}
-            onClick={() => handleJump(10)}
-            title="Jump forward 10 seconds"
-          >
-            <RotateCw size={16} />
-            +10s
-          </button>
+          {/* Viewer Quick Request Button */}
+          {!canControl && onOpenRequestsTab && (
+            <button
+              type="button"
+              className="btn btn-request-quick"
+              onClick={onOpenRequestsTab}
+              title="Request a video change or seek from Host"
+            >
+              <Bell size={14} />
+              <span>Request</span>
+            </button>
+          )}
         </div>
 
-        {!canControl && (
-          <div className="role-notice">
-            <Lock size={15} />
-            <span>Playback controlled by Host & Moderators</span>
-          </div>
-        )}
+        {/* Right Group: Mute, Sync, Role Notice, Settings, Fullscreen */}
+        <div className="controls-right-group">
+          {renderRoleBadge()}
+
+          {onToggleMute && (
+            <button
+              type="button"
+              className="btn-icon control-btn-icon"
+              onClick={onToggleMute}
+              title={isMuted ? 'Unmute Video' : 'Mute Video'}
+              style={{ color: isMuted ? 'var(--red)' : 'var(--text-main)' }}
+              aria-label="Toggle Mute"
+            >
+              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+          )}
+
+          {onResync && (
+            <button
+              type="button"
+              className="btn-icon control-btn-icon"
+              onClick={onResync}
+              title="Force sync with Host"
+              aria-label="Resync Video"
+            >
+              <RefreshCw size={17} />
+            </button>
+          )}
+
+          {/* Local Video Settings (Quality & Captions) */}
+          {(onSetQuality || onToggleCaptions) && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`btn-icon control-btn-icon ${showSettingsMenu ? 'active' : ''}`}
+                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                title="Local Video Settings (Quality & Captions)"
+                aria-label="Video Settings"
+              >
+                <Settings2 size={18} />
+              </button>
+
+              {showSettingsMenu && (
+                <div
+                  className="card glass"
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 10px)',
+                    right: 0,
+                    width: '200px',
+                    padding: '0.6rem',
+                    zIndex: 100,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+                    background: 'rgba(20, 16, 32, 0.96)',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    borderRadius: '12px',
+                  }}
+                >
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Local Video Settings
+                  </div>
+
+                  {onToggleCaptions && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        onToggleCaptions();
+                        setShowSettingsMenu(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        justifyContent: 'space-between',
+                        padding: '0.4rem 0.6rem',
+                        fontSize: '0.8rem',
+                        marginBottom: '0.5rem',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Subtitles size={15} /> Captions / CC
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: isCaptionsOn ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 700 }}>
+                        {isCaptionsOn ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  )}
+
+                  {onSetQuality && (
+                    <>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+                        Local Quality
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        {QUALITIES.map((q) => (
+                          <button
+                            key={q.value}
+                            type="button"
+                            onClick={() => {
+                              onSetQuality(q.value);
+                              setShowSettingsMenu(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.35rem 0.6rem',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: currentQuality === q.value ? 'rgba(255, 210, 31, 0.15)' : 'transparent',
+                              color: currentQuality === q.value ? 'var(--accent)' : 'var(--text-main)',
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              fontWeight: currentQuality === q.value ? 700 : 500,
+                            }}
+                          >
+                            <span>{q.label}</span>
+                            {currentQuality === q.value && <Check size={14} color="var(--accent)" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              className="btn-icon fullscreen-btn"
+              onClick={onToggleFullscreen}
+              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              aria-label="Toggle Fullscreen"
+            >
+              {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

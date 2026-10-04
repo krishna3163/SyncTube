@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { HomePage } from './pages/HomePage.js';
 import { RoomPage } from './pages/RoomPage.js';
-import { CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 interface Toast {
   id: string;
   message: string;
-  type: 'success' | 'error';
+  type: 'success' | 'error' | 'info';
 }
 
 export function App() {
@@ -35,7 +35,7 @@ export function App() {
     }
   }, []);
 
-  const showToast = React.useCallback((message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = `${Date.now()}_${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -82,8 +82,10 @@ export function App() {
           <div key={toast.id} className={`toast toast-${toast.type}`}>
             {toast.type === 'success' ? (
               <CheckCircle2 size={18} color="var(--accent-emerald)" />
-            ) : (
+            ) : toast.type === 'error' ? (
               <AlertCircle size={18} color="var(--accent-rose)" />
+            ) : (
+              <Info size={18} color="var(--accent)" />
             )}
             <span style={{ fontSize: '0.9rem', flex: 1 }}>{toast.message}</span>
             <button

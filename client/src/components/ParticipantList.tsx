@@ -1,19 +1,28 @@
 import React from 'react';
-import { Crown, Shield, User, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
+import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
 import { ParticipantPublic, Role } from '../types.js';
+import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 
 interface ParticipantListProps {
   participants: ParticipantPublic[];
   currentUserId: string;
   currentUserRole: Role;
+  currentUserAvatarId?: string;
   onAssignRole: (userId: string, role: Role) => void;
   onRemoveParticipant: (userId: string) => void;
 }
+
+const ROLE_GLOW: Record<Role, string> = {
+  HOST: '#FFD21F',
+  MODERATOR: '#38bdf8',
+  PARTICIPANT: 'transparent',
+};
 
 export const ParticipantList: React.FC<ParticipantListProps> = ({
   participants,
   currentUserId,
   currentUserRole,
+  currentUserAvatarId,
   onAssignRole,
   onRemoveParticipant,
 }) => {
@@ -38,8 +47,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       case 'PARTICIPANT':
       default:
         return (
-          <span className="badge badge-participant">
-            <User size={12} />
+          <span className="badge badge-participant" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
             Viewer
           </span>
         );
@@ -58,14 +66,37 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
       <div className="participant-list">
         {participants.map((p) => {
           const isCurrentUser = p.userId === currentUserId;
+          const glowColor = ROLE_GLOW[p.role];
 
           return (
             <div key={p.userId} className="participant-item">
               <div className="participant-info">
-                <span className="participant-name">
-                  {p.username} {isCurrentUser && <span style={{ color: 'var(--primary)', fontSize: '0.8rem' }}>(You)</span>}
-                </span>
-                {renderRoleBadge(p.role)}
+                {/* Anime avatar */}
+                <div
+                  style={{
+                    boxShadow: p.role !== 'PARTICIPANT' ? `0 0 0 2px ${glowColor}` : undefined,
+                    borderRadius: '50%',
+                  }}
+                >
+                  <AnimeAvatarDisplay
+                    username={p.username}
+                    avatarId={isCurrentUser ? currentUserAvatarId : undefined}
+                    size={32}
+                    showTooltip
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1 }}>
+                  <span className="participant-name">
+                    {p.username}
+                    {isCurrentUser && (
+                      <span style={{ color: 'var(--accent)', fontSize: '0.72rem', marginLeft: '0.3rem' }}>
+                        (You)
+                      </span>
+                    )}
+                  </span>
+                  {renderRoleBadge(p.role)}
+                </div>
               </div>
 
               {isHost && !isCurrentUser && (
@@ -89,6 +120,18 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       <ShieldAlert size={16} color="var(--text-muted)" />
                     </button>
                   )}
+
+                  <button
+                    className="btn-icon"
+                    onClick={() => {
+                      if (window.confirm(`Transfer Host ownership to ${p.username}? You will become a Moderator.`)) {
+                        onAssignRole(p.userId, 'HOST');
+                      }
+                    }}
+                    title="Transfer Host Ownership"
+                  >
+                    <Crown size={16} color="var(--accent)" />
+                  </button>
 
                   <button
                     className="btn-icon"

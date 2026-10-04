@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { PlayState, Role, SyncStatePayload } from '../types.js';
 
 declare global {
@@ -6,6 +6,16 @@ declare global {
     YT: any;
     onYouTubeIframeAPIReady: () => void;
   }
+}
+
+export interface YouTubePlayerHandle {
+  toggleMute: () => void;
+  resync: () => void;
+  isMuted: () => boolean;
+  setQuality: (quality: string) => void;
+  getCurrentQuality: () => string;
+  toggleCaptions: () => boolean;
+  isCaptionsOn: () => boolean;
 }
 
 interface YouTubePlayerProps {
@@ -16,9 +26,10 @@ interface YouTubePlayerProps {
   onLocalPause: (time: number) => void;
   onLocalSeek: (time: number) => void;
   onCurrentTimeChange: (time: number, duration: number) => void;
+  onVideoEnded?: () => void;
 }
 
-export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
+export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>(({
   videoId,
   syncState,
   userRole,
@@ -26,7 +37,8 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   onLocalPause,
   onLocalSeek,
   onCurrentTimeChange,
-}) => {
+  onVideoEnded,
+}, ref) => {
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [playerReady, setPlayerReady] = useState(false);
@@ -43,6 +55,9 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   const syncStateRef = useRef<SyncStatePayload | null>(syncState);
   syncStateRef.current = syncState;
+
+  const onVideoEndedRef = useRef(onVideoEnded);
+  onVideoEndedRef.current = onVideoEnded;
 
   const lastKnownVideoIdRef = useRef<string>(videoId);
 
@@ -67,11 +82,13 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         host: 'https://www.youtube.com',
         playerVars: {
           autoplay: 0,
-          controls: 1,
+          controls: 0,
           rel: 0,
           modestbranding: 1,
           enablejsapi: 1,
           origin: window.location.origin,
+          playsinline: 1,
+          disablekb: 1,
         },
         events: {
           onReady: () => {
@@ -90,9 +107,18 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
             // Always check latest role via ref to avoid stale closure
             const canControl = userRoleRef.current === 'HOST' || userRoleRef.current === 'MODERATOR';
 
-            // YT.PlayerState.PLAYING = 1, PAUSED = 2
-            if (event.data === window.YT.PlayerState.PLAYING) {
+            // YT.PlayerState.ENDED = 0, PLAYING = 1, PAUSED = 2
+            if (event.data === window.YT.PlayerState.ENDED) {
+              if (canControl && onVideoEndedRef.current) {
+                onVideoEndedRef.current();
+              }
+            } else if (event.data === window.YT.PlayerState.PLAYING) {
               if (canControl) {
+                // If server is ALREADY in playing state, this PLAYING event is just the player
+                // completing the transition commanded by the server - do NOT echo back to server!
+                if (syncStateRef.current?.playState === 'playing') {
+                  return;
+                }
                 const currentTime = playerRef.current?.getCurrentTime() || 0;
                 onLocalPlayRef.current(currentTime);
               } else {
@@ -101,6 +127,11 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               }
             } else if (event.data === window.YT.PlayerState.PAUSED) {
               if (canControl) {
+                // If server is ALREADY in paused state, this PAUSED event is just the player
+                // completing the transition commanded by the server - do NOT echo back to server!
+                if (syncStateRef.current?.playState === 'paused') {
+                  return;
+                }
                 const currentTime = playerRef.current?.getCurrentTime() || 0;
                 onLocalPauseRef.current(currentTime);
               } else {
@@ -156,11 +187,15 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     }
   }, [videoId, playerReady]);
 
+  // Local receipt timestamp to eliminate device-to-device clock skew
+  const localReceivedAtRef = useRef<number>(Date.now());
+  const receivedAnchorTimeRef = useRef<number>(0);
+
   // Reconcile player state with incoming server sync_state
   const reconcileWithServer = () => {
     if (!playerReady || !playerRef.current || !syncStateRef.current) return;
 
-    const { videoId: targetVideoId, playState, currentTime, updatedAt } = syncStateRef.current;
+    const { videoId: targetVideoId, playState, currentTime } = syncStateRef.current;
 
     // Load new video if changed
     if (targetVideoId !== lastKnownVideoIdRef.current) {
@@ -169,13 +204,13 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       playerRef.current.loadVideoById(targetVideoId);
     }
 
-    // If PAUSED on server, strictly enforce pause without any elapsed time addition
+    // If PAUSED on server, strictly enforce pause and exact timestamp
     if (playState === 'paused') {
       const currentYtState = playerRef.current.getPlayerState();
       const localTime = playerRef.current.getCurrentTime() || 0;
 
-      // If drifted by more than 1.5s from the pause point, seek to pause point
-      if (Math.abs(localTime - currentTime) > 1.5) {
+      // If drifted by more than 1s from the pause point, seek to pause point
+      if (Math.abs(localTime - currentTime) > 1.0) {
         ignoreStateChangesUntilRef.current = Date.now() + 1000;
         playerRef.current.seekTo(currentTime, true);
       }
@@ -187,17 +222,25 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       return;
     }
 
-    // If PLAYING on server, calculate effective target time factoring elapsed time
-    const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
-    const targetTime = currentTime + elapsed;
+    // If PLAYING on server, calculate effective target time using local elapsed time
+    const elapsed = Math.max(0, (Date.now() - localReceivedAtRef.current) / 1000);
+    const targetTime = receivedAnchorTimeRef.current + elapsed;
 
     const localTime = playerRef.current.getCurrentTime() || 0;
-    const drift = Math.abs(localTime - targetTime);
+    const drift = localTime - targetTime; // positive = viewer ahead, negative = viewer behind
 
-    // If drift is significant (> 1.5 seconds), seek
-    if (drift > 1.5) {
-      ignoreStateChangesUntilRef.current = Date.now() + 1000;
+    // Large drift (> 3s): hard seek to catch up quickly
+    if (Math.abs(drift) > 3.0) {
+      ignoreStateChangesUntilRef.current = Date.now() + 1200;
       playerRef.current.seekTo(targetTime, true);
+      try { playerRef.current.setPlaybackRate(1.0); } catch {}
+    } else if (Math.abs(drift) > 0.5) {
+      // Medium drift: adjust playback rate gently (no seek = no buffering)
+      const rate = drift > 0 ? 0.92 : 1.08; // slow down if ahead, speed up if behind
+      try { playerRef.current.setPlaybackRate(rate); } catch {}
+    } else {
+      // In sync: restore normal rate
+      try { playerRef.current.setPlaybackRate(1.0); } catch {}
     }
 
     // Match playing state
@@ -210,6 +253,10 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
 
   // Reconcile whenever syncState updates from server
   useEffect(() => {
+    if (syncState) {
+      localReceivedAtRef.current = Date.now();
+      receivedAnchorTimeRef.current = syncState.currentTime;
+    }
     reconcileWithServer();
   }, [syncState, playerReady]);
 
@@ -224,17 +271,29 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         onCurrentTimeChange(time, dur);
 
         const currentSync = syncStateRef.current;
-        // ONLY perform drift correction if server is in playing state AND not in programmatic debounce
+        // Non-host viewers: gentle rate-based correction to eliminate buffering
         if (
+          userRoleRef.current !== 'HOST' &&
           currentSync &&
           currentSync.playState === 'playing' &&
           Date.now() > ignoreStateChangesUntilRef.current
         ) {
-          const elapsed = Math.max(0, (Date.now() - currentSync.updatedAt) / 1000);
-          const expected = currentSync.currentTime + elapsed;
-          if (Math.abs(time - expected) > 2.5) {
-            ignoreStateChangesUntilRef.current = Date.now() + 1000;
+          const elapsed = Math.max(0, (Date.now() - localReceivedAtRef.current) / 1000);
+          const expected = receivedAnchorTimeRef.current + elapsed;
+          const drift = time - expected; // positive = ahead, negative = behind
+
+          if (Math.abs(drift) > 3.0) {
+            // Large drift: hard seek
+            ignoreStateChangesUntilRef.current = Date.now() + 1200;
             playerRef.current.seekTo(expected, true);
+            try { playerRef.current.setPlaybackRate(1.0); } catch {}
+          } else if (Math.abs(drift) > 0.5) {
+            // Medium drift: rate adjustment only (no buffering!)
+            const rate = drift > 0 ? 0.92 : 1.08;
+            try { playerRef.current.setPlaybackRate(rate); } catch {}
+          } else {
+            // In sync
+            try { playerRef.current.setPlaybackRate(1.0); } catch {}
           }
         }
       } catch {}
@@ -243,9 +302,79 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
     return () => clearInterval(timer);
   }, [playerReady, onCurrentTimeChange]);
 
+  useImperativeHandle(ref, () => ({
+    toggleMute: () => {
+      if (!playerRef.current) return;
+      try {
+        if (playerRef.current.isMuted()) {
+          playerRef.current.unMute();
+        } else {
+          playerRef.current.mute();
+        }
+      } catch {}
+    },
+    resync: () => {
+      reconcileWithServer();
+    },
+    isMuted: () => {
+      try {
+        return playerRef.current?.isMuted() ?? false;
+      } catch {
+        return false;
+      }
+    },
+    setQuality: (quality: string) => {
+      if (!playerRef.current) return;
+      try {
+        if (typeof playerRef.current.setPlaybackQuality === 'function') {
+          playerRef.current.setPlaybackQuality(quality);
+        }
+      } catch {}
+    },
+    getCurrentQuality: () => {
+      try {
+        return playerRef.current?.getPlaybackQuality?.() || 'auto';
+      } catch {
+        return 'auto';
+      }
+    },
+    toggleCaptions: () => {
+      if (!playerRef.current) return false;
+      try {
+        const track = playerRef.current.getOption?.('captions', 'track');
+        if (track && Object.keys(track).length > 0) {
+          playerRef.current.unloadModule?.('captions');
+          playerRef.current.setOption?.('captions', 'track', {});
+          return false;
+        } else {
+          playerRef.current.loadModule?.('captions');
+          playerRef.current.setOption?.('captions', 'track', { languageCode: 'en' });
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    },
+    isCaptionsOn: () => {
+      try {
+        const track = playerRef.current?.getOption?.('captions', 'track');
+        return Boolean(track && Object.keys(track).length > 0);
+      } catch {
+        return false;
+      }
+    }
+  }));
+
   return (
     <div className="video-wrapper" ref={containerRef}>
       <div className="video-iframe" />
+      {userRole !== 'HOST' && userRole !== 'MODERATOR' && (
+        <div 
+          className="viewer-video-shield" 
+          style={{ position: 'absolute', inset: 0, zIndex: 10, cursor: 'default' }}
+          title="Playback is controlled by the Host" 
+        />
+      )}
     </div>
   );
-};
+});

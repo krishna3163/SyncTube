@@ -60,3 +60,44 @@ export interface ParticipantPublic {
   username: string;
   role: Role;
 }
+
+export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video';
+
+export interface PendingActionRequest {
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  type: ActionRequestType;
+  data?: {
+    time?: number;
+    videoId?: string;
+  };
+  createdAt: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  username: string;
+  userColor?: string;
+  avatarId?: string;
+  role: Role;
+  text: string;
+  timestamp: number;
+}
+
+export interface EmojiReaction {
+  id: string;
+  emoji: string;
+  userId: string;
+  username: string;
+  timestamp: number;
+}
+
+export interface SoundEffectPayload {
+  soundId: string;
+  userId: string;
+  username: string;
+  timestamp: number;
+}
+

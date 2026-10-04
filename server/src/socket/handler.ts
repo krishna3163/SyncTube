@@ -11,7 +11,17 @@ import {
   PlayPauseSchema,
   RemoveParticipantSchema,
   SeekSchema,
+  PlaylistAddSchema,
+  PlaylistRemoveSchema,
+  PlaylistReorderSchema,
+  PlaylistMoveTopSchema,
+  ActionRequestSchema,
+  RespondActionRequestSchema,
+  ChatMessageSchema,
+  SendReactionSchema,
+  SendSoundEffectSchema,
 } from './schemas.js';
+import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
 
 interface SocketData {
   roomId?: string;
@@ -86,6 +96,10 @@ export function setupSocketHandlers(
 
         // Send current authoritative room state to the newly joined client
         socket.emit('sync_state', room.toSyncStatePayload());
+        // Send current playlist to the newly joined client
+        socket.emit('playlist_sync', { playlist: room.playlist });
+        // Send current pending action requests
+        socket.emit('pending_requests_sync', { requests: room.getPendingRequests() });
 
         // Broadcast to everyone in the room that a user joined
         io.to(normalizedRoomId).emit('user_joined', {
@@ -358,6 +372,292 @@ export function setupSocketHandlers(
         sendError('INTERNAL_ERROR', (err as Error).message);
       }
     });
+
+    // 11. PLAYLIST — ADD
+    socket.on('playlist_add', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can modify playlist.');
+
+        const parsed = PlaylistAddSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_add payload.');
+
+        const { videoId, title } = parsed.data;
+        const extracted = extractYouTubeId(videoId);
+        if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
+
+        const item = {
+          id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          videoId: extracted,
+          title: title || `Video (${extracted})`,
+          addedBy: participant.username,
+        };
+        room.addToPlaylist(item);
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 12. PLAYLIST — REMOVE
+    socket.on('playlist_remove', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can modify playlist.');
+
+        const parsed = PlaylistRemoveSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_remove payload.');
+
+        room.removeFromPlaylist(parsed.data.itemId);
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 13. PLAYLIST — REORDER
+    socket.on('playlist_reorder', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can modify playlist.');
+
+        const parsed = PlaylistReorderSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_reorder payload.');
+
+        room.reorderPlaylist(parsed.data.fromIndex, parsed.data.toIndex);
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 14. PLAYLIST — MOVE TO TOP
+    socket.on('playlist_move_top', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can modify playlist.');
+
+        const parsed = PlaylistMoveTopSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_move_top payload.');
+
+        room.moveToTop(parsed.data.itemId);
+        io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 9. TIME SYNC PING (NTP-style clock sync for ultra-low latency)
+    socket.on('time_sync_ping', (rawPayload: unknown) => {
+      const clientTime = (rawPayload && typeof (rawPayload as any).clientTime === 'number')
+        ? (rawPayload as any).clientTime
+        : Date.now();
+      socket.emit('time_sync_pong', {
+        clientTime,
+        serverTime: Date.now(),
+      });
+    });
+
+    // 10. HOST SYNC PULSE (Authoritative continuous playback position heartbeat)
+    socket.on('host_sync_pulse', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') return;
+
+        const time = (rawPayload && typeof (rawPayload as any).time === 'number')
+          ? (rawPayload as any).time
+          : undefined;
+
+        if (time !== undefined && !isNaN(time) && time >= 0) {
+          if (room.playState === 'playing') {
+            room.currentTime = time;
+            room.updatedAt = Date.now();
+            socket.to(room.id).emit('sync_pulse', {
+              currentTime: time,
+              serverTime: Date.now(),
+            });
+          }
+        }
+      } catch {}
+    });
+
+    // 15. PARTICIPANT ACTION REQUEST (Participant asks Admin/Mod to approve play/pause/seek/video change)
+    socket.on('request_action', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = ActionRequestSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid request_action payload.');
+
+        const { type, data } = parsed.data;
+        let extractedVideoId: string | undefined = undefined;
+        if (type === 'change_video') {
+          if (!data?.videoId) return sendError('BAD_REQUEST', 'Missing videoId for change_video request.');
+          const extracted = extractYouTubeId(data.videoId);
+          if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
+          extractedVideoId = extracted;
+        }
+
+        const request: PendingActionRequest = {
+          id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          requesterId: participant.userId,
+          requesterName: participant.username,
+          type,
+          data: data
+            ? {
+                time: data.time,
+                videoId: extractedVideoId || data.videoId,
+              }
+            : undefined,
+          createdAt: Date.now(),
+        };
+
+        room.addPendingRequest(request);
+        io.to(room.id).emit('action_requested', { request });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 16. RESPOND TO ACTION REQUEST (Host/Moderator approves or rejects participant action request)
+    socket.on('respond_action_request', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only Host and Moderator can approve or reject action requests.');
+        }
+
+        const parsed = RespondActionRequestSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid respond_action_request payload.');
+
+        const { requestId, approved } = parsed.data;
+        const request = room.getPendingRequest(requestId);
+        if (!request) return sendError('NOT_FOUND', 'Action request not found or already resolved.');
+
+        room.removePendingRequest(requestId);
+
+        if (approved) {
+          if (request.type === 'play') {
+            room.play(request.data?.time);
+          } else if (request.type === 'pause') {
+            room.pause(request.data?.time);
+          } else if (request.type === 'seek' && typeof request.data?.time === 'number') {
+            room.seek(request.data.time);
+          } else if (request.type === 'change_video' && request.data?.videoId) {
+            room.changeVideo(request.data.videoId);
+          }
+
+          io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+
+          if (dbService) {
+            dbService
+              .saveRoom({
+                id: room.id,
+                video_id: room.videoId,
+                play_state: room.playState,
+                current_time: room.currentTime,
+                updated_at: room.updatedAt,
+              })
+              .catch(() => {});
+          }
+        }
+
+        io.to(room.id).emit('action_request_resolved', {
+          requestId,
+          approved,
+          resolvedBy: participant.username,
+          request,
+        });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 17. CHAT MESSAGE
+    socket.on('chat_message', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = ChatMessageSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid chat_message payload. Message must be 1-500 characters.');
+        }
+
+        const message: ChatMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          userId: participant.userId,
+          username: participant.username,
+          userColor: parsed.data.userColor,
+          avatarId: parsed.data.avatarId,
+          role: participant.role,
+          text: parsed.data.text,
+          timestamp: Date.now(),
+        };
+
+        io.to(room.id).emit('chat_message', message);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 18. EMOJI REACTION
+    socket.on('send_reaction', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = SendReactionSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid send_reaction payload.');
+
+        const reaction: EmojiReaction = {
+          id: `rx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          emoji: parsed.data.emoji,
+          userId: participant.userId,
+          username: participant.username,
+          timestamp: Date.now(),
+        };
+
+        io.to(room.id).emit('reaction_received', reaction);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 19. SOUND EFFECT
+    socket.on('send_sound_effect', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = SendSoundEffectSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid send_sound_effect payload.');
+
+        const soundPayload: SoundEffectPayload = {
+          soundId: parsed.data.soundId,
+          userId: participant.userId,
+          username: participant.username,
+          timestamp: Date.now(),
+        };
+
+        io.to(room.id).emit('sound_effect_received', soundPayload);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
 
     // DISCONNECT
     socket.on('disconnect', () => {

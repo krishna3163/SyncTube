@@ -78,7 +78,7 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     });
 
     const hostSync = await hostJoinPromise;
-    expect(hostSync.videoId).toBe('dQw4w9WgXcQ');
+    expect(hostSync.videoId).toBe('LXb3EKWsInQ');
     expect(hostSync.playState).toBe('paused');
 
     // 2. Participant joins
@@ -283,4 +283,134 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     const err = await badJoinPromise;
     expect(err.code).toBe('BAD_REQUEST');
   });
+
+  it('allows Host to transfer Host ownership to another participant', async () => {
+    roomManager.createRoom('XFER01');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'XFER01', username: 'OriginalHost', userId: 'host-1' });
+    guestSocket.emit('join_room', { roomId: 'XFER01', username: 'NewHost', userId: 'guest-1' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const rolePromise = new Promise<any>((resolve) => {
+      guestSocket.once('role_assigned', (payload) => resolve(payload));
+    });
+
+    // Transfer host to guest-1
+    hostSocket.emit('assign_role', { userId: 'guest-1', role: 'HOST' });
+    const roleData = await rolePromise;
+
+    expect(roleData.userId).toBe('guest-1');
+    expect(roleData.role).toBe('HOST');
+
+    const participants = roleData.participants;
+    const newHost = participants.find((p: any) => p.userId === 'guest-1');
+    const demotedHost = participants.find((p: any) => p.userId === 'host-1');
+
+    expect(newHost.role).toBe('HOST');
+    expect(demotedHost.role).toBe('MODERATOR');
+  });
+
+  it('supports participant action request and Host approval workflow', async () => {
+    roomManager.createRoom('REQ01');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'REQ01', username: 'HostUser', userId: 'host-1' });
+    guestSocket.emit('join_room', { roomId: 'REQ01', username: 'GuestUser', userId: 'guest-1' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // 1. Participant requests video change
+    const requestPromise = new Promise<any>((resolve) => {
+      hostSocket.once('action_requested', (payload) => resolve(payload));
+    });
+
+    guestSocket.emit('request_action', {
+      type: 'change_video',
+      data: { videoId: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    });
+
+    const reqData = await requestPromise;
+    expect(reqData.request.type).toBe('change_video');
+    expect(reqData.request.requesterId).toBe('guest-1');
+    expect(reqData.request.data.videoId).toBe('dQw4w9WgXcQ');
+
+    // 2. Host approves the request
+    const syncPromise = new Promise<any>((resolve) => {
+      guestSocket.once('sync_state', (sync) => resolve(sync));
+    });
+
+    const resolvePromise = new Promise<any>((resolve) => {
+      guestSocket.once('action_request_resolved', (payload) => resolve(payload));
+    });
+
+    hostSocket.emit('respond_action_request', {
+      requestId: reqData.request.id,
+      approved: true,
+    });
+
+    const [syncPayload, resolvePayload] = await Promise.all([syncPromise, resolvePromise]);
+    expect(syncPayload.videoId).toBe('dQw4w9WgXcQ');
+    expect(resolvePayload.approved).toBe(true);
+    expect(resolvePayload.resolvedBy).toBe('HostUser');
+  });
+
+  it('rejects unauthorized approval attempts from participants', async () => {
+    roomManager.createRoom('REQ02');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'REQ02', username: 'HostUser', userId: 'host-1' });
+    guestSocket.emit('join_room', { roomId: 'REQ02', username: 'GuestUser', userId: 'guest-1' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    const errPromise = new Promise<any>((resolve) => {
+      guestSocket.once('error', (err) => resolve(err));
+    });
+
+    guestSocket.emit('respond_action_request', {
+      requestId: 'dummy-id',
+      approved: true,
+    });
+
+    const err = await errPromise;
+    expect(err.code).toBe('FORBIDDEN');
+    expect(err.message).toContain('Only Host and Moderator');
+  });
+
+  it('broadcasts real-time chat messages and emoji reactions', async () => {
+    roomManager.createRoom('CHAT01');
+    const hostSocket = await createClient();
+    const guestSocket = await createClient();
+
+    hostSocket.emit('join_room', { roomId: 'CHAT01', username: 'Alice', userId: 'user-a' });
+    guestSocket.emit('join_room', { roomId: 'CHAT01', username: 'Bob', userId: 'user-b' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Chat
+    const chatPromise = new Promise<any>((resolve) => {
+      hostSocket.once('chat_message', (msg) => resolve(msg));
+    });
+
+    guestSocket.emit('chat_message', { text: 'Hello watch party!' });
+    const chatMsg = await chatPromise;
+    expect(chatMsg.text).toBe('Hello watch party!');
+    expect(chatMsg.username).toBe('Bob');
+
+    // Reaction
+    const reactionPromise = new Promise<any>((resolve) => {
+      hostSocket.once('reaction_received', (rx) => resolve(rx));
+    });
+
+    guestSocket.emit('send_reaction', { emoji: '🔥' });
+    const rxData = await reactionPromise;
+    expect(rxData.emoji).toBe('🔥');
+    expect(rxData.username).toBe('Bob');
+  });
 });
+

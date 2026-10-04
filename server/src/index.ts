@@ -22,7 +22,7 @@ async function bootstrap() {
 
   const allowedOrigins = process.env.FRONTEND_URL
     ? [process.env.FRONTEND_URL, 'http://localhost:5173']
-    : '*';
+    : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => callback(null, true);
 
   const io = new Server(server, {
     cors: {
