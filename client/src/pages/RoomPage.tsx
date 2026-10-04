@@ -99,41 +99,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Active Sidebar Tab: 'participants' | 'playlist' | 'chat' | 'requests' | 'activity'
   const [activeSidebarTab, setActiveSidebarTab] = useState<TabId>('participants');
-
-  // Swipe Gesture Ref & State
   const tabBarRef = useRef<HTMLDivElement>(null);
-  const touchStartXRef = useRef<number | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
-    const diffY = e.changedTouches[0].clientY - touchStartYRef.current;
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-
-    // Minimum 40px horizontal swipe and must be more horizontal than vertical
-    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY) * 1.25) {
-      const tabIds: TabId[] = ['participants', 'playlist', 'chat', 'requests', 'activity'];
-      const currentIndex = tabIds.indexOf(activeSidebarTab);
-
-      if (diffX < 0 && currentIndex < tabIds.length - 1) {
-        // Swiped Left -> go to next tab
-        setSlideDirection('left');
-        setActiveSidebarTab(tabIds[currentIndex + 1]);
-      } else if (diffX > 0 && currentIndex > 0) {
-        // Swiped Right -> go to previous tab
-        setSlideDirection('right');
-        setActiveSidebarTab(tabIds[currentIndex - 1]);
-      }
-    }
-  };
 
   // Scroll active tab into view when changed
   useEffect(() => {
@@ -255,6 +221,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
   const [isCaptionsOn, setIsCaptionsOn] = useState<boolean>(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+
+  const handleSetPlaybackSpeed = useCallback((speed: number) => {
+    setPlaybackSpeed(speed);
+    ytPlayerRef.current?.setPlaybackRate(speed);
+    onNotify(`Playback speed set to ${speed}x`, 'success');
+  }, [onNotify]);
 
   const handleResync = useCallback(() => {
     if (ytPlayerRef.current) {
@@ -839,6 +812,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   videoId={videoId}
                   syncState={syncState}
                   userRole={userRole}
+                  playbackSpeed={playbackSpeed}
                   onLocalPlay={handlePlay}
                   onLocalPause={handlePause}
                   onLocalSeek={handleSeek}
@@ -868,6 +842,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   onToggleCaptions={handleToggleCaptions}
                   currentQuality={currentQuality}
                   isCaptionsOn={isCaptionsOn}
+                  playbackSpeed={playbackSpeed}
+                  onSetPlaybackSpeed={handleSetPlaybackSpeed}
                   onRequestAction={handleRequestAction}
                   onOpenRequestsTab={() => setActiveSidebarTab('requests')}
                 />
@@ -899,6 +875,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onToggleCaptions={handleToggleCaptions}
               currentQuality={currentQuality}
               isCaptionsOn={isCaptionsOn}
+              playbackSpeed={playbackSpeed}
+              onSetPlaybackSpeed={handleSetPlaybackSpeed}
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
             />
@@ -939,12 +917,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             })}
           </div>
 
-          {/* Active Tab Panel with Touch Swipe Gesture Support */}
-          <div
-            className={`sidebar-tab-content ${slideDirection ? `slide-${slideDirection}` : ''}`}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
+          {/* Active Tab Panel */}
+          <div className="sidebar-tab-content">
 
             {activeSidebarTab === 'participants' && (
               <ParticipantList

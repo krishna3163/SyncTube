@@ -19,6 +19,7 @@ import {
   Settings2,
   Subtitles,
   Check,
+  Gauge,
 } from 'lucide-react';
 import { Role, PlayState } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
@@ -44,6 +45,8 @@ export interface PlaybackControlsProps {
   onToggleCaptions?: () => void;
   currentQuality?: string;
   isCaptionsOn?: boolean;
+  playbackSpeed?: number;
+  onSetPlaybackSpeed?: (speed: number) => void;
   onRequestAction?: (
     type: 'play' | 'pause' | 'seek' | 'change_video',
     data?: { time?: number; videoId?: string }
@@ -51,6 +54,15 @@ export interface PlaybackControlsProps {
   onOpenRequestsTab?: () => void;
   isDockMode?: boolean;
 }
+
+const PLAYBACK_SPEEDS = [
+  { label: '0.5x', value: 0.5 },
+  { label: '0.75x', value: 0.75 },
+  { label: '1x', value: 1 },
+  { label: '1.25x', value: 1.25 },
+  { label: '1.5x', value: 1.5 },
+  { label: '2x', value: 2 },
+];
 
 const QUALITIES = [
   { label: 'Auto', value: 'auto' },
@@ -82,6 +94,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onToggleCaptions,
   currentQuality = 'auto',
   isCaptionsOn = false,
+  playbackSpeed = 1,
+  onSetPlaybackSpeed,
   onRequestAction,
   onOpenRequestsTab,
   isDockMode = false,
@@ -278,8 +292,40 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             </button>
           )}
 
-          {/* Local Video Settings (Quality & Captions) */}
-          {(onSetQuality || onToggleCaptions) && (
+          {/* Quick Playback Speed Cycle Button */}
+          {onSetPlaybackSpeed && (
+            <button
+              type="button"
+              className="btn-icon control-btn-icon speed-pill-btn"
+              onClick={() => {
+                const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+                const idx = speeds.indexOf(playbackSpeed);
+                const nextSpeed = speeds[(idx + 1) % speeds.length];
+                onSetPlaybackSpeed(nextSpeed);
+              }}
+              title={`Playback Speed: ${playbackSpeed}x (Click to cycle)`}
+              aria-label="Change Playback Speed"
+              style={{
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                fontFamily: 'var(--mono)',
+                color: playbackSpeed !== 1 ? 'var(--accent)' : 'var(--text-muted)',
+                padding: '0.2rem 0.45rem',
+                borderRadius: 'var(--r-sm)',
+                border: playbackSpeed !== 1 ? '1px solid var(--accent-dim)' : '1px solid rgba(255,255,255,0.08)',
+                background: playbackSpeed !== 1 ? 'rgba(255, 210, 31, 0.14)' : 'rgba(255,255,255,0.03)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.2rem',
+              }}
+            >
+              <Gauge size={13} />
+              <span>{playbackSpeed}x</span>
+            </button>
+          )}
+
+          {/* Local Video Settings (Quality, Speed & Captions) */}
+          {(onSetQuality || onToggleCaptions || onSetPlaybackSpeed) && (
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -372,6 +418,42 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                         ))}
                       </div>
                     </>
+                  )}
+
+                  {onSetPlaybackSpeed && (
+                    <div style={{ marginTop: '0.55rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.45rem' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <Gauge size={13} /> Playback Speed
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.25rem' }}>
+                        {PLAYBACK_SPEEDS.map((s) => (
+                          <button
+                            key={s.value}
+                            type="button"
+                            onClick={() => {
+                              onSetPlaybackSpeed(s.value);
+                              setShowSettingsMenu(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.32rem 0.2rem',
+                              borderRadius: '6px',
+                              border: '1px solid',
+                              borderColor: playbackSpeed === s.value ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
+                              background: playbackSpeed === s.value ? 'rgba(255, 210, 31, 0.16)' : 'rgba(255,255,255,0.03)',
+                              color: playbackSpeed === s.value ? 'var(--accent)' : 'var(--text-main)',
+                              fontSize: '0.75rem',
+                              cursor: 'pointer',
+                              fontWeight: playbackSpeed === s.value ? 700 : 500,
+                            }}
+                          >
+                            <span>{s.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

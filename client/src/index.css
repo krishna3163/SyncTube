@@ -19,10 +19,12 @@
   --text-muted:   #9A9D9F;
   --text-dim:     #5C6063;
 
-  /* Accent — warm yellow, used sparingly */
+  /* Accent — warm yellow, cyan, rose */
   --accent:       #FFD21F;
   --accent-dim:   rgba(255, 210, 31, 0.12);
   --accent-glow:  rgba(255, 210, 31, 0.25);
+  --accent-cyan:  #38bdf8;
+  --accent-rose:  #f25f5c;
 
   /* Status */
   --green:        #3DD68C;
@@ -42,7 +44,7 @@
 }
 
 /* ─────────────────────────────────────────────
-   RESET
+   RESET & MOBILE VIEWPORT LOCKS
 ───────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -50,16 +52,33 @@
   padding: 0;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
 
 body {
   background-color: var(--bg-root);
   color: var(--text-main);
   font-family: var(--font);
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+}
+
+#root,
+.room-page-root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* ─────────────────────────────────────────────
@@ -763,28 +782,23 @@ body {
   border-radius: var(--r-full);
 }
 
-/* Swipe animations for sidebar content */
+/* Tab content transitions — clean fade without horizontal shift */
 .sidebar-tab-content {
   touch-action: pan-y;
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-.sidebar-tab-content.slide-left {
-  animation: tabSlideFromRight 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
-}
-
+.sidebar-tab-content.slide-left,
 .sidebar-tab-content.slide-right {
-  animation: tabSlideFromLeft 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+  animation: tabFadeIn 0.18s ease-out;
 }
 
-@keyframes tabSlideFromRight {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes tabSlideFromLeft {
-  from { opacity: 0; transform: translateX(-20px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes tabFadeIn {
+  from { opacity: 0.65; }
+  to { opacity: 1; }
 }
 
 
@@ -1017,7 +1031,70 @@ body {
 .participant-actions {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.35rem;
+}
+
+.participant-actions .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.participant-actions .btn-icon:hover {
+  transform: scale(1.08);
+}
+
+.participant-actions .action-promote {
+  color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.participant-actions .action-promote:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.participant-actions .action-demote {
+  color: #f4a942 !important;
+  background: rgba(244, 169, 66, 0.12);
+  border-color: rgba(244, 169, 66, 0.35);
+}
+
+.participant-actions .action-demote:hover {
+  background: rgba(244, 169, 66, 0.25);
+  border-color: rgba(244, 169, 66, 0.6);
+}
+
+.participant-actions .action-host {
+  color: #ffd21f !important;
+  background: rgba(255, 210, 31, 0.12);
+  border-color: rgba(255, 210, 31, 0.35);
+}
+
+.participant-actions .action-host:hover {
+  background: rgba(255, 210, 31, 0.25);
+  border-color: rgba(255, 210, 31, 0.6);
+}
+
+.participant-actions .action-remove {
+  color: #f25f5c !important;
+  background: rgba(242, 95, 92, 0.12);
+  border-color: rgba(242, 95, 92, 0.35);
+}
+
+.participant-actions .action-remove:hover {
+  background: rgba(242, 95, 92, 0.25);
+  border-color: rgba(242, 95, 92, 0.6);
 }
 
 /* ─────────────────────────────────────────────
@@ -4781,6 +4858,27 @@ body {
 }
 
 @media (max-width: 768px) {
+  html, body {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
+  }
+
+  #root,
+  .room-page-root,
+  .room-container,
+  .stage-area,
+  .sidebar,
+  .sidebar-tab-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    touch-action: pan-y;
+    box-sizing: border-box;
+  }
+
   .app-header {
     padding-inline: clamp(0.5rem, 2.5vw, 1rem);
     gap: 0.5rem;

@@ -103,42 +103,50 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                 <div className="participant-actions">
                   {p.role === 'PARTICIPANT' && (
                     <button
-                      className="btn-icon"
+                      type="button"
+                      className="btn-icon action-promote"
                       onClick={() => onAssignRole(p.userId, 'MODERATOR')}
                       title="Promote to Moderator"
+                      aria-label="Promote to Moderator"
                     >
-                      <ShieldCheck size={16} color="var(--accent-cyan)" />
+                      <ShieldCheck size={18} color="#38bdf8" strokeWidth={2.2} />
                     </button>
                   )}
 
                   {p.role === 'MODERATOR' && (
                     <button
-                      className="btn-icon"
+                      type="button"
+                      className="btn-icon action-demote"
                       onClick={() => onAssignRole(p.userId, 'PARTICIPANT')}
                       title="Demote to Participant"
+                      aria-label="Demote to Participant"
                     >
-                      <ShieldAlert size={16} color="var(--text-muted)" />
+                      <ShieldAlert size={18} color="#f4a942" strokeWidth={2.2} />
                     </button>
                   )}
 
                   <button
-                    className="btn-icon"
+                    type="button"
+                    className="btn-icon action-host"
                     onClick={() => {
                       if (window.confirm(`Transfer Host ownership to ${p.username}? You will become a Moderator.`)) {
                         onAssignRole(p.userId, 'HOST');
                       }
                     }}
                     title="Transfer Host Ownership"
+                    aria-label="Transfer Host Ownership"
                   >
-                    <Crown size={16} color="var(--accent)" />
+                    <Crown size={18} color="#ffd21f" strokeWidth={2.2} />
                   </button>
 
                   <button
-                    className="btn-icon"
+                    type="button"
+                    className="btn-icon action-remove"
                     onClick={() => onRemoveParticipant(p.userId)}
                     title="Remove user from room"
+                    aria-label="Remove user from room"
                   >
-                    <UserMinus size={16} color="var(--accent-rose)" />
+                    <UserMinus size={18} color="#f25f5c" strokeWidth={2.2} />
                   </button>
                 </div>
               )}

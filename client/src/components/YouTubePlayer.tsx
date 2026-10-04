@@ -16,12 +16,15 @@ export interface YouTubePlayerHandle {
   getCurrentQuality: () => string;
   toggleCaptions: () => boolean;
   isCaptionsOn: () => boolean;
+  setPlaybackRate: (rate: number) => void;
+  getPlaybackRate: () => number;
 }
 
 interface YouTubePlayerProps {
   videoId: string;
   syncState: SyncStatePayload | null;
   userRole: Role;
+  playbackSpeed?: number;
   onLocalPlay: (time: number) => void;
   onLocalPause: (time: number) => void;
   onLocalSeek: (time: number) => void;
@@ -33,6 +36,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   videoId,
   syncState,
   userRole,
+  playbackSpeed = 1,
   onLocalPlay,
   onLocalPause,
   onLocalSeek,
@@ -42,6 +46,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   const playerRef = useRef<any>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const targetPlaybackRateRef = useRef<number>(playbackSpeed);
+
+  useEffect(() => {
+    targetPlaybackRateRef.current = playbackSpeed;
+    if (playerReady && playerRef.current && typeof playerRef.current.setPlaybackRate === 'function') {
+      try {
+        playerRef.current.setPlaybackRate(playbackSpeed);
+      } catch {}
+    }
+  }, [playbackSpeed, playerReady]);
 
   // Dynamic refs to avoid stale closures in YouTube callbacks
   const userRoleRef = useRef<Role>(userRole);
@@ -241,18 +255,20 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     const localTime = playerRef.current.getCurrentTime() || 0;
     const drift = localTime - targetTime; // positive = viewer ahead, negative = viewer behind
 
+    const baseRate = targetPlaybackRateRef.current || 1.0;
+
     // Large drift (> 3s): hard seek to catch up quickly
     if (Math.abs(drift) > 3.0) {
       ignoreStateChangesUntilRef.current = Date.now() + 1200;
       playerRef.current.seekTo(targetTime, true);
-      try { playerRef.current.setPlaybackRate(1.0); } catch {}
+      try { playerRef.current.setPlaybackRate(baseRate); } catch {}
     } else if (Math.abs(drift) > 0.5) {
       // Medium drift: adjust playback rate gently (no seek = no buffering)
-      const rate = drift > 0 ? 0.92 : 1.08; // slow down if ahead, speed up if behind
+      const rate = drift > 0 ? baseRate * 0.92 : baseRate * 1.08;
       try { playerRef.current.setPlaybackRate(rate); } catch {}
     } else {
-      // In sync: restore normal rate
-      try { playerRef.current.setPlaybackRate(1.0); } catch {}
+      // In sync: restore chosen rate
+      try { playerRef.current.setPlaybackRate(baseRate); } catch {}
     }
 
     // Match playing state
@@ -373,6 +389,22 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         return Boolean(track && Object.keys(track).length > 0);
       } catch {
         return false;
+      }
+    },
+    setPlaybackRate: (rate: number) => {
+      targetPlaybackRateRef.current = rate;
+      if (!playerRef.current) return;
+      try {
+        if (typeof playerRef.current.setPlaybackRate === 'function') {
+          playerRef.current.setPlaybackRate(rate);
+        }
+      } catch {}
+    },
+    getPlaybackRate: () => {
+      try {
+        return playerRef.current?.getPlaybackRate?.() || targetPlaybackRateRef.current;
+      } catch {
+        return targetPlaybackRateRef.current;
       }
     }
   }));
