@@ -9,12 +9,25 @@ import { extractYouTubeId } from './utils/youtube.js';
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService): Express {
   const app = express();
 
-  const allowedOrigins = process.env.FRONTEND_URL
-    ? [process.env.FRONTEND_URL, 'http://localhost:5173']
-    : true;
+  const isAllowedOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin) return callback(null, true);
+    if (process.env.NODE_ENV !== 'production') return callback(null, true);
+    if (process.env.FRONTEND_URL && (origin === process.env.FRONTEND_URL || origin.startsWith(process.env.FRONTEND_URL))) {
+      return callback(null, true);
+    }
+    if (
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin.endsWith('.vercel.app') ||
+      /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  };
 
   app.use(cors({
-    origin: allowedOrigins,
+    origin: isAllowedOrigin,
     credentials: true,
   }));
 

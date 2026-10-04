@@ -41,10 +41,15 @@ interface HomePageProps {
 }
 
 export const getApiUrl = (): string => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    if (!isLocalhost && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+      return '';
+    }
   }
-  return '';
+  return envUrl || '';
 };
 
 export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => {
@@ -183,12 +188,25 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
 
     try {
       const apiUrl = getApiUrl();
-      const res = await fetch(`${apiUrl}/api/rooms/${normalizedRoom}`);
-      if (!res.ok) {
-        throw new Error(`Room "${normalizedRoom}" was not found.`);
+      let roomData: any = {};
+      try {
+        const res = await fetch(`${apiUrl}/api/rooms/${normalizedRoom}`);
+        if (!res.ok) {
+          if (res.status === 404) {
+            throw new Error(`Room "${normalizedRoom}" was not found.`);
+          }
+        } else {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            roomData = await res.json().catch(() => ({}));
+          }
+        }
+      } catch (fetchErr: any) {
+        if (fetchErr?.message?.includes('not found')) {
+          throw fetchErr;
+        }
+        console.warn('API room check bypassed, continuing to WebSocket join:', fetchErr);
       }
-
-      const roomData = await res.json().catch(() => ({}));
 
       saveUserAvatar(joinUsername.trim(), selectedAvatarId);
       saveStoredParty({
@@ -219,29 +237,47 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
 
     try {
       const apiUrl = getApiUrl();
-      const res = await fetch(`${apiUrl}/api/rooms/${party.roomId}`);
-      if (res.ok) {
-        saveStoredParty({
-          roomId: party.roomId,
-          username: userToUse,
-          role: party.role,
-          videoId: party.videoId,
-          avatarId: party.avatarId,
-          lastVisited: Date.now(),
-        });
-        refreshParties();
-        onNotify(`Rejoining room ${party.roomId}...`, 'success');
-        onEnterRoom(party.roomId, userToUse, party.role === 'HOST');
-      } else {
-        onNotify(
-          `Room ${party.roomId} is no longer open. Fill out below to restart a party with this video!`,
-          'error'
-        );
-        if (party.videoId) {
-          setCreateVideoUrl(`https://www.youtube.com/watch?v=${party.videoId}`);
+      try {
+        const res = await fetch(`${apiUrl}/api/rooms/${party.roomId}`);
+        if (res.ok) {
+          saveStoredParty({
+            roomId: party.roomId,
+            username: userToUse,
+            role: party.role,
+            videoId: party.videoId,
+            avatarId: party.avatarId,
+            lastVisited: Date.now(),
+          });
+          refreshParties();
+          onNotify(`Rejoining room ${party.roomId}...`, 'success');
+          onEnterRoom(party.roomId, userToUse, party.role === 'HOST');
+          return;
+        } else if (res.status === 404) {
+          onNotify(
+            `Room ${party.roomId} is no longer open. Fill out below to restart a party with this video!`,
+            'error'
+          );
+          if (party.videoId) {
+            setCreateVideoUrl(`https://www.youtube.com/watch?v=${party.videoId}`);
+          }
+          setCreateUsername(userToUse);
+          return;
         }
-        setCreateUsername(userToUse);
+      } catch (fetchErr) {
+        console.warn('API check error on rejoin, proceeding to room:', fetchErr);
       }
+
+      saveStoredParty({
+        roomId: party.roomId,
+        username: userToUse,
+        role: party.role,
+        videoId: party.videoId,
+        avatarId: party.avatarId,
+        lastVisited: Date.now(),
+      });
+      refreshParties();
+      onNotify(`Rejoining room ${party.roomId}...`, 'success');
+      onEnterRoom(party.roomId, userToUse, party.role === 'HOST');
     } catch (err) {
       onNotify((err as Error).message, 'error');
     }
@@ -328,14 +364,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
         </nav>
 
         <div className="home-nav-right">
-          <button
-            type="button"
-            className="btn-icon home-theme-btn"
-            title="Theme toggle"
-            onClick={() => onNotify('Dark theme is active', 'info')}
-          >
-            <Sun size={17} />
-          </button>
+          {/* Theme toggle (temporarily hidden per user request) */}
+          {false && (
+            <button
+              type="button"
+              className="btn-icon home-theme-btn"
+              title="Theme toggle"
+              onClick={() => onNotify('Dark theme is active', 'info')}
+            >
+              <Sun size={17} />
+            </button>
+          )}
 
           <div
             className="home-header-profile"
@@ -376,36 +415,38 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
           </p>
         </div>
 
-        {/* YOUR PROFILE CHARACTER Banner */}
-        <div className="home-profile-banner">
-          <div className="home-profile-left">
-            <div
-              className="home-profile-avatar-wrap"
-              onClick={() => setIsAvatarModalOpen(true)}
-              title="Click to choose a different anime character"
-            >
-              <AnimeAvatarDisplay username={currentAvatar.name} avatarId={selectedAvatarId} size={54} />
-              <span className="online-status-dot" title="Online & ready" />
-            </div>
-            <div className="home-profile-info">
-              <span className="home-profile-greeting">YOUR PROFILE CHARACTER</span>
-              <div className="home-profile-name-row">
-                <span className="home-profile-char-name">{currentAvatar.name}</span>
-                <span className="home-profile-char-series">{currentAvatar.series}</span>
+        {/* YOUR PROFILE CHARACTER Banner (temporarily hidden per user request) */}
+        {false && (
+          <div className="home-profile-banner">
+            <div className="home-profile-left">
+              <div
+                className="home-profile-avatar-wrap"
+                onClick={() => setIsAvatarModalOpen(true)}
+                title="Click to choose a different anime character"
+              >
+                <AnimeAvatarDisplay username={currentAvatar.name} avatarId={selectedAvatarId} size={54} />
+                <span className="online-status-dot" title="Online & ready" />
+              </div>
+              <div className="home-profile-info">
+                <span className="home-profile-greeting">YOUR PROFILE CHARACTER</span>
+                <div className="home-profile-name-row">
+                  <span className="home-profile-char-name">{currentAvatar.name}</span>
+                  <span className="home-profile-char-series">{currentAvatar.series}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            className="home-choose-char-btn"
-            onClick={() => setIsAvatarModalOpen(true)}
-          >
-            <Sparkles size={14} color="var(--accent)" />
-            <span>Choose Character</span>
-            <ChevronRight size={15} />
-          </button>
-        </div>
+            <button
+              type="button"
+              className="home-choose-char-btn"
+              onClick={() => setIsAvatarModalOpen(true)}
+            >
+              <Sparkles size={14} color="var(--accent)" />
+              <span>Choose Character</span>
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
 
         {/* The Two Main Action Cards Grid */}
         <div className="home-grid">
