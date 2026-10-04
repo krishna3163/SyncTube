@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Smile, Reply, X } from 'lucide-react';
 import { ChatMessage, ChatReplyPreview, Role } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
+import { EmojiPicker } from './EmojiPicker.js';
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -256,25 +257,18 @@ export const Chat: React.FC<ChatProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Reaction Panel */}
-      {showReactionBar && (
-        <div className="chat-reaction-panel">
-          {QUICK_REACTIONS.map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              className="chat-react-btn"
-              onClick={() => {
-                onSendReaction(emoji);
-                setShowReactionBar(false);
-              }}
-              title={`React ${emoji}`}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Full Android Emoji Picker Panel */}
+      <EmojiPicker
+        isOpen={showReactionBar}
+        onClose={() => setShowReactionBar(false)}
+        onSelectEmoji={(emoji) => {
+          setInputText((prev) => prev + emoji);
+          inputRef.current?.focus();
+        }}
+        onSendFloatingReaction={(emoji) => {
+          onSendReaction(emoji);
+        }}
+      />
 
       {/* Replying Banner Bar above Input */}
       {replyingTo && (

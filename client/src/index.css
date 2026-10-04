@@ -2831,6 +2831,163 @@ body {
   background: rgba(255,255,255,0.08);
 }
 
+/* Full Android-Style Emoji Picker for Chat */
+.android-emoji-picker {
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 250px;
+  max-height: 42vh;
+  animation: slideUpIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  position: relative;
+  z-index: 9998;
+}
+
+.emoji-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 0.5rem;
+}
+
+.emoji-quick-reactions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.emoji-quick-reactions-wrap::-webkit-scrollbar {
+  display: none;
+}
+
+.emoji-quick-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.emoji-quick-list {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.emoji-quick-btn {
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: var(--r-sm);
+  transition: transform 0.12s ease;
+  line-height: 1;
+}
+.emoji-quick-btn:hover {
+  transform: scale(1.3);
+}
+
+.emoji-picker-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  flex-shrink: 0;
+}
+.emoji-picker-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.emoji-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.emoji-category-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.emoji-cat-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.emoji-cat-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+.emoji-cat-tab.active {
+  background: rgba(255, 210, 31, 0.15);
+  border-color: rgba(255, 210, 31, 0.4);
+  color: var(--accent);
+}
+.emoji-cat-icon {
+  font-size: 0.95rem;
+}
+
+.emoji-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 0.3rem;
+}
+
+.emoji-item-btn {
+  background: none;
+  border: none;
+  font-size: 1.45rem;
+  cursor: pointer;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  transition: transform 0.1s ease, background 0.1s ease;
+  line-height: 1;
+}
+.emoji-item-btn:hover,
+.emoji-item-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.25);
+}
+
 /* Input bar at bottom */
 .chat-input-bar {
   flex-shrink: 0;
@@ -3080,37 +3237,54 @@ body {
     height: 38px;
   }
 
-  /* Floating controls on mobile */
+  /* Floating controls on mobile: placed at top-right over video so they NEVER overlap the chat input */
   .floating-reactions-launcher {
-    bottom: 12px !important;
-    left: 12px !important;
-    right: auto !important;
+    top: 66px !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: auto !important;
     z-index: 9980 !important;
   }
 
   .reaction-toggle-btn {
-    padding: 0.35rem 0.65rem;
-    font-size: 0.76rem;
-    height: 34px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.74rem;
+    height: 32px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
   }
 
   .soundboard-container {
-    bottom: 68px !important;
-    left: 12px !important;
-    right: auto !important;
+    top: 106px !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: auto !important;
     z-index: 9980 !important;
   }
 
   .soundboard-toggle-btn {
-    width: 34px;
-    height: 34px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    width: 32px;
+    height: 32px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
   }
 
-  /* Bottom padding so tab contents can be scrolled past floating buttons */
+  .soundboard-panel {
+    right: 0 !important;
+    left: auto !important;
+    width: 250px !important;
+    top: 40px !important;
+    bottom: auto !important;
+  }
+
+  .reactions-palette {
+    right: 0 !important;
+    left: auto !important;
+    top: 38px !important;
+    bottom: auto !important;
+  }
+
+  /* Normal bottom padding on mobile sidebar since floating buttons are now at top */
   .sidebar-tab-content {
-    padding-bottom: 75px;
+    padding-bottom: 16px !important;
   }
 
   /* Full width home cards */
@@ -4576,12 +4750,16 @@ body {
 
 @media (max-width: 768px) {
   .floating-reactions-launcher {
-    bottom: 74px;
-    right: 14px;
+    top: 66px !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: auto !important;
   }
   .soundboard-container {
-    bottom: 126px;
-    right: 14px;
+    top: 106px !important;
+    right: 12px !important;
+    bottom: auto !important;
+    left: auto !important;
   }
   .header-sync-center {
     display: none;
