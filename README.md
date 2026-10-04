@@ -2,6 +2,15 @@
 
 A production-grade, real-time synchronized YouTube watch party application built with **React**, **TypeScript**, **Node.js**, **Socket.IO**, and the **YouTube IFrame Player API**.
 
+[![Live App on Vercel](https://img.shields.io/badge/Vercel-Live%20Frontend-black?style=for-the-badge&logo=vercel)](https://sync-tube-tqda.vercel.app)
+[![Backend on Render](https://img.shields.io/badge/Render-Live%20Backend-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://synctube-2ar4.onrender.com)
+[![CI Pipeline](https://github.com/krishna3163/SyncTube/actions/workflows/ci.yml/badge.svg)](https://github.com/krishna3163/SyncTube/actions)
+
+### 🌐 Live Deployments
+- 🚀 **Live Web Application (Vercel):** [https://sync-tube-tqda.vercel.app](https://sync-tube-tqda.vercel.app)
+- ⚙️ **Live Backend Service (Render):** [https://synctube-2ar4.onrender.com](https://synctube-2ar4.onrender.com)
+- 🩺 **Backend Health Check:** [https://synctube-2ar4.onrender.com/health](https://synctube-2ar4.onrender.com/health)
+
 ---
 
 ## 🌟 Features
@@ -169,19 +178,19 @@ npm run test:client
 - **Build Command**: `npm run build`
 - **Output Directory**: `dist`
 - **Environment Variables**:
-  - `VITE_API_URL`: `https://<your-render-backend>.onrender.com`
-  - `VITE_SOCKET_URL`: `https://<your-render-backend>.onrender.com`
+  - `VITE_API_URL`: `https://synctube-2ar4.onrender.com`
+  - `VITE_SOCKET_URL`: `https://synctube-2ar4.onrender.com`
 
 ### 2. Backend (Render)
 - **Environment**: Node
-- **Build Command**: `npm ci && npm run build`
+- **Build Command**: `npm ci --include=dev && npm run build:server`
 - **Start Command**: `npm start`
 - **Health Check Path**: `/health`
 - **Environment Variables**:
   - `NODE_ENV`: `production`
   - `PORT`: `10000` (or platform default)
-  - `FRONTEND_URL`: `https://<your-vercel-app>.vercel.app`
-  - `DATABASE_URL`: Optional (e.g. Neon or Render PostgreSQL)
+  - `FRONTEND_URL`: `https://sync-tube-tqda.vercel.app`
+  - `DATABASE_URL`: Optional (e.g. Supabase or Neon PostgreSQL connection string)
 
 ---
 
