@@ -210,7 +210,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {onToggleAmbientMode && (
                 <div className="settings-section">
                   <label className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Sparkles size={15} color="var(--primary)" />
+                    <Sparkles size={15} color="var(--accent)" />
                     <span>Ambient Mode</span>
                   </label>
                   <p className="settings-description">

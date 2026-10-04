@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && (mkdir -p client && cp -r dist client/ 2>/dev/null || true)",
+    "build:client": "tsc && vite build && (mkdir -p client && cp -r dist client/ 2>/dev/null || true)",
     "preview": "vite preview",
     "test": "vitest run"
   },

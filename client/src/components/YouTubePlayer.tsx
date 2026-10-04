@@ -79,7 +79,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         height: '100%',
         width: '100%',
         videoId: videoId,
-        host: 'https://www.youtube.com',
+        host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 0,
           controls: 0,
@@ -193,7 +193,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
   // Reconcile player state with incoming server sync_state
   const reconcileWithServer = () => {
-    if (!playerReady || !playerRef.current || !syncStateRef.current) return;
+    if (
+      !playerReady ||
+      !playerRef.current ||
+      typeof playerRef.current.getCurrentTime !== 'function' ||
+      typeof playerRef.current.getPlayerState !== 'function' ||
+      !syncStateRef.current
+    ) return;
 
     const { videoId: targetVideoId, playState, currentTime } = syncStateRef.current;
 
