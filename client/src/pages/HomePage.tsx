@@ -45,14 +45,15 @@ export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (!isLocalhost && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+    if (isLocalhost) {
       return '';
     }
-    if (!isLocalhost && !envUrl && hostname.includes('vercel.app')) {
-      return 'https://synctube-2ar4.onrender.com';
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
     }
+    return 'https://synctube-2ar4.onrender.com';
   }
-  return envUrl || '';
+  return envUrl || 'https://synctube-2ar4.onrender.com';
 };
 
 export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => {
@@ -144,12 +145,22 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
     setIsCreating(true);
 
     try {
-      const apiUrl = getApiUrl();
-      const res = await fetch(`${apiUrl}/api/rooms`, {
+      let apiUrl = getApiUrl();
+      let res = await fetch(`${apiUrl}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initialVideoId }),
       });
+
+      // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
+      if (res.status === 405 && apiUrl !== 'https://synctube-2ar4.onrender.com') {
+        apiUrl = 'https://synctube-2ar4.onrender.com';
+        res = await fetch(`${apiUrl}/api/rooms`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initialVideoId }),
+        });
+      }
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

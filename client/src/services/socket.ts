@@ -6,20 +6,15 @@ const getSocketUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (!isLocalhost && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+    if (isLocalhost) {
       return window.location.origin;
     }
-    if (!isLocalhost && !envUrl && hostname.includes('vercel.app')) {
-      return 'https://synctube-2ar4.onrender.com';
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+      return envUrl;
     }
+    return 'https://synctube-2ar4.onrender.com';
   }
-  if (envUrl) {
-    return envUrl;
-  }
-  if (typeof window !== 'undefined') {
-    return window.location.origin;
-  }
-  return 'http://127.0.0.1:10000';
+  return envUrl || 'https://synctube-2ar4.onrender.com';
 };
 
 
