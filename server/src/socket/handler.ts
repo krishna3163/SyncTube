@@ -18,6 +18,7 @@ import {
   ActionRequestSchema,
   RespondActionRequestSchema,
   ChatMessageSchema,
+  ToggleMessageReactionSchema,
   SendReactionSchema,
   SendSoundEffectSchema,
 } from './schemas.js';
@@ -605,9 +606,31 @@ export function setupSocketHandlers(
           role: participant.role,
           text: parsed.data.text,
           timestamp: Date.now(),
+          replyTo: parsed.data.replyTo,
+          reactions: {},
         };
 
         io.to(room.id).emit('chat_message', message);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // 17.5. TOGGLE MESSAGE REACTION
+    socket.on('toggle_message_reaction', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const parsed = ToggleMessageReactionSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid toggle_message_reaction payload.');
+
+        io.to(room.id).emit('message_reaction_updated', {
+          messageId: parsed.data.messageId,
+          emoji: parsed.data.emoji,
+          userId: participant.userId,
+          username: participant.username,
+        });
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
       }

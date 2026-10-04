@@ -17,6 +17,7 @@ import {
   emitRequestAction,
   emitRespondActionRequest,
   emitSendChat,
+  emitToggleMessageReaction,
   emitSendReaction,
   startTimeSync,
 } from '../services/socket.js';
@@ -38,6 +39,7 @@ import {
   ActionRequestResolvedPayload,
   ActionRequestType,
   ChatMessage,
+  ChatReplyPreview,
   EmojiReaction,
 } from '../types.js';
 import { YouTubePlayer, YouTubePlayerHandle } from '../components/YouTubePlayer.js';
@@ -446,6 +448,29 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       setChatMessages((prev) => [...prev.slice(-99), data]);
     };
 
+    // message_reaction_updated: real-time reaction toggle on a chat message
+    const onMessageReactionUpdated = (data: { messageId: string; emoji: string; userId: string; username: string }) => {
+      setChatMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== data.messageId) return msg;
+          const reactions = { ...(msg.reactions || {}) };
+          const users = reactions[data.emoji] ? [...reactions[data.emoji]] : [];
+          const idx = users.indexOf(data.userId);
+          if (idx >= 0) {
+            users.splice(idx, 1);
+          } else {
+            users.push(data.userId);
+          }
+          if (users.length === 0) {
+            delete reactions[data.emoji];
+          } else {
+            reactions[data.emoji] = users;
+          }
+          return { ...msg, reactions };
+        })
+      );
+    };
+
     // reaction_received: real-time emoji reaction from a viewer
     const onReactionReceived = (data: EmojiReaction) => {
       setActiveReactions((prev) => [...prev, data]);
@@ -476,6 +501,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('action_requested', onActionRequested);
     socket.on('action_request_resolved', onActionRequestResolved);
     socket.on('chat_message', onChatMessage);
+    socket.on('message_reaction_updated', onMessageReactionUpdated);
     socket.on('reaction_received', onReactionReceived);
     socket.on('user_joined', onUserJoined);
     socket.on('user_left', onUserLeft);
@@ -502,6 +528,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('action_requested', onActionRequested);
       socket.off('action_request_resolved', onActionRequestResolved);
       socket.off('chat_message', onChatMessage);
+      socket.off('message_reaction_updated', onMessageReactionUpdated);
       socket.off('reaction_received', onReactionReceived);
       socket.off('user_joined', onUserJoined);
       socket.off('user_left', onUserLeft);
@@ -700,11 +727,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Chat & Reaction Handlers
   const handleSendChat = useCallback(
-    (text: string) => {
-      emitSendChat(text, userSettings.color, userSettings.avatarId);
+    (text: string, replyTo?: ChatReplyPreview) => {
+      emitSendChat(text, userSettings.color, userSettings.avatarId, replyTo);
     },
     [userSettings.color, userSettings.avatarId]
   );
+
+  const handleToggleMessageReaction = useCallback((messageId: string, emoji: string) => {
+    emitToggleMessageReaction(messageId, emoji);
+  }, []);
 
   const handleSendReaction = useCallback((emoji: string) => {
     emitSendReaction(emoji);
@@ -947,6 +978,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserAvatarId={userSettings.avatarId}
                 viewerCount={participants.length}
                 onSendMessage={handleSendChat}
+                onToggleReaction={handleToggleMessageReaction}
                 onSendReaction={handleSendReaction}
               />
             )}

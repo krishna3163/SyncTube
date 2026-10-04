@@ -64,10 +64,23 @@ export const RespondActionRequestSchema = z.object({
   approved: z.boolean(),
 });
 
+export const ReplyToSchema = z.object({
+  messageId: z.string().trim().min(1),
+  username: z.string().trim().min(1).max(50),
+  text: z.string().trim().min(1).max(500),
+  avatarId: z.string().trim().max(50).optional(),
+});
+
 export const ChatMessageSchema = z.object({
   text: z.string().trim().min(1).max(500),
   userColor: z.string().trim().max(30).optional(),
   avatarId: z.string().trim().max(50).optional(),
+  replyTo: ReplyToSchema.optional(),
+});
+
+export const ToggleMessageReactionSchema = z.object({
+  messageId: z.string().trim().min(1),
+  emoji: z.string().trim().min(1).max(10),
 });
 
 export const SendReactionSchema = z.object({

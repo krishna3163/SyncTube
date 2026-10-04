@@ -75,6 +75,13 @@ export interface PendingActionRequest {
   createdAt: number;
 }
 
+export interface ChatReplyPreview {
+  messageId: string;
+  username: string;
+  text: string;
+  avatarId?: string;
+}
+
 export interface ChatMessage {
   id: string;
   userId: string;
@@ -84,6 +91,8 @@ export interface ChatMessage {
   role: Role;
   text: string;
   timestamp: number;
+  replyTo?: ChatReplyPreview;
+  reactions?: Record<string, string[]>;
 }
 
 export interface EmojiReaction {

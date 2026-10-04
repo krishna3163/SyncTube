@@ -83,8 +83,12 @@ export const emitRespondActionRequest = (requestId: string, approved: boolean) =
   socket.emit('respond_action_request', { requestId, approved });
 };
 
-export const emitSendChat = (text: string, userColor?: string, avatarId?: string) => {
-  socket.emit('chat_message', { text, userColor, avatarId });
+export const emitSendChat = (text: string, userColor?: string, avatarId?: string, replyTo?: any) => {
+  socket.emit('chat_message', { text, userColor, avatarId, replyTo });
+};
+
+export const emitToggleMessageReaction = (messageId: string, emoji: string) => {
+  socket.emit('toggle_message_reaction', { messageId, emoji });
 };
 
 export const emitSendReaction = (emoji: string) => {
