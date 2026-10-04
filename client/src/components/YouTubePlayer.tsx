@@ -40,7 +40,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   onVideoEnded,
 }, ref) => {
   const playerRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
   const [playerReady, setPlayerReady] = useState(false);
 
   // Dynamic refs to avoid stale closures in YouTube callbacks
@@ -71,15 +71,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     const initPlayer = () => {
       if (!isMounted || !window.YT || !window.YT.Player) return;
 
-      if (!containerRef.current) return;
-      containerRef.current.innerHTML = '<div class="video-iframe"></div>';
-      const slot = containerRef.current.firstElementChild as HTMLElement;
+      if (!slotRef.current) return;
+      slotRef.current.innerHTML = '';
+      const mountPoint = document.createElement('div');
+      slotRef.current.appendChild(mountPoint);
 
-      playerRef.current = new window.YT.Player(slot, {
+      playerRef.current = new window.YT.Player(mountPoint, {
         height: '100%',
         width: '100%',
         videoId: videoId,
-        host: 'https://www.youtube-nocookie.com',
+        host: 'https://www.youtube.com',
         playerVars: {
           autoplay: 0,
           controls: 0,
@@ -168,6 +169,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           playerRef.current.destroy();
         } catch {}
         playerRef.current = null;
+      }
+      if (slotRef.current) {
+        try {
+          slotRef.current.innerHTML = '';
+        } catch {}
       }
     };
   }, []);
@@ -372,8 +378,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   }));
 
   return (
-    <div className="video-wrapper" ref={containerRef}>
-      <div className="video-iframe" />
+    <div className="video-wrapper">
+      <div className="video-iframe" ref={slotRef} />
       {userRole !== 'HOST' && userRole !== 'MODERATOR' && (
         <div 
           className="viewer-video-shield" 
