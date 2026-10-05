@@ -3876,9 +3876,14 @@ body {
 
   @media (max-width: 560px) {
     .controls-reaction-slot .inline-reactions-launcher .reactions-palette {
-      right: -0.35rem;
+      position: fixed;
+      left: 0.5rem;
+      right: 0.5rem;
+      bottom: 7.25rem;
       width: min(330px, calc(100vw - 16px));
       max-width: min(330px, calc(100vw - 16px));
+      margin: 0;
+      z-index: 1000;
     }
 
     .controls-reaction-slot .reaction-group-tab {
