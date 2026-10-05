@@ -4200,6 +4200,15 @@ body {
   opacity: 0.98;
 }
 
+body.is-dragging-reaction {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.is-dragging-reaction iframe {
+  pointer-events: none !important;
+}
+
 .floating-reactions-launcher.is-dragging * {
   cursor: grabbing !important;
 }

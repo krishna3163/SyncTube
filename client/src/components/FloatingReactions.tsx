@@ -27,13 +27,16 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
 
   const launcherRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const justToggledRef = useRef(false);
-  const dragStartRef = useRef<{
+  const ignoreNextClickRef = useRef(false);
+  const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 70 });
+  const dragStateRef = useRef<{
     startX: number;
     startY: number;
-    origX: number;
-    origY: number;
+    lastClientX: number;
+    lastClientY: number;
     hasMoved: boolean;
+    pointerId: number;
+    target: HTMLElement;
   } | null>(null);
 
   // Initialize and restore position (remembers user preference across views)
@@ -45,8 +48,8 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       const height = launcherRef.current?.offsetHeight || 38;
       const minX = 8;
       const maxX = Math.max(minX, window.innerWidth - width - 8);
-      const minY = 54;
-      const maxY = Math.max(minY, window.innerHeight - height - 8);
+      const minY = 56;
+      const maxY = Math.max(minY, window.innerHeight - height - 12);
       return {
         x: Math.min(Math.max(minX, x), maxX),
         y: Math.min(Math.max(minY, y), maxY),
@@ -70,14 +73,20 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       // fallback to initial default
     }
 
+    posRef.current = initialPosition;
     setPos(initialPosition);
 
     const handleResize = () => {
-      setPos((prev) => (prev ? clampToScreen(prev.x, prev.y) : null));
+      const clamped = clampToScreen(posRef.current.x, posRef.current.y);
+      posRef.current = clamped;
+      setPos(clamped);
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.body.classList.remove('is-dragging-reaction');
+    };
   }, []);
 
   // Handle incoming reactions from server
@@ -114,43 +123,47 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     socket.emit('send_reaction', { emoji });
   }, [socket]);
 
-  // Pointer down handler for smooth dragging
-  const handlePointerDown = (e: React.PointerEvent) => {
+  // Pointer down handler for smooth dragging and immediate response
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     // If interacting with the palette buttons, do not initiate drag
     if ((e.target as HTMLElement).closest('.reaction-btn')) return;
 
     // Only respond to primary click / touch
     if (e.button !== 0) return;
 
-    // Close palette immediately when drag starts to provide a clean, compact pill to drag
-    if (isOpen) {
-      setIsOpen(false);
+    const targetEl = e.currentTarget;
+    try {
+      targetEl.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture unsupported
     }
 
-    const currentX = pos ? pos.x : Math.max(8, window.innerWidth - 125);
-    const currentY = pos ? pos.y : 68;
-
-    dragStartRef.current = {
+    dragStateRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      origX: currentX,
-      origY: currentY,
+      lastClientX: e.clientX,
+      lastClientY: e.clientY,
       hasMoved: false,
+      pointerId: e.pointerId,
+      target: targetEl,
     };
 
     const handlePointerMove = (moveEvt: PointerEvent) => {
-      if (!dragStartRef.current) return;
-      const dx = moveEvt.clientX - dragStartRef.current.startX;
-      const dy = moveEvt.clientY - dragStartRef.current.startY;
+      const state = dragStateRef.current;
+      if (!state) return;
+
+      const totalDist = Math.hypot(moveEvt.clientX - state.startX, moveEvt.clientY - state.startY);
 
       // Threshold check to differentiate between tap/click vs actual drag
-      if (!dragStartRef.current.hasMoved && Math.hypot(dx, dy) > 4) {
-        dragStartRef.current.hasMoved = true;
+      if (!state.hasMoved && totalDist > 4) {
+        state.hasMoved = true;
         isDraggingRef.current = true;
         setIsDragging(true);
+        setIsOpen(false);
+        document.body.classList.add('is-dragging-reaction');
       }
 
-      if (dragStartRef.current.hasMoved) {
+      if (state.hasMoved) {
         if (moveEvt.cancelable) {
           moveEvt.preventDefault();
         }
@@ -159,13 +172,21 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
         const height = launcherRef.current?.offsetHeight || 38;
         const minX = 8;
         const maxX = Math.max(minX, window.innerWidth - width - 8);
-        const minY = 52;
-        const maxY = Math.max(minY, window.innerHeight - height - 8);
+        const minY = 54;
+        const maxY = Math.max(minY, window.innerHeight - height - 12);
 
-        const nextX = Math.min(Math.max(minX, dragStartRef.current.origX + dx), maxX);
-        const nextY = Math.min(Math.max(minY, dragStartRef.current.origY + dy), maxY);
+        const dx = moveEvt.clientX - state.lastClientX;
+        const dy = moveEvt.clientY - state.lastClientY;
 
+        // Apply delta to current clamped position so moving out of corner responds instantly
+        const nextX = Math.min(Math.max(minX, posRef.current.x + dx), maxX);
+        const nextY = Math.min(Math.max(minY, posRef.current.y + dy), maxY);
+
+        posRef.current = { x: nextX, y: nextY };
         setPos({ x: nextX, y: nextY });
+
+        state.lastClientX = moveEvt.clientX;
+        state.lastClientY = moveEvt.clientY;
       }
     };
 
@@ -173,30 +194,33 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
+      document.body.classList.remove('is-dragging-reaction');
 
-      const wasDragging = isDraggingRef.current || (dragStartRef.current && dragStartRef.current.hasMoved);
-      const finalPos = pos;
-
-      if (wasDragging && finalPos) {
+      const state = dragStateRef.current;
+      if (state) {
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(finalPos));
+          state.target.releasePointerCapture(state.pointerId);
         } catch {
-          // Ignore storage error
+          // Ignore
+        }
+
+        if (state.hasMoved) {
+          ignoreNextClickRef.current = true;
+          setTimeout(() => {
+            ignoreNextClickRef.current = false;
+          }, 150);
+
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(posRef.current));
+          } catch {
+            // Ignore storage error
+          }
         }
       }
 
-      dragStartRef.current = null;
+      dragStateRef.current = null;
       isDraggingRef.current = false;
       setIsDragging(false);
-
-      if (!wasDragging) {
-        // Pure tap or click without dragging: toggle reactions palette
-        justToggledRef.current = true;
-        setTimeout(() => {
-          justToggledRef.current = false;
-        }, 250);
-        setIsOpen((prev) => !prev);
-      }
     };
 
     window.addEventListener('pointermove', handlePointerMove, { passive: false });
@@ -265,7 +289,11 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           className="reaction-toggle-btn"
           onPointerDown={handlePointerDown}
           onClick={() => {
-            if (!isDraggingRef.current && !justToggledRef.current) {
+            if (ignoreNextClickRef.current) {
+              ignoreNextClickRef.current = false;
+              return;
+            }
+            if (!isDraggingRef.current) {
               setIsOpen((prev) => !prev);
             }
           }}

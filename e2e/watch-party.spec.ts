@@ -53,6 +53,27 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     // Verify drag handle grip icon exists
     await expect(page.locator('.reaction-drag-handle')).toBeVisible();
 
+    // Drag into screen corner and verify it unsticks and moves back smoothly
+    const boxBefore = await reactBtn.boundingBox();
+    if (boxBefore) {
+      await page.mouse.move(boxBefore.x + boxBefore.width / 2, boxBefore.y + boxBefore.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(1200, 800, { steps: 5 });
+      await page.mouse.up();
+
+      const boxInCorner = await reactBtn.boundingBox();
+
+      // Drag back away from corner - button must immediately follow cursor and not be stuck
+      await page.mouse.move(boxInCorner!.x + boxInCorner!.width / 2, boxInCorner!.y + boxInCorner!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(boxInCorner!.x - 200, boxInCorner!.y - 200, { steps: 5 });
+      await page.mouse.up();
+
+      const boxAfterUnstick = await reactBtn.boundingBox();
+      expect(boxAfterUnstick!.x).toBeLessThan(boxInCorner!.x);
+      expect(boxAfterUnstick!.y).toBeLessThan(boxInCorner!.y);
+    }
+
     // Click to open emoji reactions palette
     await reactBtn.click();
     const palette = page.locator('.reactions-palette');
