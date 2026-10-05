@@ -668,8 +668,9 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
                           alt={`Watch party ${party.roomId}`}
                           className="stored-party-thumb"
                           loading="lazy"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                          onError={(event) => {
+                            event.currentTarget.onerror = null;
+                            event.currentTarget.src = '/video-placeholder.svg';
                           }}
                         />
                       ) : (

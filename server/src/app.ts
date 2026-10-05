@@ -380,7 +380,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   const clientDist = path.resolve(process.cwd(), '../dist');
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('*', apiRateLimiter('spa-fallback', 120, 60000), (_req: Request, res: Response) => {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   }
