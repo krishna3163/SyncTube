@@ -61,6 +61,7 @@ import { FloatingReactions } from '../components/FloatingReactions.js';
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 import { InviteModal } from '../components/InviteModal.js';
 import { extractYouTubeId } from '../utils/youtube.js';
+import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X } from 'lucide-react';
@@ -398,7 +399,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         'luffy';
 
       rememberParticipantCharacter(userSettings.name || username, userId, activeAvatar);
-      emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar);
+      emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar, getRoomIdentityToken(roomId));
       addActivityRef.current('Connected to room session.', 'joined', {
         username: userSettings.name || username,
         userId,
@@ -499,6 +500,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         setTimeout(() => onLeaveRoomRef.current(), 1500);
       } else if (err.code === 'FORBIDDEN' && err.message.toLowerCase().includes('removed')) {
         setTimeout(() => onLeaveRoomRef.current(), 1500);
+      }
+    };
+
+    const onIdentityCredential = (data: { roomId: string; userId: string; token: string }) => {
+      if (data?.roomId === roomId && data.userId === userId && typeof data.token === 'string') {
+        saveRoomIdentityToken(roomId, data.token);
       }
     };
 
@@ -676,6 +683,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('participant_removed', onParticipantRemoved);
     socket.on('participant_avatar_updated', onAvatarUpdated);
     socket.on('error', onError);
+    socket.on('identity_credential', onIdentityCredential);
 
     const stopTimeSync = startTimeSync();
 
@@ -707,6 +715,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('participant_removed', onParticipantRemoved);
       socket.off('participant_avatar_updated', onAvatarUpdated);
       socket.off('error', onError);
+      socket.off('identity_credential', onIdentityCredential);
       emitLeaveRoom(roomId);
     };
   }, [roomId, username, userId, userSettings.name, userSettings.avatarId, addActivity]);

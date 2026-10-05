@@ -1,4 +1,5 @@
 import { Room } from './Room.js';
+import { randomInt } from 'node:crypto';
 
 export class RoomManager {
   private rooms: Map<string, Room> = new Map();
@@ -9,18 +10,22 @@ export class RoomManager {
     do {
       id = '';
       for (let i = 0; i < 6; i++) {
-        id += chars.charAt(Math.floor(Math.random() * chars.length));
+        id += chars.charAt(randomInt(chars.length));
       }
     } while (this.rooms.has(id));
     return id;
   }
 
-  public createRoom(customId?: string, initialVideoId: string = ''): Room {
+  public createRoom(
+    customId?: string,
+    initialVideoId: string = '',
+    creatorIdentity?: { userId: string; credentialHash: string }
+  ): Room {
     const id = customId ? customId.toUpperCase() : this.generateRoomId();
     if (this.rooms.has(id)) {
       throw new Error(`Room with ID ${id} already exists`);
     }
-    const room = new Room(id, initialVideoId);
+    const room = new Room(id, initialVideoId, creatorIdentity);
     this.rooms.set(id, room);
     return room;
   }

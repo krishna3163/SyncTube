@@ -23,5 +23,6 @@ describe('Client YouTube Utils', () => {
     expect(extractYouTubeId('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
     expect(extractYouTubeId('https://www.youtube.com/live/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
     expect(extractYouTubeId('https://music.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(extractYouTubeId(`https://youtube.com/watch?v=${'a'.repeat(5000)}`)).toBeNull();
   });
 });

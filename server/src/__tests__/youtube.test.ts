@@ -43,5 +43,6 @@ describe('YouTube Utility', () => {
     expect(extractYouTubeId('https://vimeo.com/12345')).toBeNull();
     expect(extractYouTubeId('not a url')).toBeNull();
     expect(extractYouTubeId('')).toBeNull();
+    expect(extractYouTubeId(`https://youtube.com/watch?v=${'a'.repeat(5000)}`)).toBeNull();
   });
 });

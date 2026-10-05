@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { RoomManager } from '../models/RoomManager.js';
+import { createHash } from 'node:crypto';
 
 describe('Express REST API Endpoints', () => {
   let roomManager: RoomManager;
@@ -40,6 +41,19 @@ describe('Express REST API Endpoints', () => {
       expect(res.body.videoId).toBe('M7lc1UVf-VE');
     });
 
+    it('reserves the creator identity with a private reconnect token', async () => {
+      const creatorUserId = '123e4567-e89b-12d3-a456-426614174000';
+      const res = await request(app).post('/api/rooms').send({ creatorUserId });
+      const room = roomManager.getRoom(res.body.roomId);
+      expect(res.status).toBe(201);
+      expect(res.body.identityToken).toMatch(/^[a-f0-9]{64}$/);
+      expect(room?.creatorUserId).toBe(creatorUserId);
+      expect(room?.getIdentityCredentialHash(creatorUserId)).toBe(
+        createHash('sha256').update(res.body.identityToken).digest('hex')
+      );
+      expect(room?.getIdentityCredentialHash(creatorUserId)).not.toBe(res.body.identityToken);
+    });
+
     it('rejects invalid YouTube URL', async () => {
       const res = await request(app)
         .post('/api/rooms')
@@ -63,6 +77,14 @@ describe('Express REST API Endpoints', () => {
       const res = await request(app).get('/api/rooms/NONEXIST');
       expect(res.status).toBe(404);
       expect(res.body.exists).toBe(false);
+    });
+
+    it('applies a general rate limit to API routes', async () => {
+      let response;
+      for (let attempt = 0; attempt < 121; attempt++) {
+        response = await request(app).get('/api/rooms/RATE01');
+      }
+      expect(response?.status).toBe(429);
     });
   });
 

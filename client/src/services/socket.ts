@@ -26,8 +26,8 @@ export const socket: Socket = io(getSocketUrl(), {
   reconnectionDelay: 1000,
 });
 
-export const emitJoinRoom = (roomId: string, username: string, userId: string, avatarId?: string) => {
-  socket.emit('join_room', { roomId, username, userId, avatarId });
+export const emitJoinRoom = (roomId: string, username: string, userId: string, avatarId?: string, identityToken?: string) => {
+  socket.emit('join_room', { roomId, username, userId, avatarId, identityToken });
 };
 
 export const emitLeaveRoom = (roomId: string) => {

@@ -35,8 +35,10 @@ import { StoredWatchParty, UserSettings } from '../types.js';
 import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
 import { rememberParticipantCharacter } from '../utils/characterMemory.js';
+import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
 
 interface HomePageProps {
+  userId: string;
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
@@ -57,7 +59,7 @@ export const getApiUrl = (): string => {
   return envUrl || 'https://synctube-2ar4.onrender.com';
 };
 
-export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => {
+export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
   // Saved user profile from localStorage
   const savedSettings = (() => {
     try {
@@ -152,7 +154,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
       let res = await fetch(`${apiUrl}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initialVideoId }),
+        body: JSON.stringify({ initialVideoId, creatorUserId: userId }),
       });
 
       // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
@@ -161,7 +163,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
         res = await fetch(`${apiUrl}/api/rooms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initialVideoId }),
+          body: JSON.stringify({ initialVideoId, creatorUserId: userId }),
         });
       }
 
@@ -171,6 +173,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
       }
 
       const data = await res.json();
+      if (typeof data.identityToken === 'string') saveRoomIdentityToken(data.roomId, data.identityToken);
       saveUserAvatar(createUsername.trim(), selectedAvatarId);
       rememberParticipantCharacter(createUsername.trim(), undefined, selectedAvatarId);
       saveStoredParty({
@@ -205,10 +208,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
     const normalizedRoom = joinRoomCode.trim().toUpperCase();
 
     try {
+      if (!/^[A-Za-z0-9_-]{4,16}$/.test(normalizedRoom)) {
+        throw new Error('Invalid room code.');
+      }
       const apiUrl = getApiUrl();
       let roomData: any = {};
       try {
-        const res = await fetch(`${apiUrl}/api/rooms/${normalizedRoom}`);
+        const res = await fetch(`${apiUrl}/api/rooms/${encodeURIComponent(normalizedRoom)}`);
         if (!res.ok) {
           if (res.status === 404) {
             throw new Error(`Room "${normalizedRoom}" was not found.`);
@@ -258,7 +264,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
     try {
       const apiUrl = getApiUrl();
       try {
-        const res = await fetch(`${apiUrl}/api/rooms/${party.roomId}`);
+        if (!/^[A-Za-z0-9_-]{4,16}$/.test(party.roomId)) {
+          throw new Error('Invalid saved room code.');
+        }
+        const res = await fetch(`${apiUrl}/api/rooms/${encodeURIComponent(party.roomId)}`);
         if (res.ok) {
           saveStoredParty({
             roomId: party.roomId,
@@ -645,7 +654,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
             <div className="stored-parties-grid">
               {storedParties.map((party) => {
                 const videoId = party.videoId || '';
-                const thumbUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
+                const thumbUrl = getSafeYouTubeThumbnailUrl(undefined, videoId);
                 const isHost = party.role === 'HOST';
 
                 return (

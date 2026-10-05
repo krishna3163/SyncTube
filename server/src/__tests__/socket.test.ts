@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import http from 'http';
 import { AddressInfo } from 'net';
+import { createHash } from 'node:crypto';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ClientIO, Socket as ClientSocket } from 'socket.io-client';
 import { createApp } from '../app.js';
@@ -116,6 +117,49 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
 
     const err = await errorPromise;
     expect(err.code).toBe('NOT_FOUND');
+  });
+
+  it('requires the private creator credential before granting the reserved Host identity', async () => {
+    const creatorId = '123e4567-e89b-12d3-a456-426614174000';
+    const creatorToken = 'a'.repeat(64);
+    roomManager.createRoom('AUTH01', '', {
+      userId: creatorId,
+      credentialHash: createHash('sha256').update(creatorToken).digest('hex'),
+    });
+
+    const attacker = await createClient();
+    const attackerError = new Promise<any>((resolve) => attacker.once('error', resolve));
+    attacker.emit('join_room', { roomId: 'AUTH01', username: 'Attacker', userId: creatorId });
+    expect((await attackerError).code).toBe('FORBIDDEN');
+    expect(roomManager.getRoom('AUTH01')?.getParticipant(creatorId)).toBeUndefined();
+
+    const creator = await createClient();
+    const creatorJoin = new Promise<any>((resolve) => creator.once('sync_state', resolve));
+    creator.emit('join_room', {
+      roomId: 'AUTH01',
+      username: 'Creator',
+      userId: creatorId,
+      identityToken: creatorToken,
+    });
+    await creatorJoin;
+    expect(roomManager.getRoom('AUTH01')?.getParticipant(creatorId)?.role).toBe('HOST');
+  });
+
+  it('issues new participant reconnect credentials privately and rejects ID-only takeover', async () => {
+    roomManager.createRoom('AUTH02');
+    const owner = await createClient();
+    const tokenPromise = new Promise<{ token: string }>((resolve) => owner.once('identity_credential', resolve));
+    const ownerJoin = new Promise<void>((resolve) => owner.once('sync_state', () => resolve()));
+    owner.emit('join_room', { roomId: 'AUTH02', username: 'Owner', userId: 'owner-id' });
+    const { token } = await tokenPromise;
+    await ownerJoin;
+    expect(token).toMatch(/^[a-f0-9]{64}$/);
+
+    const attacker = await createClient();
+    const errorPromise = new Promise<any>((resolve) => attacker.once('error', resolve));
+    attacker.emit('join_room', { roomId: 'AUTH02', username: 'Impersonator', userId: 'owner-id' });
+    expect((await errorPromise).code).toBe('FORBIDDEN');
+    expect(roomManager.getRoom('AUTH02')?.getParticipant('owner-id')?.username).toBe('Owner');
   });
 
   it('allows Host to play/pause/seek/change_video, synchronizing to everyone', async () => {
@@ -550,4 +594,3 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     expect(updatedPlaylist[0].addedBy).toBe('ViewerNext');
   });
 });
-

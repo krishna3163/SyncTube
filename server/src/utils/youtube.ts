@@ -16,7 +16,7 @@ export function isValidYouTubeId(id: string): boolean {
 }
 
 export function extractYouTubeId(input: string): string | null {
-  if (!input || typeof input !== 'string') {
+  if (!input || typeof input !== 'string' || input.length > 2048) {
     return null;
   }
 
@@ -59,11 +59,7 @@ export function extractYouTubeId(input: string): string | null {
       }
     }
   } catch {
-    // Fall back to regex search for robust matching
-    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
-    if (match && match[1] && isValidYouTubeId(match[1])) {
-      return match[1];
-    }
+    return null;
   }
 
   return null;

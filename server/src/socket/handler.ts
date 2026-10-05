@@ -1,4 +1,5 @@
 import { Server, Socket } from 'socket.io';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { RoomManager } from '../models/RoomManager.js';
 import { DatabaseService } from '../services/db.js';
 import { canPerformAction } from '../services/permissions.js';
@@ -69,7 +70,7 @@ export function setupSocketHandlers(
           return sendError('BAD_REQUEST', 'Invalid join_room payload.');
         }
 
-        const { roomId, username, userId: providedUserId } = parsed.data;
+        const { roomId, username, userId, identityToken } = parsed.data;
         const normalizedRoomId = roomId.toUpperCase();
         let room = roomManager.getRoom(normalizedRoomId);
 
@@ -91,10 +92,30 @@ export function setupSocketHandlers(
           return sendError('NOT_FOUND', `Room "${roomId}" does not exist.`);
         }
 
-        const userId = providedUserId || `user_${socket.id.substring(0, 8)}`;
-
         if (room.isRemoved(userId)) {
           return sendError('FORBIDDEN', 'You have been removed from this room.');
+        }
+
+        const credentialHash = room.getIdentityCredentialHash(userId);
+        if (credentialHash) {
+          const candidateHash = identityToken
+            ? createHash('sha256').update(identityToken).digest('hex')
+            : '';
+          const stored = Buffer.from(credentialHash, 'hex');
+          const candidate = Buffer.from(candidateHash, 'hex');
+          if (stored.length !== candidate.length || !timingSafeEqual(stored, candidate)) {
+            return sendError('FORBIDDEN', 'Identity verification failed. Rejoin using this browser session.');
+          }
+        } else {
+          if (room.getParticipant(userId)) {
+            return sendError('FORBIDDEN', 'Identity verification failed. Rejoin using this browser session.');
+          }
+          const issuedToken = randomBytes(32).toString('hex');
+          room.registerIdentityCredential(
+            userId,
+            createHash('sha256').update(issuedToken).digest('hex')
+          );
+          socket.emit('identity_credential', { roomId: normalizedRoomId, userId, token: issuedToken });
         }
 
         // Leave any previous room
@@ -106,7 +127,8 @@ export function setupSocketHandlers(
         socket.data.userId = userId;
         socket.join(normalizedRoomId);
 
-        const participant = room.addParticipant(userId, socket.id, username, false, parsed.data.avatarId);
+        const isCreator = room.creatorUserId === userId;
+        const participant = room.addParticipant(userId, socket.id, username, isCreator, parsed.data.avatarId);
 
         // Send current authoritative room state to the newly joined client
         socket.emit('sync_state', room.toSyncStatePayload());

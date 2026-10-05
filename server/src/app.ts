@@ -2,6 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import { createHash, randomBytes } from 'node:crypto';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { extractYouTubeId } from './utils/youtube.js';
@@ -9,6 +10,7 @@ import { serverSentry } from './services/sentry.js';
 
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService): Express {
   const app = express();
+  app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 
   // Security Headers (Satisfies Semgrep and Lighthouse best practices)
   app.use((_req: Request, res: Response, next: NextFunction) => {
@@ -47,13 +49,14 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
 
   // In-memory sliding rate limiter (OWASP & Semgrep defense against API abuse)
   const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-  const apiRateLimiter = (limit: number, windowMs: number) => {
+  const apiRateLimiter = (scope: string, limit: number, windowMs: number) => {
     return (req: Request, res: Response, next: NextFunction) => {
       const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+      const key = `${scope}:${ip}`;
       const now = Date.now();
-      const record = rateLimitMap.get(ip);
+      const record = rateLimitMap.get(key);
       if (!record || now > record.resetTime) {
-        rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
+        rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
         return next();
       }
       record.count++;
@@ -63,6 +66,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
       next();
     };
   };
+  app.use('/api', apiRateLimiter('api', 120, 60000));
 
   // Health check endpoint
   app.get('/health', (_req: Request, res: Response) => {
@@ -75,7 +79,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   });
 
   // Create room endpoint (protected by rate limiter)
-  app.post('/api/rooms', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
+  app.post('/api/rooms', apiRateLimiter('create-room', 30, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { initialVideoId } = req.body || {};
       let videoId = '';
@@ -88,7 +92,19 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
         videoId = parsed;
       }
 
-      const room = roomManager.createRoom(undefined, videoId);
+      const hasCreatorIdentity = Object.hasOwn(req.body || {}, 'creatorUserId');
+      const creatorUserId = typeof req.body?.creatorUserId === 'string' ? req.body.creatorUserId : undefined;
+      if (hasCreatorIdentity && (!creatorUserId || !/^[0-9a-f-]{36}$/i.test(creatorUserId))) {
+        return res.status(400).json({ error: 'Invalid creator identity.' });
+      }
+      const creatorToken = creatorUserId ? randomBytes(32).toString('hex') : undefined;
+      const creatorIdentity = creatorUserId && creatorToken
+        ? {
+            userId: creatorUserId,
+            credentialHash: createHash('sha256').update(creatorToken).digest('hex'),
+          }
+        : undefined;
+      const room = roomManager.createRoom(undefined, videoId, creatorIdentity);
 
       if (dbService) {
         await dbService.saveRoom({
@@ -103,6 +119,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
       res.status(201).json({
         roomId: room.id,
         videoId: room.videoId,
+        ...(creatorToken ? { identityToken: creatorToken } : {}),
       });
     } catch (err) {
       next(err);
@@ -219,7 +236,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   ];
 
   // Search YouTube videos endpoint (rate limited + fetch timeouts + sanitization)
-  app.get('/api/youtube/search', apiRateLimiter(60, 60000), async (req: Request, res: Response, next: NextFunction) => {
+  app.get('/api/youtube/search', apiRateLimiter('youtube-search', 60, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const q = String(req.query.q || '').trim();
       if (!q) {

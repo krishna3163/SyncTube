@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { HomePage } from './pages/HomePage.js';
 import { RoomPage } from './pages/RoomPage.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { getOrCreateUserId } from './utils/identity.js';
 
 interface Toast {
   id: string;
@@ -12,20 +13,7 @@ interface Toast {
 export function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
-  const [userId] = useState<string>(() => {
-    const existing =
-      localStorage.getItem('synctube_user_id') ||
-      sessionStorage.getItem('synctube_user_id');
-    if (existing) {
-      localStorage.setItem('synctube_user_id', existing);
-      sessionStorage.setItem('synctube_user_id', existing);
-      return existing;
-    }
-    const generated = `usr_${Math.random().toString(36).substring(2, 9)}`;
-    localStorage.setItem('synctube_user_id', generated);
-    sessionStorage.setItem('synctube_user_id', generated);
-    return generated;
-  });
+  const [userId] = useState<string>(getOrCreateUserId);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -46,7 +34,7 @@ export function App() {
   }, []);
 
   const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = `${Date.now()}_${Math.random()}`;
+    const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -82,7 +70,7 @@ export function App() {
           onNotify={showToast}
         />
       ) : (
-        <HomePage onEnterRoom={handleEnterRoom} onNotify={showToast} />
+        <HomePage onEnterRoom={handleEnterRoom} onNotify={showToast} userId={userId} />
       )}
 
       {/* Floating Toast Alerts */}

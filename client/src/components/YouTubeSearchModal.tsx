@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../pages/HomePage.js';
+import { getSafeYouTubeThumbnailUrl } from '../utils/identity.js';
 import { extractYouTubeId } from '../utils/youtube.js';
 
 interface SearchResultItem {
@@ -174,7 +175,14 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
     }
 
     // Always include public Render endpoint as fallback if local/primary fails
-    if (!endpointsToTry.some((u) => u.includes('synctube-2ar4.onrender.com'))) {
+    const alreadyHasFallback = endpointsToTry.some((endpoint) => {
+      try {
+        return new URL(endpoint, window.location.origin).hostname === 'synctube-2ar4.onrender.com';
+      } catch {
+        return false;
+      }
+    });
+    if (!alreadyHasFallback) {
       endpointsToTry.push(`https://synctube-2ar4.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
@@ -344,7 +352,7 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
                 <div key={item.videoId} className="yt-search-item">
                   <div className="yt-search-item-thumb-wrap">
                     <img
-                      src={item.thumbnail || `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`}
+                      src={getSafeYouTubeThumbnailUrl(item.thumbnail, item.videoId)}
                       alt={item.title}
                       className="yt-search-item-thumb"
                       loading="lazy"

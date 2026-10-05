@@ -39,6 +39,7 @@ function getDefaultAvatarForUsername(username: string): string {
 
 export class Room {
   public readonly id: string;
+  public readonly creatorUserId: string | null;
   public videoId: string;
   public playState: PlayState;
   public currentTime: number;
@@ -48,21 +49,38 @@ export class Room {
   public activePoll: RoomPoll | null = null;
 
   private participants: Map<string, Participant> = new Map();
+  private identityCredentialHashes: Map<string, string> = new Map();
   private socketToUserId: Map<string, string> = new Map();
   private removedUserIds: Set<string> = new Set();
   private pendingRequests: Map<string, PendingActionRequest> = new Map();
   private chatMessages: ChatMessage[] = [];
 
-  constructor(id: string, initialVideoId: string = '') {
+  constructor(
+    id: string,
+    initialVideoId: string = '',
+    creatorIdentity?: { userId: string; credentialHash: string }
+  ) {
     this.id = id;
     this.videoId = initialVideoId;
     this.playState = 'paused';
     this.currentTime = 0;
     this.updatedAt = Date.now();
+    this.creatorUserId = creatorIdentity?.userId || null;
+    if (creatorIdentity) {
+      this.identityCredentialHashes.set(creatorIdentity.userId, creatorIdentity.credentialHash);
+    }
   }
 
   public isRemoved(userId: string): boolean {
     return this.removedUserIds.has(userId);
+  }
+
+  public getIdentityCredentialHash(userId: string): string | undefined {
+    return this.identityCredentialHashes.get(userId);
+  }
+
+  public registerIdentityCredential(userId: string, credentialHash: string): void {
+    this.identityCredentialHashes.set(userId, credentialHash);
   }
 
   public addParticipant(
@@ -95,7 +113,12 @@ export class Room {
     // Role assignment:
     // If no participants exist or isCreator, role is HOST
     let role: Role = 'PARTICIPANT';
-    if (this.participants.size === 0 || isCreator || !this.hostUserId) {
+    if (this.creatorUserId) {
+      if (isCreator && userId === this.creatorUserId) {
+        role = 'HOST';
+        this.hostUserId = userId;
+      }
+    } else if (this.participants.size === 0 || isCreator || !this.hostUserId) {
       role = 'HOST';
       this.hostUserId = userId;
     }

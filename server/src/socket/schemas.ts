@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const JoinRoomSchema = z.object({
   roomId: z.string().trim().min(1).max(32),
   username: z.string().trim().min(1).max(50),
-  userId: z.string().trim().min(1).max(100).optional(),
+  userId: z.string().trim().min(1).max(100),
+  identityToken: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
   avatarId: z.string().trim().max(50).optional(),
 });
 
