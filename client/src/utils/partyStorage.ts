@@ -65,7 +65,7 @@ export function saveStoredParty(
       roomId: party.roomId,
       username: party.username || prev?.username || 'Viewer',
       role: party.role || prev?.role || 'PARTICIPANT',
-      videoId: party.videoId || prev?.videoId || 'LXb3EKWsInQ',
+      videoId: party.videoId || prev?.videoId || '',
       videoTitle: party.videoTitle || prev?.videoTitle,
       avatarId: party.avatarId || prev?.avatarId,
       lastVisited: Date.now(),

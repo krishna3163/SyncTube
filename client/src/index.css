@@ -43,6 +43,120 @@
   --mono:  'JetBrains Mono', monospace;
 }
 
+.room-page-root {
+  --room-accent: var(--accent);
+}
+
+.connection-status-banner {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 3000;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: calc(100vw - 1rem);
+  padding: 0.45rem 0.75rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 999px;
+  background: rgba(38, 28, 8, 0.94);
+  color: #fbbf24;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.connection-status-banner.connecting {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(8, 30, 42, 0.94);
+  color: #7dd3fc;
+}
+
+.connection-status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: pulseDot 1.2s infinite;
+}
+
+.room-page-root[data-room-theme="ocean"] {
+  --bg-deep: #071521;
+  --bg-card: #0d2230;
+  --bg-raised: #123446;
+  --room-accent-soft: rgba(56, 189, 248, 0.16);
+}
+
+.room-page-root[data-room-theme="forest"] {
+  --bg-deep: #081812;
+  --bg-card: #10261d;
+  --bg-raised: #173628;
+  --room-accent-soft: rgba(52, 211, 153, 0.16);
+}
+
+.room-page-root[data-room-theme="sunset"] {
+  --bg-deep: #1e1010;
+  --bg-card: #2b1717;
+  --bg-raised: #402020;
+  --room-accent-soft: rgba(251, 146, 60, 0.16);
+}
+
+.room-page-root .btn-primary,
+.room-page-root .modal-tab-btn.active,
+.room-page-root .reaction-group-tab.active {
+  --accent: var(--room-accent);
+}
+
+.room-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.room-theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-theme-option span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.room-theme-option.selected {
+  border-color: var(--room-accent);
+  box-shadow: 0 0 0 1px var(--room-accent), 0 0 16px color-mix(in srgb, var(--room-accent) 20%, transparent);
+}
+
+.room-accent-picker {
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 480px) {
+  .room-theme-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chat-row-v2.chat-row-me .chat-msg-emoji-picker,
+.chat-bubble-wrapper:has(.chat-msg-emoji-picker) .chat-msg-emoji-picker {
+  right: 0;
+  left: auto;
+}
+
 /* ─────────────────────────────────────────────
    RESET & MOBILE VIEWPORT LOCKS
 ───────────────────────────────────────────── */
@@ -147,6 +261,40 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+@media (max-width: 1024px) {
+  .app-header {
+    padding-inline: 0.65rem;
+    gap: 0.45rem;
+  }
+
+  .app-header .header-sync-center,
+  .app-header .header-btn-text,
+  .app-header .header-btn-prefix {
+    display: none !important;
+  }
+
+  .app-header .header-actions {
+    min-width: 0;
+    gap: 0.25rem;
+    overflow: hidden;
+  }
+
+  .app-header .header-btn {
+    flex: 0 1 auto;
+    min-width: 34px;
+    padding-inline: 0.45rem;
+  }
+
+  .app-header .header-room-code {
+    min-width: 0;
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .header-btn {
@@ -397,10 +545,13 @@ body {
   pointer-events: none;
   overflow: hidden;
   border-radius: calc(var(--r-xl) + 28px);
-  filter: blur(60px) saturate(180%) brightness(1.15);
-  opacity: 0.65;
+  filter: blur(60px) saturate(180%) brightness(1.1);
+  opacity: 0.72;
   transform: translateZ(0);
-  transition: opacity 0.6s ease, filter 0.6s ease;
+  background:
+    radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--ambient-primary, #5b4bb7) 70%, transparent), transparent 55%),
+    radial-gradient(circle at 82% 76%, color-mix(in srgb, var(--ambient-secondary, #1b5c72) 68%, transparent), transparent 58%);
+  transition: opacity 0.8s ease, filter 0.8s ease, background 0.8s ease;
   will-change: transform, opacity;
 }
 
@@ -422,8 +573,8 @@ body {
   background: radial-gradient(
     ellipse at center,
     transparent 0%,
-    rgba(11, 13, 14, 0.55) 60%,
-    rgba(11, 13, 14, 0.88) 100%
+    rgba(11, 13, 14, 0.38) 55%,
+    rgba(11, 13, 14, 0.82) 100%
   );
   pointer-events: none;
 }
@@ -433,9 +584,9 @@ body {
 }
 
 @keyframes ambientBreathing {
-  0%   { opacity: 0.58; filter: blur(55px) saturate(165%) brightness(1.1); }
-  50%  { opacity: 0.8;  filter: blur(72px) saturate(210%) brightness(1.25); }
-  100% { opacity: 0.65; filter: blur(62px) saturate(180%) brightness(1.15); }
+  0%   { opacity: 0.62; filter: blur(55px) saturate(165%) brightness(1.05); transform: scale(1); }
+  50%  { opacity: 0.82; filter: blur(72px) saturate(215%) brightness(1.2); transform: scale(1.035); }
+  100% { opacity: 0.68; filter: blur(62px) saturate(185%) brightness(1.1); transform: scale(1.015); }
 }
 
 .stage-card {
@@ -462,6 +613,30 @@ body {
   top: 0; left: 0;
   width: 100%; height: 100%;
   border: 0;
+}
+
+.video-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  background: radial-gradient(circle at center, rgba(47, 97, 143, 0.18), transparent 58%), #080a0d;
+  text-align: center;
+}
+
+.video-empty-state span {
+  color: var(--text-main);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.video-empty-state small {
+  color: var(--text-dim);
+  font-size: 0.8rem;
 }
 
 /* ─────────────────────────────────────────────
@@ -717,6 +892,7 @@ body {
   border-radius: var(--r-xl);
   overflow-x: auto;
   scrollbar-width: none;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 0.25rem;
 }
@@ -727,6 +903,7 @@ body {
 
 .sidebar-tab-btn {
   flex: 1 0 auto;
+  min-width: max-content;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1176,6 +1353,8 @@ body {
 .modal-tabs {
   display: flex;
   gap: 0.4rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .modal-tab-btn {
@@ -1192,6 +1371,30 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .modal-card {
+    width: calc(100% - 1rem);
+    max-height: 92vh;
+  }
+
+  .modal-header {
+    padding: 0.7rem 0.8rem;
+  }
+
+  .modal-body {
+    padding: 0.85rem;
+  }
+
+  .modal-tab-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 0.55rem;
+    font-size: 0.76rem;
+  }
 }
 
 .modal-tab-btn:hover {
@@ -1615,12 +1818,13 @@ body {
     padding: 4px;
     border-radius: var(--r-xl);
     overflow-x: auto;
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 210, 31, 0.7) rgba(255, 255, 255, 0.06);
     -webkit-overflow-scrolling: touch;
   }
 
   .sidebar-tab-bar::-webkit-scrollbar {
-    display: none;
+    height: 7px;
   }
 
   .sidebar-tab-btn {
@@ -2694,6 +2898,8 @@ body {
   position: absolute;
   top: -42px;
   left: 0;
+  max-width: min(260px, calc(100vw - 24px));
+  overflow-x: auto;
   display: flex;
   gap: 4px;
   background: rgba(18, 14, 28, 0.96);
@@ -3180,8 +3386,190 @@ body {
   gap: 0.5rem;
 }
 
+/* Compact room header before the phone breakpoint so tablet-sized windows
+   never push the right-side actions outside the viewport. */
+@media (max-width: 900px) {
+  .app-header {
+    padding-inline: 0.65rem;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .header-sync-center {
+    display: none;
+  }
+
+  .brand {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .brand-title {
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    gap: 0.3rem;
+    overflow: hidden;
+  }
+
+  .header-btn {
+    flex: 0 0 auto;
+    min-width: 34px;
+    min-height: 34px;
+    padding-inline: 0.45rem;
+  }
+
+  .header-btn-text,
+  .header-btn-prefix {
+    display: none !important;
+  }
+
+  .header-room-code {
+    max-width: 58px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Reaction strips scroll by touch or wheel without showing a horizontal bar. */
+.controls-reaction-slot .reaction-options {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+.controls-reaction-slot .reaction-options::-webkit-scrollbar,
+.controls-reaction-slot .reaction-options::-webkit-scrollbar-track,
+.controls-reaction-slot .reaction-options::-webkit-scrollbar-thumb {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+@media (max-width: 480px) {
+  .controls-dock-panel .controls-role-badge {
+    padding: 0 !important;
+    padding-inline: 0 !important;
+  }
+}
+
 @media (max-width: 480px) {
   .avatar-picker-grid { grid-template-columns: repeat(6, 1fr); }
+}
+
+/* Final room-header guard: this must come after the base header rules. */
+@media (max-width: 900px) {
+  .app-header .header-sync-center {
+    display: none;
+  }
+
+  .app-header .header-btn-text,
+  .app-header .header-btn-prefix {
+    display: none !important;
+  }
+
+  .app-header .header-actions {
+    min-width: 0;
+    overflow: hidden;
+    gap: 0.3rem;
+  }
+
+  .app-header .header-btn {
+    flex: 0 0 auto;
+    min-width: 34px;
+    min-height: 34px;
+    padding-inline: 0.45rem;
+  }
+}
+
+/* Keep tab navigation compact while allowing mouse-wheel and touch scrolling. */
+.sidebar-tab-bar {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  touch-action: pan-x;
+  overscroll-behavior: contain;
+}
+
+.sidebar-tab-bar::-webkit-scrollbar,
+.sidebar-tab-bar::-webkit-scrollbar-track,
+.sidebar-tab-bar::-webkit-scrollbar-thumb {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.reaction-options {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+  touch-action: pan-x;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reaction-options::-webkit-scrollbar,
+.reaction-options::-webkit-scrollbar-track,
+.reaction-options::-webkit-scrollbar-thumb {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 480px) {
+  .controls-dock-panel .controls-role-badge {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    padding-inline: 0;
+    font-size: 0;
+    line-height: 0;
+    gap: 0 !important;
+  }
+
+  .controls-dock-panel .controls-role-badge svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex: 0 0 16px;
+  }
+
+  .controls-dock-panel .playback-buttons {
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+  }
+
+  .controls-dock-panel .control-btn-play,
+  .controls-dock-panel .control-btn-jump,
+  .controls-dock-panel .control-btn-next,
+  .controls-dock-panel .btn-request-quick {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    justify-content: center;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+
+  .controls-dock-panel .control-btn-play span,
+  .controls-dock-panel .control-btn-jump span,
+  .controls-dock-panel .control-btn-next span,
+  .controls-dock-panel .btn-request-quick span {
+    display: none;
+  }
+}
+
+.controls-reaction-slot .reaction-options {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
 }
 
 .avatar-picker-item {
@@ -3320,6 +3708,274 @@ body {
   /* Floating reactions on mobile */
   .floating-reactions-launcher {
     z-index: 9980;
+  }
+
+  .inline-reactions-launcher {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    z-index: 8;
+    width: 100%;
+    margin-top: 0.35rem;
+    align-items: center !important;
+  }
+
+  .controls-reaction-slot {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .controls-reaction-slot .inline-reactions-launcher {
+    width: auto;
+    margin-top: 0;
+    align-items: center !important;
+    touch-action: auto;
+    z-index: 130;
+  }
+
+  .controls-reaction-slot .reaction-toggle-btn {
+    background: var(--bg-card);
+    border-color: var(--border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .controls-reaction-slot .inline-reactions-launcher .reactions-palette {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.55rem);
+    width: min(420px, calc(100vw - 20px));
+    max-width: min(420px, calc(100vw - 20px));
+    margin: 0 !important;
+    padding: 0.55rem;
+    gap: 0.45rem;
+    border-radius: 14px;
+    background: rgba(24, 27, 36, 0.98);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    z-index: 120;
+  }
+
+  .controls-reaction-slot .reaction-group-tabs {
+    flex: 1;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .controls-reaction-slot .reaction-group-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .controls-reaction-slot .reaction-group-tab {
+    min-height: 28px;
+    padding: 0.28rem 0.65rem;
+    background: rgba(255, 255, 255, 0.06);
+    white-space: nowrap;
+  }
+
+  .controls-reaction-slot .reaction-group-tab.active {
+    background: rgba(255, 210, 31, 0.16);
+    border: 1px solid rgba(255, 210, 31, 0.28);
+  }
+
+  .controls-reaction-slot .reaction-create-poll {
+    align-self: flex-end;
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+  }
+
+  .reaction-palette-header {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .controls-reaction-slot .reaction-create-poll:hover {
+    color: var(--accent);
+    border-color: rgba(255, 210, 31, 0.28);
+    background: rgba(255, 210, 31, 0.1);
+  }
+
+  .reaction-poll-composer {
+    display: grid;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 0.45rem;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .reaction-poll-composer input {
+    width: 100%;
+    min-width: 0;
+    padding: 0.38rem 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text-main);
+    font-size: 0.72rem;
+  }
+
+  .reaction-poll-composer > div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.35rem;
+  }
+
+  .reaction-poll-composer button {
+    padding: 0.28rem 0.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    font-size: 0.68rem;
+    cursor: pointer;
+  }
+
+  .reaction-poll-composer button:first-child {
+    background: rgba(255, 210, 31, 0.16);
+    color: var(--accent);
+  }
+
+  .reaction-poll-composer button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .controls-reaction-slot .reaction-options {
+    min-width: 0;
+    padding: 0.15rem 0.05rem 0.2rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .controls-reaction-slot .reaction-options .reaction-btn,
+  .controls-reaction-slot .reaction-options .reaction-close-btn {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+  }
+
+  @media (max-width: 560px) {
+    .controls-reaction-slot .inline-reactions-launcher .reactions-palette {
+      right: -0.35rem;
+      width: min(330px, calc(100vw - 16px));
+      max-width: min(330px, calc(100vw - 16px));
+    }
+
+    .controls-reaction-slot .reaction-group-tab {
+      padding-inline: 0.5rem;
+      font-size: 0.64rem;
+    }
+  }
+
+  .below-video-reactions {
+    position: relative;
+    z-index: 8;
+    width: 100%;
+    margin-top: 0.45rem;
+    padding: 0 0.5rem;
+  }
+
+  .local-video-settings {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    width: min(250px, calc(100vw - 24px));
+    max-height: min(70vh, 390px);
+    overflow-y: auto;
+    padding: 0.65rem;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+    background: var(--surface-elevated, rgba(24, 27, 36, 0.98));
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.14));
+    border-radius: 12px;
+  }
+
+  .local-video-settings > div:first-child {
+    color: var(--text-muted);
+  }
+
+  .below-video-reactions .inline-reactions-launcher {
+    align-items: stretch !important;
+  }
+
+  .below-video-reactions .reaction-toggle-btn {
+    align-self: center;
+  }
+
+  .below-video-reactions .reactions-palette {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    border-radius: 14px;
+    padding: 0.35rem 0.45rem;
+    scrollbar-width: thin;
+  }
+
+  .below-video-reactions .reaction-btn,
+  .below-video-reactions .reaction-close-btn {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+  }
+
+  @media (max-width: 520px) {
+    .below-video-reactions {
+      padding: 0 0.35rem;
+      margin-top: 0.3rem;
+    }
+
+    .below-video-reactions .reaction-toggle-btn {
+      min-height: 34px;
+      padding: 0.42rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .below-video-reactions .reactions-palette {
+      gap: 0.2rem;
+      padding: 0.3rem 0.35rem;
+    }
+
+    .below-video-reactions .reaction-btn,
+    .below-video-reactions .reaction-close-btn {
+      flex-basis: 32px;
+      width: 32px;
+      height: 32px;
+    }
+  }
+
+  .inline-reactions-launcher .reactions-palette {
+    max-width: 100%;
+  }
+
+  .current-speed-indicator {
+    align-self: center;
+    margin: -0.15rem auto 0.2rem;
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
   .reaction-toggle-btn {
@@ -4185,6 +4841,8 @@ body {
 
 .floating-reactions-launcher {
   position: fixed;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 68px);
   z-index: 9999;
   display: flex;
   flex-direction: column;
@@ -4264,7 +4922,13 @@ body.is-dragging-reaction iframe {
 .reactions-palette {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: flex-start;
   gap: 0.35rem;
+  width: max-content;
+  max-width: calc(100vw - 24px);
   background: rgba(18, 14, 28, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(16px);
@@ -4272,6 +4936,187 @@ body.is-dragging-reaction iframe {
   border-radius: 9999px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   animation: scaleIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reaction-group-tabs {
+  display: flex;
+  gap: 0.25rem;
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.reaction-group-tab {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.reaction-group-tab.active {
+  background: rgba(255, 210, 31, 0.18);
+  color: var(--accent);
+}
+
+.reaction-options {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.reaction-live-counters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.reaction-live-counters span {
+  padding: 0.18rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.reaction-poll {
+  display: grid;
+  gap: 0.4rem;
+  width: min(100%, 320px);
+  padding: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(8, 10, 15, 0.72);
+  font-size: 0.76rem;
+}
+
+.reaction-poll-title {
+  display: grid;
+  gap: 0.12rem;
+  padding-bottom: 0.25rem;
+}
+
+.reaction-poll-label {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.reaction-poll-title strong {
+  color: var(--text-main);
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.reaction-poll-option {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  text-align: left;
+}
+
+.reaction-poll-option:hover {
+  border-color: rgba(255, 210, 31, 0.45);
+  background: rgba(255, 210, 31, 0.08);
+}
+
+.reaction-poll-option-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  min-width: 0;
+  background: linear-gradient(90deg, rgba(255, 210, 31, 0.3), rgba(255, 160, 0, 0.16));
+  transition: width 0.25s ease;
+}
+
+.reaction-poll-option-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.38rem 0.55rem;
+  font-weight: 600;
+}
+
+.reaction-poll-option-content small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.reaction-create-poll {
+  align-self: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.reaction-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #19130a;
+  font-size: 0.6rem;
+  font-weight: 800;
+  line-height: 14px;
+}
+
+.reaction-options .reaction-btn {
+  position: relative;
+  flex: 0 0 34px;
+}
+
+.reactions-palette {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.reaction-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reaction-close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-main);
 }
 
 .reaction-btn {
@@ -4531,6 +5376,7 @@ body.is-dragging-reaction iframe {
 .sync-badge {
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
   gap: 0.45rem;
   padding: 0.3rem 0.65rem;
   border-radius: 9999px;
@@ -4885,9 +5731,48 @@ body.is-dragging-reaction iframe {
     justify-content: space-between;
   }
 
-  .controls-dock-panel .utility-buttons {
+  .controls-dock-panel .controls-right-group {
     flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    column-gap: 0.5rem;
+    row-gap: 0.35rem;
+  }
+
+  .controls-dock-panel .controls-role-badge {
+    flex: 0 0 auto;
+    padding-inline: 0.45rem;
+  }
+
+  .controls-dock-panel .controls-reaction-slot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+  }
+
+  .controls-dock-panel .reaction-toggle-btn {
+    width: 42px;
+    justify-content: center;
+    padding-inline: 0.35rem;
+  }
+
+  .controls-dock-panel .reaction-toggle-label {
+    display: none;
+  }
+
+  .mobile-playback-dock .controls-reaction-slot .reactions-palette {
+    position: fixed !important;
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: 7.25rem !important;
+    background: var(--bg-card) !important;
+    border-color: var(--border) !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
   }
 
   .home-page-wrapper {
@@ -5278,7 +6163,8 @@ body.is-dragging-reaction iframe {
 .upnext-dropdown-menu {
   position: absolute;
   right: 0;
-  top: calc(100% + 4px);
+  top: auto;
+  bottom: calc(100% + 4px);
   z-index: 100;
   background: #141720;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -5289,6 +6175,35 @@ body.is-dragging-reaction iframe {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+}
+
+.upnext-item-row,
+.upnext-actions-col,
+.upnext-menu-container {
+  overflow: visible;
+}
+
+.upnext-items-list {
+  overflow-x: visible;
+}
+
+.playback-speed-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.playback-speed-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+}
+
+.playback-speed-scale strong {
+  color: var(--accent);
+  font-size: 0.76rem;
 }
 
 .upnext-menu-item {
@@ -5547,3 +6462,27 @@ body.is-dragging-reaction iframe {
   gap: 0.5rem;
 }
 
+/* Keep every room-header action inside compact tablet-sized viewports. */
+@media (max-width: 900px) {
+  .app-header .header-sync-center {
+    display: none;
+  }
+
+  .app-header .header-btn-text,
+  .app-header .header-btn-prefix {
+    display: none !important;
+  }
+
+  .app-header .header-actions {
+    min-width: 0;
+    overflow: hidden;
+    gap: 0.3rem;
+  }
+
+  .app-header .header-btn {
+    flex: 0 0 auto;
+    min-width: 34px;
+    min-height: 34px;
+    padding-inline: 0.45rem;
+  }
+}

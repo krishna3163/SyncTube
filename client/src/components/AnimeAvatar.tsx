@@ -40,7 +40,7 @@ export const AnimeAvatarDisplay: React.FC<AnimeAvatarDisplayProps> = ({
         position: 'relative',
         cursor: showTooltip ? 'default' : undefined,
       }}
-      title={showTooltip ? `${avatar.name} (${avatar.series})` : undefined}
+      title={showTooltip ? avatar.name : undefined}
     >
       {!imgError ? (
         <img
@@ -81,7 +81,6 @@ export const AvatarPicker: React.FC<AvatarPickerProps> = ({ selectedId, username
         <AnimeAvatarDisplay username={username} avatarId={selectedId} size={72} showTooltip />
         <div className="avatar-picker-preview-info">
           <span className="avatar-picker-name">{current.name}</span>
-          <span className="avatar-picker-series">{current.series}</span>
         </div>
       </div>
       <div className="avatar-picker-grid">

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
-import { GripVertical } from 'lucide-react';
+import { getAvatarById } from '../utils/animeAvatars.js';
 
 interface FloatingReactionsProps {
   socket: Socket | null;
   username: string;
+  avatarId?: string;
+  inline?: boolean;
+  currentTime?: number;
+  userRole?: string;
 }
 
 interface ReactionParticle {
@@ -16,16 +20,38 @@ interface ReactionParticle {
   scale: number;
 }
 
-const REACTION_EMOJIS = ['❤️', '🔥', '😂', '🍿', '👏', '🥳', '💀', '⚡'];
+const REACTION_EMOJIS = ['🦊', '🍥', '⚡', '🔥', '🏴‍☠️', '🍖', '🌊', '⚔️', '🧹', '🌙', '✨'];
+const REACTION_GROUPS = {
+  Basic: ['❤️', '😂', '🔥', '👏', '😮', '😢', '😡', '🎉', '🍿', '💀'],
+  'Watch Party': ['⏪', '⏩', '🤯', '😱', '🥹', '🧠', '💤', '🎬', '🔊', '❓'],
+  Character: REACTION_EMOJIS,
+} as const;
+const CHARACTER_REACTIONS: Record<string, string[]> = {
+  naruto: ['🦊', '🍥'],
+  goku: ['⚡', '🔥'],
+  luffy: ['🏴‍☠️', '🍖'],
+  tanjiro: ['🌊', '⚔️'],
+  levi: ['⚔️', '🧹'],
+  sailor: ['🌙', '✨'],
+};
 const STORAGE_KEY = 'synctube_reaction_btn_pos_v2';
 
-export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, username }) => {
+export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, username, avatarId, inline = false, currentTime = 0, userRole }) => {
   const [particles, setParticles] = useState<ReactionParticle[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [reactionGroup, setReactionGroup] = useState<keyof typeof REACTION_GROUPS>('Basic');
+  const [recentCounts, setRecentCounts] = useState<Record<string, number>>({});
+  const [recentReactions, setRecentReactions] = useState<string[]>([]);
+  const [poll, setPoll] = useState<{ id: string; question: string; options: string[]; votes: Record<string, string[]> } | null>(null);
+  const [showPollComposer, setShowPollComposer] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState('Yes, No');
+  const lastSentAtRef = useRef(0);
 
   const launcherRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const isDraggingRef = useRef(false);
   const ignoreNextClickRef = useRef(false);
   const posRef = useRef<{ x: number; y: number }>({ x: 0, y: 70 });
@@ -44,8 +70,8 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     if (typeof window === 'undefined') return;
 
     const clampToScreen = (x: number, y: number) => {
-      const width = launcherRef.current?.offsetWidth || 115;
-      const height = launcherRef.current?.offsetHeight || 38;
+      const width = buttonRef.current?.offsetWidth || 115;
+      const height = buttonRef.current?.offsetHeight || 38;
       const minX = 8;
       const maxX = Math.max(minX, window.innerWidth - width - 8);
       const minY = 56;
@@ -58,7 +84,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
 
     let initialPosition = {
       x: Math.max(8, window.innerWidth - 125),
-      y: window.innerWidth <= 768 ? 64 : 70,
+      y: Math.max(56, window.innerHeight - 125),
     };
 
     try {
@@ -89,6 +115,53 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     };
   }, []);
 
+  // Re-clamp restored positions after the button has rendered and whenever
+  // the viewport changes. The palette must not affect the button's bounds.
+  useEffect(() => {
+    if (!pos) return;
+
+    const clampButtonPosition = () => {
+      const width = buttonRef.current?.offsetWidth || 115;
+      const height = buttonRef.current?.offsetHeight || 38;
+      const next = {
+        x: Math.min(Math.max(8, posRef.current.x), Math.max(8, window.innerWidth - width - 8)),
+        y: Math.min(Math.max(56, posRef.current.y), Math.max(56, window.innerHeight - height - 12)),
+      };
+      if (next.x !== posRef.current.x || next.y !== posRef.current.y) {
+        posRef.current = next;
+        setPos(next);
+      }
+    };
+
+    const frame = window.requestAnimationFrame(clampButtonPosition);
+    window.addEventListener('resize', clampButtonPosition);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', clampButtonPosition);
+    };
+  }, [pos, isOpen]);
+
+  // Clicking outside the launcher or pressing Escape closes the palette.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!launcherRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
   // Handle incoming reactions from server
   useEffect(() => {
     if (!socket) return;
@@ -103,25 +176,64 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
         scale: 0.85 + Math.random() * 0.4,
       };
 
+      const activeCount = recentCounts[data.emoji] || 0;
+      newParticle.scale = activeCount >= 2 ? 1.25 : newParticle.scale;
       setParticles((prev) => [...prev.slice(-25), newParticle]);
+      setRecentCounts((prev) => ({ ...prev, [data.emoji]: (prev[data.emoji] || 0) + 1 }));
 
       // Remove after 2.4s animation
       setTimeout(() => {
         setParticles((prev) => prev.filter((p) => p.id !== newParticle.id));
+        setRecentCounts((prev) => {
+          const next = { ...prev };
+          if (next[data.emoji] <= 1) delete next[data.emoji];
+          else next[data.emoji] -= 1;
+          return next;
+        });
       }, 2400);
     };
 
     socket.on('reaction_received', handleReactionReceived);
+    const handlePoll = (data: typeof poll) => setPoll(data);
+    socket.on('poll_updated', handlePoll);
     return () => {
       socket.off('reaction_received', handleReactionReceived);
+      socket.off('poll_updated', handlePoll);
     };
-  }, [socket]);
+  }, [socket, recentCounts]);
+
+  const createPoll = () => {
+    const options = pollOptions.split(',').map((item) => item.trim()).filter(Boolean);
+    if (!socket || !pollQuestion.trim() || options.length < 2) return;
+    socket.emit('create_poll', { question: pollQuestion.trim(), options });
+    setPollQuestion('');
+    setPollOptions('Yes, No');
+    setShowPollComposer(false);
+  };
 
   // Send reaction
   const sendReaction = useCallback((emoji: string) => {
     if (!socket) return;
-    socket.emit('send_reaction', { emoji });
-  }, [socket]);
+    const now = Date.now();
+    if (now - lastSentAtRef.current < 500) return;
+    lastSentAtRef.current = now;
+    setRecentReactions((prev) => {
+      const next = [emoji, ...prev.filter((item) => item !== emoji)].slice(0, 5);
+      localStorage.setItem('synctube_recent_reactions', JSON.stringify(next));
+      return next;
+    });
+    socket.emit('send_reaction', { emoji, videoTime: currentTime });
+    setIsOpen(false);
+  }, [socket, currentTime]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('synctube_recent_reactions') || '[]');
+      if (Array.isArray(saved)) setRecentReactions(saved.filter((item) => typeof item === 'string').slice(0, 5));
+    } catch {
+      setRecentReactions([]);
+    }
+  }, []);
 
   // Pointer down handler for smooth dragging and immediate response
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -168,8 +280,10 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           moveEvt.preventDefault();
         }
 
-        const width = launcherRef.current?.offsetWidth || 115;
-        const height = launcherRef.current?.offsetHeight || 38;
+        // Clamp against the draggable button, not the open palette. The
+        // palette can be wider/taller and must not make the launcher stick.
+        const width = state.target.offsetWidth || 115;
+        const height = state.target.offsetHeight || 38;
         const minX = 8;
         const maxX = Math.max(minX, window.innerWidth - width - 8);
         const minY = 54;
@@ -190,10 +304,11 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       }
     };
 
-    const handlePointerUp = (upEvt: PointerEvent) => {
+    const handlePointerUp = () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerUp);
+      targetEl.removeEventListener('lostpointercapture', handlePointerUp);
       document.body.classList.remove('is-dragging-reaction');
 
       const state = dragStateRef.current;
@@ -226,11 +341,108 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     window.addEventListener('pointermove', handlePointerMove, { passive: false });
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
+    targetEl.addEventListener('lostpointercapture', handlePointerUp);
   };
 
   // Smart placement for emoji palette so it stays 100% visible on screen
   const isRightSide = !pos || pos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 400);
   const isNearBottom = pos && pos.y > (typeof window !== 'undefined' ? window.innerHeight - 150 : 500);
+  const characterEmoji = getAvatarById(avatarId || '')?.emoji || '✨';
+  const groupEmojis = reactionGroup === 'Basic' && recentReactions.length
+    ? [...recentReactions, ...REACTION_GROUPS.Basic]
+    : reactionGroup === 'Character'
+      ? (CHARACTER_REACTIONS[avatarId || ''] || REACTION_GROUPS.Character)
+      : REACTION_GROUPS[reactionGroup];
+  const visibleReactionEmojis = [characterEmoji, ...groupEmojis.filter((emoji) => emoji !== characterEmoji)].filter((emoji, index, list) => list.indexOf(emoji) === index);
+  const handleReactionOptionsWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const options = event.currentTarget;
+    const scrollDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (options.scrollWidth <= options.clientWidth || scrollDelta === 0) return;
+
+    options.scrollLeft += scrollDelta;
+  }, []);
+
+  const renderPalette = (marginStyle: React.CSSProperties) => (
+    <div className="reactions-palette" style={marginStyle}>
+      <div className="reaction-palette-header">
+        <div className="reaction-group-tabs" role="tablist" aria-label="Reaction categories">
+          {(Object.keys(REACTION_GROUPS) as Array<keyof typeof REACTION_GROUPS>).map((group) => (
+            <button
+              key={group}
+              type="button"
+              className={`reaction-group-tab ${reactionGroup === group ? 'active' : ''}`}
+              onClick={() => setReactionGroup(group)}
+              role="tab"
+              aria-selected={reactionGroup === group}
+            >
+              {group}
+            </button>
+          ))}
+        </div>
+        {userRole === 'HOST' || userRole === 'MODERATOR' ? (
+          <button type="button" className="reaction-create-poll" onClick={() => setShowPollComposer((value) => !value)}>＋ Poll</button>
+        ) : null}
+      </div>
+      {showPollComposer && (
+        <div className="reaction-poll-composer">
+          <input
+            value={pollQuestion}
+            onChange={(event) => setPollQuestion(event.target.value)}
+            placeholder="Poll question"
+            maxLength={200}
+            aria-label="Poll question"
+          />
+          <input
+            value={pollOptions}
+            onChange={(event) => setPollOptions(event.target.value)}
+            placeholder="Options separated by commas"
+            aria-label="Poll options"
+          />
+          <div>
+            <button type="button" onClick={createPoll} disabled={!pollQuestion.trim() || pollOptions.split(',').filter((item) => item.trim()).length < 2}>Create</button>
+            <button type="button" onClick={() => setShowPollComposer(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {poll && (
+        <div className="reaction-poll">
+          <div className="reaction-poll-title">
+            <span className="reaction-poll-label">ROOM POLL</span>
+            <strong>{poll.question}</strong>
+          </div>
+          {poll.options.map((option, index) => {
+            const totalVotes = Object.values(poll.votes).reduce((total, voters) => total + voters.length, 0);
+            const votes = poll.votes[String(index)]?.length || 0;
+            const percentage = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
+            return (
+              <button key={option} type="button" className="reaction-poll-option" onClick={() => { socket?.emit('vote_poll', { optionIndex: index }); setIsOpen(false); }}>
+                <span className="reaction-poll-option-fill" style={{ width: `${percentage}%` }} />
+                <span className="reaction-poll-option-content">
+                  <span>{option}</span>
+                  <small>{percentage}% · {votes}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="reaction-options" onWheel={handleReactionOptionsWheel}>
+        <button type="button" className="reaction-close-btn" onClick={() => setIsOpen(false)} aria-label="Close reactions">×</button>
+        {visibleReactionEmojis.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            className="reaction-btn"
+            onClick={(e) => { e.stopPropagation(); sendReaction(emoji); }}
+            title={`Send ${emoji}`}
+          >
+            {emoji}
+            {recentCounts[emoji] ? <span className="reaction-count">{recentCounts[emoji]}</span> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -254,7 +466,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       {/* Draggable React Button Dock */}
       <div
         ref={launcherRef}
-        className={`floating-reactions-launcher ${isOpen ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
+        className={`${inline ? 'inline-reactions-launcher' : 'floating-reactions-launcher'} ${isOpen ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
         style={{
           left: pos ? `${pos.x}px` : undefined,
           top: pos ? `${pos.y}px` : undefined,
@@ -263,68 +475,44 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           alignItems: isRightSide ? 'flex-end' : 'flex-start',
         }}
       >
-        {/* If placed near bottom of screen, show emoji palette ABOVE the button */}
-        {isOpen && isNearBottom && (
-          <div className="reactions-palette" style={{ marginBottom: '0.4rem' }}>
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                className="reaction-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendReaction(emoji);
-                }}
-                title={`Send ${emoji}`}
-              >
-                {emoji}
-              </button>
+        {Object.keys(recentCounts).length > 0 && (
+          <div className="reaction-live-counters" aria-live="polite">
+            {Object.entries(recentCounts).map(([emoji, count]) => (
+              <span key={emoji}>{emoji} {count}</span>
             ))}
           </div>
+        )}
+        {/* If placed near bottom of screen, show emoji palette ABOVE the button */}
+        {isOpen && !inline && isNearBottom && (
+          renderPalette({ marginBottom: '0.4rem' })
         )}
 
         {/* Draggable React Pill Button */}
         <button
           type="button"
           className="reaction-toggle-btn"
-          onPointerDown={handlePointerDown}
+          ref={buttonRef}
+          onPointerDown={inline ? undefined : handlePointerDown}
           onClick={() => {
             if (ignoreNextClickRef.current) {
               ignoreNextClickRef.current = false;
               return;
             }
             if (!isDraggingRef.current) {
-              setIsOpen((prev) => !prev);
+              setIsOpen((open) => !open);
             }
           }}
-          title={isOpen ? 'Close reactions · Drag anywhere to move' : 'Send live reactions · Drag anywhere to move'}
-          aria-label="Toggle Live Reactions (Draggable)"
+          title={isOpen ? 'Close live reactions' : 'Send live reactions'}
+          aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
+          aria-expanded={isOpen}
         >
-          <span className="reaction-drag-handle" title="Drag to move">
-            <GripVertical size={14} />
-          </span>
-          <span className="reaction-toggle-emoji">❤️</span>
+          <span className="reaction-toggle-emoji">{characterEmoji}</span>
           <span className="reaction-toggle-label">React</span>
         </button>
 
         {/* If placed in upper/middle of screen, show emoji palette BELOW the button */}
-        {isOpen && !isNearBottom && (
-          <div className="reactions-palette" style={{ marginTop: '0.4rem' }}>
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                className="reaction-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendReaction(emoji);
-                }}
-                title={`Send ${emoji}`}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+        {isOpen && (inline || !isNearBottom) && (
+          renderPalette({ marginTop: '0.4rem' })
         )}
       </div>
     </>

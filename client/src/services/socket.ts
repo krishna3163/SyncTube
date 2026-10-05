@@ -46,8 +46,8 @@ export const emitSeek = (time: number) => {
   socket.emit('seek', { time });
 };
 
-export const emitChangeVideo = (videoId: string) => {
-  socket.emit('change_video', { videoId });
+export const emitChangeVideo = (videoId: string, play = false) => {
+  socket.emit('change_video', { videoId, play });
 };
 
 export const emitAssignRole = (userId: string, role: Role) => {

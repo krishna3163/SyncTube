@@ -91,7 +91,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   onNotify,
 }) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-  const [videoId, setVideoId] = useState<string>('LXb3EKWsInQ');
+  const [videoId, setVideoId] = useState<string>('');
   const [syncState, setSyncState] = useState<SyncStatePayload | null>(null);
   const [userRole, setUserRole] = useState<Role>('PARTICIPANT');
   const [participants, setParticipants] = useState<ParticipantPublic[]>([]);
@@ -113,6 +113,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
   }, [activeSidebarTab]);
 
+  const handleTabBarWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    const tabBar = event.currentTarget;
+    const scrollDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (tabBar.scrollWidth <= tabBar.clientWidth || scrollDelta === 0) return;
+
+    tabBar.scrollLeft += scrollDelta;
+  }, []);
+
   // Real-time Chat, Reactions, and Action Requests
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activeReactions, setActiveReactions] = useState<EmojiReaction[]>([]);
@@ -123,6 +131,37 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const saved = localStorage.getItem('synctube_ambient_mode');
     return saved !== null ? saved === 'true' : true; // Default ON
   });
+  const [ambientPalette, setAmbientPalette] = useState({ primary: '#5b4bb7', secondary: '#1b5c72' });
+
+  const handleAmbientImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+    const image = event.currentTarget;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 24;
+      canvas.height = 14;
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      let count = 0;
+      for (let index = 0; index < pixels.length; index += 16) {
+        red += pixels[index];
+        green += pixels[index + 1];
+        blue += pixels[index + 2];
+        count += 1;
+      }
+      if (!count) return;
+      const average = [red, green, blue].map((value) => Math.round(value / count));
+      const primary = `rgb(${average[0]}, ${average[1]}, ${average[2]})`;
+      const secondary = `rgb(${Math.round(average[2] * 0.7)}, ${Math.round(average[0] * 0.55)}, ${Math.round(average[1] * 0.65)})`;
+      setAmbientPalette({ primary, secondary });
+    } catch {
+      // YouTube may disallow canvas sampling; the image backdrop remains the fallback.
+    }
+  }, []);
 
   const handleToggleAmbientMode = useCallback(() => {
     setAmbientMode((prev) => {
@@ -193,6 +232,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Room Settings state
   const [roomSettings, setRoomSettings] = useState<RoomSettingsData>({
     name: `Room #${roomId}`,
+    theme: 'midnight',
+    accentColor: '#ffd21f',
     permissions: {
       add: { viewer: true, moderator: true, owner: true },
       remove: { viewer: false, moderator: true, owner: true },
@@ -259,8 +300,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const handleSetPlaybackSpeed = useCallback((speed: number) => {
     setPlaybackSpeed(speed);
     ytPlayerRef.current?.setPlaybackRate(speed);
-    onNotify(`Playback speed set to ${speed}x`, 'success');
-  }, [onNotify]);
+    socket?.emit('set_playback_speed', { speed });
+  }, [socket]);
 
   const handleResync = useCallback(() => {
     if (ytPlayerRef.current) {
@@ -548,24 +589,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     };
 
     // message_reaction_updated: real-time reaction toggle on a chat message
-    const onMessageReactionUpdated = (data: { messageId: string; emoji: string; userId: string; username: string }) => {
+    const onMessageReactionUpdated = (data: {
+      messageId: string;
+      emoji: string;
+      userId: string;
+      username: string;
+      reactions?: Record<string, string[]>;
+    }) => {
       setChatMessages((prev) =>
         prev.map((msg) => {
           if (msg.id !== data.messageId) return msg;
-          const reactions = { ...(msg.reactions || {}) };
-          const users = reactions[data.emoji] ? [...reactions[data.emoji]] : [];
-          const idx = users.indexOf(data.userId);
-          if (idx >= 0) {
-            users.splice(idx, 1);
-          } else {
-            users.push(data.userId);
-          }
-          if (users.length === 0) {
-            delete reactions[data.emoji];
-          } else {
-            reactions[data.emoji] = users;
-          }
-          return { ...msg, reactions };
+          return { ...msg, reactions: data.reactions || {} };
         })
       );
     };
@@ -573,9 +607,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     // reaction_received: real-time emoji reaction from a viewer
     const onReactionReceived = (data: EmojiReaction) => {
       setActiveReactions((prev) => [...prev, data]);
+      addActivity(
+        `${data.username} reacted ${data.emoji}${data.videoTime !== undefined ? ` at ${Math.floor(data.videoTime / 60)}:${String(Math.floor(data.videoTime % 60)).padStart(2, '0')}` : ''}`,
+        'reaction',
+        { username: data.username, userId: data.userId }
+      );
       setTimeout(() => {
         setActiveReactions((prev) => prev.filter((r) => r.id !== data.id));
       }, 2800);
+    };
+
+    const onPlaybackSpeedUpdated = (data: { speed: number }) => {
+      if (!Number.isFinite(data.speed)) return;
+      setPlaybackSpeed(data.speed);
+      ytPlayerRef.current?.setPlaybackRate(data.speed);
     };
 
     // sync_pulse: lightweight real-time position update from host → re-anchor viewers
@@ -603,6 +648,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('chat_history', onChatHistory);
     socket.on('message_reaction_updated', onMessageReactionUpdated);
     socket.on('reaction_received', onReactionReceived);
+    socket.on('playback_speed_updated', onPlaybackSpeedUpdated);
     socket.on('user_joined', onUserJoined);
     socket.on('user_left', onUserLeft);
     socket.on('role_assigned', onRoleAssigned);
@@ -632,6 +678,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('chat_history', onChatHistory);
       socket.off('message_reaction_updated', onMessageReactionUpdated);
       socket.off('reaction_received', onReactionReceived);
+      socket.off('playback_speed_updated', onPlaybackSpeedUpdated);
       socket.off('user_joined', onUserJoined);
       socket.off('user_left', onUserLeft);
       socket.off('role_assigned', onRoleAssigned);
@@ -640,7 +687,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('error', onError);
       emitLeaveRoom(roomId);
     };
-  }, [roomId, username, userId, userSettings.name, userSettings.avatarId]);
+  }, [roomId, username, userId, userSettings.name, userSettings.avatarId, addActivity]);
 
   // Actions
   const handlePlay = useCallback((time?: number) => {
@@ -755,7 +802,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       onNotify('Only hosts and moderators can change the video.', 'error');
       return;
     }
-    emitChangeVideo(targetVideoId);
+    emitChangeVideo(targetVideoId, true);
     addActivity(`Playing video: ${targetVideoId}`, 'playback');
     if (roomSettings.autoRemovePlayed) {
       setPlaylist((prev) => prev.filter((i) => i.id !== itemId));
@@ -785,7 +832,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
 
     if (nextItem) {
-      emitChangeVideo(nextItem.videoId);
+      emitChangeVideo(nextItem.videoId, true);
       addActivity(`Playing next video: ${nextItem.videoId}`, 'playback');
       onNotify(`Now playing: ${nextItem.videoId}`, 'success');
       if (roomSettings.autoRemovePlayed) {
@@ -896,7 +943,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   }, []);
 
   return (
-    <div className={`room-page-root ${isTheaterMode ? 'theater-dimmed' : ''}`}>
+    <div
+      className={`room-page-root ${isTheaterMode ? 'theater-dimmed' : ''}`}
+      data-room-theme={roomSettings.theme}
+      style={{ '--room-accent': roomSettings.accentColor } as React.CSSProperties}
+    >
+      {connectionStatus !== 'connected' && (
+        <div className={`connection-status-banner ${connectionStatus}`} role="status" aria-live="polite">
+          <span className="connection-status-dot" />
+          {connectionStatus === 'connecting' ? 'Connecting to the room…' : 'Connection lost — reconnecting…'}
+        </div>
+      )}
       {/* Theater Dim Lights Backdrop */}
       {isTheaterMode && (
         <div
@@ -957,9 +1014,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             </div>
           )}
 
-          <div className="stage-ambient-wrapper">
+          <div
+            className="stage-ambient-wrapper"
+            style={{
+              '--ambient-primary': ambientPalette.primary,
+              '--ambient-secondary': ambientPalette.secondary,
+            } as React.CSSProperties}
+          >
           {/* Ambient Mode Backdrop — only shown after server confirms state */}
-          {ambientMode && syncState && (
+          {ambientMode && syncState && videoId && (
             <div
               className={`ambient-backdrop ${syncState.playState === 'playing' ? 'ambient-live' : ''}`}
               aria-hidden="true"
@@ -969,6 +1032,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
                 alt=""
                 className="ambient-backdrop-img"
+                crossOrigin="anonymous"
+                onLoad={handleAmbientImageLoad}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
                 }}
@@ -987,18 +1052,27 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               <div className="video-wrapper">
                 <ReactionOverlay reactions={activeReactions} />
 
-                <YouTubePlayer
-                  ref={ytPlayerRef}
-                  videoId={videoId}
-                  syncState={syncState}
-                  userRole={userRole}
-                  playbackSpeed={playbackSpeed}
-                  onLocalPlay={handlePlay}
-                  onLocalPause={handlePause}
-                  onLocalSeek={handleSeek}
-                  onCurrentTimeChange={handleTimeChange}
-                  onVideoEnded={handleVideoEnded}
-                />
+                {videoId ? (
+                  <YouTubePlayer
+                    ref={ytPlayerRef}
+                    videoId={videoId}
+                    syncState={syncState}
+                    userRole={userRole}
+                    playbackSpeed={playbackSpeed}
+                    onLocalPlay={handlePlay}
+                    onLocalPause={handlePause}
+                    onLocalSeek={handleSeek}
+                    onCurrentTimeChange={handleTimeChange}
+                    onVideoEnded={handleVideoEnded}
+                  />
+                ) : (
+                  <div className="video-empty-state">
+                    <span>No video selected</span>
+                    {(userRole === 'HOST' || userRole === 'MODERATOR') && (
+                      <small>Use "Change Video" to choose a YouTube video.</small>
+                    )}
+                  </div>
+                )}
 
                 {/* Playback Controls overlay */}
                 <PlaybackControls
@@ -1023,9 +1097,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   currentQuality={currentQuality}
                   isCaptionsOn={isCaptionsOn}
                   playbackSpeed={playbackSpeed}
-                  onSetPlaybackSpeed={handleSetPlaybackSpeed}
+                  onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
                   onRequestAction={handleRequestAction}
                   onOpenRequestsTab={() => setActiveSidebarTab('requests')}
+                  reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline />}
                 />
               </div>
             </div>
@@ -1056,9 +1131,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               currentQuality={currentQuality}
               isCaptionsOn={isCaptionsOn}
               playbackSpeed={playbackSpeed}
-              onSetPlaybackSpeed={handleSetPlaybackSpeed}
+              onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
+              reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline />}
             />
           </div>
         </div>
@@ -1068,7 +1144,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
 
           {/* Button-style Segmented Tab Bar */}
-          <div className="sidebar-tab-bar" role="tablist" ref={tabBarRef}>
+          <div className="sidebar-tab-bar" role="tablist" ref={tabBarRef} onWheel={handleTabBarWheel}>
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeSidebarTab === tab.id;
@@ -1175,14 +1251,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       />
 
       {/* Floating Animated Emojis & Live Reaction Dock */}
-      <FloatingReactions socket={socket} username={username} />
 
       {/* In-App YouTube Search Modal */}
       <YouTubeSearchModal
         isOpen={isSearchModalOpen}
         onClose={() => setIsSearchModalOpen(false)}
         userRole={userRole}
-        onPlayVideo={(newVid) => emitChangeVideo(newVid)}
+        onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
         onAddToPlaylist={handleAddToPlaylist}
         onRequestAction={(type, data) => handleRequestAction(type, data)}
         onNotify={onNotify}

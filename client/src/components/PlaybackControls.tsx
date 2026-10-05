@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Play,
   Pause,
@@ -53,16 +53,8 @@ export interface PlaybackControlsProps {
   ) => void;
   onOpenRequestsTab?: () => void;
   isDockMode?: boolean;
+  reactionControl?: React.ReactNode;
 }
-
-const PLAYBACK_SPEEDS = [
-  { label: '0.5x', value: 0.5 },
-  { label: '0.75x', value: 0.75 },
-  { label: '1x', value: 1 },
-  { label: '1.25x', value: 1.25 },
-  { label: '1.5x', value: 1.5 },
-  { label: '2x', value: 2 },
-];
 
 const QUALITIES = [
   { label: 'Auto', value: 'auto' },
@@ -99,9 +91,29 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onRequestAction,
   onOpenRequestsTab,
   isDockMode = false,
+  reactionControl,
 }) => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
+
+  useEffect(() => {
+    if (!showSettingsMenu) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!settingsRef.current?.contains(event.target as Node)) {
+        setShowSettingsMenu(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowSettingsMenu(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showSettingsMenu]);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const target = parseFloat(e.target.value);
@@ -182,6 +194,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         />
         <span className="time-text total">{formatTime(duration)}</span>
       </div>
+      {playbackSpeed !== 1 && (
+        <div className="current-speed-indicator" aria-live="polite">
+          Speed {playbackSpeed.toFixed(2).replace(/\.00$/, '')}x
+        </div>
+      )}
 
       {/* Button controls row */}
       <div className="buttons-row">
@@ -267,6 +284,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         <div className="controls-right-group">
           {renderRoleBadge()}
 
+          {reactionControl && <div className="controls-reaction-slot">{reactionControl}</div>}
+
           {onToggleMute && (
             <button
               type="button"
@@ -292,41 +311,9 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             </button>
           )}
 
-          {/* Quick Playback Speed Cycle Button */}
-          {onSetPlaybackSpeed && (
-            <button
-              type="button"
-              className="btn-icon control-btn-icon speed-pill-btn"
-              onClick={() => {
-                const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
-                const idx = speeds.indexOf(playbackSpeed);
-                const nextSpeed = speeds[(idx + 1) % speeds.length];
-                onSetPlaybackSpeed(nextSpeed);
-              }}
-              title={`Playback Speed: ${playbackSpeed}x (Click to cycle)`}
-              aria-label="Change Playback Speed"
-              style={{
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                fontFamily: 'var(--mono)',
-                color: playbackSpeed !== 1 ? 'var(--accent)' : 'var(--text-muted)',
-                padding: '0.2rem 0.45rem',
-                borderRadius: 'var(--r-sm)',
-                border: playbackSpeed !== 1 ? '1px solid var(--accent-dim)' : '1px solid rgba(255,255,255,0.08)',
-                background: playbackSpeed !== 1 ? 'rgba(255, 210, 31, 0.14)' : 'rgba(255,255,255,0.03)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.2rem',
-              }}
-            >
-              <Gauge size={13} />
-              <span>{playbackSpeed}x</span>
-            </button>
-          )}
-
           {/* Local Video Settings (Quality, Speed & Captions) */}
           {(onSetQuality || onToggleCaptions || onSetPlaybackSpeed) && (
-            <div style={{ position: 'relative' }}>
+            <div ref={settingsRef} style={{ position: 'relative' }}>
               <button
                 type="button"
                 className={`btn-icon control-btn-icon ${showSettingsMenu ? 'active' : ''}`}
@@ -338,22 +325,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
               </button>
 
               {showSettingsMenu && (
-                <div
-                  className="card glass"
-                  style={{
-                    position: 'absolute',
-                    bottom: 'calc(100% + 10px)',
-                    right: 0,
-                    width: '200px',
-                    padding: '0.6rem',
-                    zIndex: 100,
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-                    background: 'rgba(20, 16, 32, 0.96)',
-                    backdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    borderRadius: '12px',
-                  }}
-                >
+                <div className="local-video-settings card glass">
                   <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Local Video Settings
                   </div>
@@ -425,33 +397,20 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                       <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                         <Gauge size={13} /> Playback Speed
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.25rem' }}>
-                        {PLAYBACK_SPEEDS.map((s) => (
-                          <button
-                            key={s.value}
-                            type="button"
-                            onClick={() => {
-                              onSetPlaybackSpeed(s.value);
-                              setShowSettingsMenu(false);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '0.32rem 0.2rem',
-                              borderRadius: '6px',
-                              border: '1px solid',
-                              borderColor: playbackSpeed === s.value ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
-                              background: playbackSpeed === s.value ? 'rgba(255, 210, 31, 0.16)' : 'rgba(255,255,255,0.03)',
-                              color: playbackSpeed === s.value ? 'var(--accent)' : 'var(--text-main)',
-                              fontSize: '0.75rem',
-                              cursor: 'pointer',
-                              fontWeight: playbackSpeed === s.value ? 700 : 500,
-                            }}
-                          >
-                            <span>{s.label}</span>
-                          </button>
-                        ))}
+                      <input
+                        type="range"
+                        min="0.25"
+                        max="2"
+                        step="0.05"
+                        value={playbackSpeed}
+                        onChange={(e) => onSetPlaybackSpeed(Number(e.target.value))}
+                        className="playback-speed-slider"
+                        aria-label="Playback speed"
+                      />
+                      <div className="playback-speed-scale">
+                        <span>0.25x</span>
+                        <strong>{playbackSpeed.toFixed(2).replace(/\.00$/, '')}x</strong>
+                        <span>2x</span>
                       </div>
                     </div>
                   )}

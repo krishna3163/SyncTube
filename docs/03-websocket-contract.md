@@ -34,9 +34,10 @@ Requires Host or Moderator.
 
 ### change_video
 ```json
-{ "videoId": "dQw4w9WgXcQ" }
+{ "videoId": "dQw4w9WgXcQ", "play": true }
 ```
 Requires Host or Moderator.
+The optional `play` flag starts the selected video at `0` for every room member.
 
 ### assign_role
 ```json

@@ -78,7 +78,7 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     });
 
     const hostSync = await hostJoinPromise;
-    expect(hostSync.videoId).toBe('LXb3EKWsInQ');
+    expect(hostSync.videoId).toBe('');
     expect(hostSync.playState).toBe('paused');
 
     // 2. Participant joins
@@ -550,5 +550,4 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
     expect(updatedPlaylist[0].addedBy).toBe('ViewerNext');
   });
 });
-
 

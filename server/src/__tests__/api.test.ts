@@ -24,11 +24,11 @@ describe('Express REST API Endpoints', () => {
   });
 
   describe('POST /api/rooms', () => {
-    it('creates a new room with default video ID', async () => {
+    it('creates a new room without a video when no video is provided', async () => {
       const res = await request(app).post('/api/rooms').send({});
       expect(res.status).toBe(201);
       expect(res.body.roomId).toBeDefined();
-      expect(res.body.videoId).toBe('LXb3EKWsInQ');
+      expect(res.body.videoId).toBe('');
       expect(roomManager.hasRoom(res.body.roomId)).toBe(true);
     });
 

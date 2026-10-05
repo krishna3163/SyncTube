@@ -78,7 +78,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   app.post('/api/rooms', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { initialVideoId } = req.body || {};
-      let videoId = 'LXb3EKWsInQ';
+      let videoId = '';
 
       if (initialVideoId) {
         const parsed = extractYouTubeId(initialVideoId);

@@ -21,6 +21,7 @@ export const SeekSchema = z.object({
 
 export const ChangeVideoSchema = z.object({
   videoId: z.string().trim().min(1).max(256),
+  play: z.boolean().optional().default(false),
 });
 
 export const AssignRoleSchema = z.object({
@@ -101,6 +102,16 @@ export const ToggleMessageReactionSchema = z.object({
 
 export const SendReactionSchema = z.object({
   emoji: z.string().trim().min(1).max(10),
+  videoTime: z.number().nonnegative().optional(),
+});
+
+export const CreatePollSchema = z.object({
+  question: z.string().trim().min(1).max(200),
+  options: z.array(z.string().trim().min(1).max(80)).min(2).max(6),
+});
+
+export const VotePollSchema = z.object({
+  optionIndex: z.number().int().nonnegative().max(5),
 });
 
 export const SendSoundEffectSchema = z.object({
@@ -110,4 +121,3 @@ export const SendSoundEffectSchema = z.object({
 export const UpdateAvatarSchema = z.object({
   avatarId: z.string().trim().min(1).max(50),
 });
-

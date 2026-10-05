@@ -60,6 +60,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [sortByVotes, setSortByVotes] = useState(false);
+  const [sortAlphabetically, setSortAlphabetically] = useState(false);
 
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
 
@@ -92,9 +93,11 @@ export const Playlist: React.FC<PlaylistProps> = ({
     return titleMatch || channelMatch || idMatch || addedByMatch;
   });
 
-  const displayPlaylist = sortByVotes
-    ? [...filteredPlaylist].sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0))
-    : filteredPlaylist;
+  const displayPlaylist = sortAlphabetically
+    ? [...filteredPlaylist].sort((a, b) => (a.title || a.videoId).localeCompare(b.title || b.videoId))
+    : sortByVotes
+      ? [...filteredPlaylist].sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0))
+      : filteredPlaylist;
 
   const handleCopyLink = (videoId: string) => {
     navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${videoId}`);
@@ -168,10 +171,25 @@ export const Playlist: React.FC<PlaylistProps> = ({
           <button
             type="button"
             className={`btn btn-ghost upnext-btn-icon ${sortByVotes ? 'active-gold' : ''}`}
-            onClick={() => setSortByVotes(!sortByVotes)}
+            onClick={() => {
+              setSortByVotes((value) => !value);
+              setSortAlphabetically(false);
+            }}
             title={sortByVotes ? 'Sorted by Most Votes (click for normal order)' : 'Sort by Most Voted'}
           >
             <ThumbsUp size={14} />
+            <span className="hide-on-mobile">{sortByVotes ? 'Votes' : 'Sort'}</span>
+          </button>
+          <button
+            type="button"
+            className={`btn btn-ghost upnext-btn-icon ${sortAlphabetically ? 'active-gold' : ''}`}
+            onClick={() => {
+              setSortAlphabetically((value) => !value);
+              setSortByVotes(false);
+            }}
+            title={sortAlphabetically ? 'Sorted A-Z (click for queue order)' : 'Sort A-Z'}
+          >
+            <span> A-Z</span>
           </button>
         </div>
       </div>

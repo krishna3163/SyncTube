@@ -26,6 +26,8 @@ import {
   SendReactionSchema,
   SendSoundEffectSchema,
   UpdateAvatarSchema,
+  CreatePollSchema,
+  VotePollSchema,
 } from './schemas.js';
 import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
 
@@ -108,6 +110,7 @@ export function setupSocketHandlers(
 
         // Send current authoritative room state to the newly joined client
         socket.emit('sync_state', room.toSyncStatePayload());
+        if (room.activePoll) socket.emit('poll_updated', room.activePoll);
         // Send current playlist to the newly joined client
         socket.emit('playlist_sync', { playlist: room.playlist });
         // Send current pending action requests
@@ -138,6 +141,7 @@ export function setupSocketHandlers(
 
         const room = roomManager.getRoom(roomId);
         if (room) {
+          const previousHostUserId = room.hostUserId;
           const removed = room.removeParticipantBySocket(socket.id);
           socket.leave(roomId);
           socket.data.roomId = undefined;
@@ -148,6 +152,17 @@ export function setupSocketHandlers(
               userId: removed.userId,
               participants: room.getAllParticipants(),
             });
+            if (room.hostUserId && room.hostUserId !== previousHostUserId) {
+              const promoted = room.getParticipant(room.hostUserId);
+              if (promoted) {
+                io.to(roomId).emit('role_assigned', {
+                  userId: promoted.userId,
+                  username: promoted.username,
+                  role: promoted.role,
+                  participants: room.getAllParticipants(),
+                });
+              }
+            }
           }
         }
       } catch (err) {
@@ -279,6 +294,9 @@ export function setupSocketHandlers(
         }
 
         room.changeVideo(extractedId);
+        if (parsed.data.play) {
+          room.play(0);
+        }
 
         io.to(room.id).emit('sync_state', room.toSyncStatePayload());
 
@@ -402,6 +420,9 @@ export function setupSocketHandlers(
         const { videoId, title, duration, channel, thumbnail } = parsed.data;
         const extracted = extractYouTubeId(videoId);
         if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
+        if (room.playlist.some((playlistItem) => playlistItem.videoId === extracted)) {
+          return sendError('ALREADY_EXISTS', 'That video is already in the playlist.');
+        }
 
         const item = {
           id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -552,6 +573,25 @@ export function setupSocketHandlers(
             socket.to(room.id).emit('sync_pulse', {
               currentTime: time,
               serverTime: Date.now(),
+            });
+
+            socket.on('set_playback_speed', (rawPayload: unknown) => {
+              try {
+                const { room, participant } = getContext();
+                if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+                if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+                  return sendError('FORBIDDEN', 'Only hosts and moderators can change playback speed.');
+                }
+                const speed = rawPayload && typeof (rawPayload as { speed?: unknown }).speed === 'number'
+                  ? (rawPayload as { speed: number }).speed
+                  : NaN;
+                if (!Number.isFinite(speed) || speed < 0.25 || speed > 2) {
+                  return sendError('BAD_REQUEST', 'Playback speed must be between 0.25x and 2x.');
+                }
+                io.to(room.id).emit('playback_speed_updated', { speed });
+              } catch (err) {
+                sendError('INTERNAL_ERROR', (err as Error).message);
+              }
             });
           }
         }
@@ -742,12 +782,14 @@ export function setupSocketHandlers(
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid toggle_message_reaction payload.');
 
         room.toggleMessageReaction(parsed.data.messageId, parsed.data.emoji, participant.userId);
+        const message = room.getChatMessages().find((item) => item.id === parsed.data.messageId);
 
         io.to(room.id).emit('message_reaction_updated', {
           messageId: parsed.data.messageId,
           emoji: parsed.data.emoji,
           userId: participant.userId,
           username: participant.username,
+          reactions: message?.reactions || {},
         });
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
@@ -769,12 +811,43 @@ export function setupSocketHandlers(
           userId: participant.userId,
           username: participant.username,
           timestamp: Date.now(),
+          videoTime: parsed.data.videoTime,
         };
 
         io.to(room.id).emit('reaction_received', reaction);
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
       }
+    });
+
+    socket.on('create_poll', (rawPayload: unknown) => {
+      const { room, participant } = getContext();
+      if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+      if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') return sendError('FORBIDDEN', 'Only hosts and moderators can create polls.');
+      const parsed = CreatePollSchema.safeParse(rawPayload);
+      if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid poll.');
+      room.activePoll = {
+        id: `poll_${Date.now()}`,
+        question: parsed.data.question,
+        options: parsed.data.options,
+        votes: {},
+        createdBy: participant.userId,
+      };
+      io.to(room.id).emit('poll_updated', room.activePoll);
+    });
+
+    socket.on('vote_poll', (rawPayload: unknown) => {
+      const { room, participant } = getContext();
+      if (!room || !participant || !room.activePoll) return sendError('NOT_FOUND', 'No active poll.');
+      const parsed = VotePollSchema.safeParse(rawPayload);
+      if (!parsed.success || parsed.data.optionIndex >= room.activePoll.options.length) return sendError('BAD_REQUEST', 'Invalid poll option.');
+      for (const voters of Object.values(room.activePoll.votes)) {
+        const index = voters.indexOf(participant.userId);
+        if (index >= 0) voters.splice(index, 1);
+      }
+      const key = String(parsed.data.optionIndex);
+      room.activePoll.votes[key] = [...(room.activePoll.votes[key] || []), participant.userId];
+      io.to(room.id).emit('poll_updated', room.activePoll);
     });
 
     // 19. SOUND EFFECT
@@ -807,14 +880,35 @@ export function setupSocketHandlers(
 
       const room = roomManager.getRoom(roomId);
       if (room) {
-        const removed = room.removeParticipantBySocket(socket.id);
-        if (removed) {
-          io.to(roomId).emit('user_left', {
-            username: removed.username,
-            userId: removed.userId,
-            participants: room.getAllParticipants(),
-          });
-        }
+        // Keep the participant (and especially the host role) during short
+        // network outages so Socket.IO reconnect can restore the same session.
+        const userId = socket.data.userId;
+        const reconnectGraceMs = 60_000;
+        setTimeout(() => {
+          const participant = userId ? room.getParticipant(userId) : undefined;
+          if (!participant || participant.socketId !== socket.id) return;
+
+          const previousHostUserId = room.hostUserId;
+          const removed = room.removeParticipantBySocket(socket.id);
+          if (removed) {
+            io.to(roomId).emit('user_left', {
+              username: removed.username,
+              userId: removed.userId,
+              participants: room.getAllParticipants(),
+            });
+            if (room.hostUserId && room.hostUserId !== previousHostUserId) {
+              const promoted = room.getParticipant(room.hostUserId);
+              if (promoted) {
+                io.to(roomId).emit('role_assigned', {
+                  userId: promoted.userId,
+                  username: promoted.username,
+                  role: promoted.role,
+                  participants: room.getAllParticipants(),
+                });
+              }
+            }
+          }
+        }, reconnectGraceMs);
       }
     });
   });

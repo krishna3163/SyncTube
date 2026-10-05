@@ -163,9 +163,15 @@ describe('Room & RoomManager Models', () => {
       room.toggleMessageReaction('msg-1', '🔥', 'user-2');
       expect(room.getChatMessages()[0].reactions?.['🔥']).toEqual(['user-2']);
 
-      // Toggle reaction off
-      room.toggleMessageReaction('msg-1', '🔥', 'user-2');
+      // Selecting another reaction replaces the user's previous reaction.
+      room.toggleMessageReaction('msg-1', '🎉', 'user-2');
       expect(room.getChatMessages()[0].reactions?.['🔥']).toBeUndefined();
+      expect(room.getChatMessages()[0].reactions?.['🎉']).toEqual(['user-2']);
+
+      // Selecting the same reaction again removes it.
+      room.toggleMessageReaction('msg-1', '🎉', 'user-2');
+      expect(room.getChatMessages()[0].reactions?.['🔥']).toBeUndefined();
+      expect(room.getChatMessages()[0].reactions?.['🎉']).toBeUndefined();
     });
   });
 });

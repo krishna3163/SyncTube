@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Zap, RefreshCw, AlertCircle } from 'lucide-react';
 import { SyncStatePayload } from '../types.js';
 
@@ -16,6 +16,15 @@ export const SyncQualityBadge: React.FC<SyncQualityBadgeProps> = ({
   onResync,
 }) => {
   const [showDetails, setShowDetails] = useState(false);
+  const [, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const refreshTimer = window.setInterval(() => {
+      setRefreshTick((tick) => tick + 1);
+    }, 250);
+
+    return () => window.clearInterval(refreshTimer);
+  }, []);
 
   if (!isConnected) {
     return (
@@ -38,7 +47,7 @@ export const SyncQualityBadge: React.FC<SyncQualityBadgeProps> = ({
   }
 
   const isTightSync = driftSeconds < 0.6;
-  const driftDisplay = driftSeconds < 0.1 ? '< 0.1s' : `±${driftSeconds.toFixed(1)}s`;
+  const driftDisplay = `${driftSeconds < 1 ? driftSeconds.toFixed(2) : driftSeconds.toFixed(1)}s`;
 
   return (
     <div

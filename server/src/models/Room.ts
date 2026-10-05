@@ -12,6 +12,14 @@ export interface ServerPlaylistItem {
   votes?: string[];
 }
 
+export interface RoomPoll {
+  id: string;
+  question: string;
+  options: string[];
+  votes: Record<string, string[]>;
+  createdBy: string;
+}
+
 const DEFAULT_AVATARS = [
   'naruto', 'goku', 'sailor', 'pikachu',
   'luffy', 'levi', 'zerotwo', 'rem',
@@ -37,6 +45,7 @@ export class Room {
   public updatedAt: number;
   public hostUserId: string | null = null;
   public playlist: ServerPlaylistItem[] = [];
+  public activePoll: RoomPoll | null = null;
 
   private participants: Map<string, Participant> = new Map();
   private socketToUserId: Map<string, string> = new Map();
@@ -44,7 +53,7 @@ export class Room {
   private pendingRequests: Map<string, PendingActionRequest> = new Map();
   private chatMessages: ChatMessage[] = [];
 
-  constructor(id: string, initialVideoId: string = 'LXb3EKWsInQ') {
+  constructor(id: string, initialVideoId: string = '') {
     this.id = id;
     this.videoId = initialVideoId;
     this.playState = 'paused';
@@ -374,16 +383,19 @@ export class Room {
     const msg = this.chatMessages.find((m) => m.id === messageId);
     if (!msg) return;
     if (!msg.reactions) msg.reactions = {};
-    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
-    const idx = msg.reactions[emoji].indexOf(userId);
-    if (idx > -1) {
-      msg.reactions[emoji].splice(idx, 1);
-      if (msg.reactions[emoji].length === 0) {
-        delete msg.reactions[emoji];
+
+    const alreadySelected = msg.reactions[emoji]?.includes(userId) ?? false;
+    for (const [existingEmoji, userIds] of Object.entries(msg.reactions)) {
+      const remainingUsers = userIds.filter((id) => id !== userId);
+      if (remainingUsers.length === 0) {
+        delete msg.reactions[existingEmoji];
+      } else {
+        msg.reactions[existingEmoji] = remainingUsers;
       }
-    } else {
-      msg.reactions[emoji].push(userId);
+    }
+
+    if (!alreadySelected) {
+      msg.reactions[emoji] = [...(msg.reactions[emoji] || []), userId];
     }
   }
 }
-

@@ -51,7 +51,7 @@ export interface ActivityItem {
   id: string;
   time: string;
   text: string;
-  type: 'joined' | 'left' | 'playback' | 'role' | 'removed' | 'error' | 'playlist' | 'request_approved' | 'video_requested';
+  type: 'joined' | 'left' | 'playback' | 'role' | 'removed' | 'error' | 'playlist' | 'request_approved' | 'video_requested' | 'reaction';
   username?: string;
   userId?: string;
   avatarId?: string;
@@ -122,6 +122,8 @@ export interface EmojiReaction {
   userId: string;
   username: string;
   timestamp: number;
+  videoTime?: number;
+  burstCount?: number;
 }
 
 
@@ -157,6 +159,8 @@ export interface PermissionMatrix {
 
 export interface RoomSettingsData {
   name: string;
+  theme: 'midnight' | 'ocean' | 'forest' | 'sunset';
+  accentColor: string;
   permissions: PermissionMatrix;
   autoRemovePlayed: boolean;
   shuffle: boolean;

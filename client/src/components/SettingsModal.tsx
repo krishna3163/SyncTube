@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, User, Sliders, Shield, Trash2, Check, Sparkles } from 'lucide-react';
 import { UserSettings, RoomSettingsData, Role } from '../types.js';
 import { AvatarPicker } from './AnimeAvatar.js';
@@ -28,6 +28,13 @@ const PRESET_COLORS = [
   '#14b8a6',
 ];
 
+const ROOM_THEMES: Array<{ value: RoomSettingsData['theme']; label: string; description: string }> = [
+  { value: 'midnight', label: 'Midnight', description: 'Deep dark party room' },
+  { value: 'ocean', label: 'Ocean', description: 'Cool blue atmosphere' },
+  { value: 'forest', label: 'Forest', description: 'Calm green atmosphere' },
+  { value: 'sunset', label: 'Sunset', description: 'Warm cinematic atmosphere' },
+];
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -44,6 +51,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localUser, setLocalUser] = useState<UserSettings>(userSettings);
   const [localRoom, setLocalRoom] = useState<RoomSettingsData>(roomSettings);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLocalUser(userSettings);
+    setLocalRoom(roomSettings);
+    setDeleteConfirm(false);
+  }, [isOpen, userSettings, roomSettings]);
 
   if (!isOpen) return null;
 
@@ -102,7 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onClick={() => setActiveTab('user')}
             >
               <User size={16} />
-              <span>User</span>
+              <span>User Settings</span>
             </button>
             <button
               type="button"
@@ -110,7 +124,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onClick={() => setActiveTab('room')}
             >
               <Sliders size={16} />
-              <span>Room</span>
+              <span>Room Settings</span>
             </button>
           </div>
           <button type="button" className="btn-icon modal-close-btn" onClick={onClose} aria-label="Close settings">
@@ -268,6 +282,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onChange={(e) => setLocalRoom({ ...localRoom, name: e.target.value })}
                   placeholder="Room #744"
                 />
+              </div>
+
+              <div className="settings-section">
+                <label className="settings-label">Room appearance</label>
+                <p className="settings-description">Choose a shared visual style and accent color for this room.</p>
+                <div className="room-theme-grid">
+                  {ROOM_THEMES.map((theme) => (
+                    <button
+                      key={theme.value}
+                      type="button"
+                      className={`room-theme-option ${localRoom.theme === theme.value ? 'selected' : ''}`}
+                      disabled={!isOwner}
+                      onClick={() => setLocalRoom({ ...localRoom, theme: theme.value })}
+                    >
+                      <strong>{theme.label}</strong>
+                      <span>{theme.description}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="color-picker-row room-accent-picker">
+                  <input
+                    type="color"
+                    className="color-swatch-input"
+                    value={localRoom.accentColor}
+                    disabled={!isOwner}
+                    onChange={(e) => setLocalRoom({ ...localRoom, accentColor: e.target.value })}
+                    aria-label="Room accent color"
+                  />
+                  <input
+                    type="text"
+                    className="input-field color-hex-field"
+                    value={localRoom.accentColor}
+                    disabled={!isOwner}
+                    pattern="^#[0-9a-fA-F]{6}$"
+                    onChange={(e) => setLocalRoom({ ...localRoom, accentColor: e.target.value })}
+                    aria-label="Room accent hex color"
+                  />
+                </div>
               </div>
 
               {/* Permissions Matrix */}

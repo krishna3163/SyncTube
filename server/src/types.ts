@@ -108,6 +108,8 @@ export interface EmojiReaction {
   userId: string;
   username: string;
   timestamp: number;
+  videoTime?: number;
+  burstCount?: number;
 }
 
 export interface SoundEffectPayload {
@@ -116,4 +118,3 @@ export interface SoundEffectPayload {
   username: string;
   timestamp: number;
 }
-

@@ -13,9 +13,16 @@ export function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [userId] = useState<string>(() => {
-    const existing = sessionStorage.getItem('synctube_user_id');
-    if (existing) return existing;
+    const existing =
+      localStorage.getItem('synctube_user_id') ||
+      sessionStorage.getItem('synctube_user_id');
+    if (existing) {
+      localStorage.setItem('synctube_user_id', existing);
+      sessionStorage.setItem('synctube_user_id', existing);
+      return existing;
+    }
     const generated = `usr_${Math.random().toString(36).substring(2, 9)}`;
+    localStorage.setItem('synctube_user_id', generated);
     sessionStorage.setItem('synctube_user_id', generated);
     return generated;
   });

@@ -15,7 +15,7 @@ export class RoomManager {
     return id;
   }
 
-  public createRoom(customId?: string, initialVideoId: string = 'LXb3EKWsInQ'): Room {
+  public createRoom(customId?: string, initialVideoId: string = ''): Room {
     const id = customId ? customId.toUpperCase() : this.generateRoomId();
     if (this.rooms.has(id)) {
       throw new Error(`Room with ID ${id} already exists`);

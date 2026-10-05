@@ -135,7 +135,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
       return;
     }
 
-    let initialVideoId = 'LXb3EKWsInQ';
+    let initialVideoId = '';
     if (createVideoUrl.trim()) {
       const extracted = extractYouTubeId(createVideoUrl.trim());
       if (!extracted) {
@@ -232,7 +232,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
         roomId: normalizedRoom,
         username: joinUsername.trim(),
         role: 'PARTICIPANT',
-        videoId: roomData.videoId || 'LXb3EKWsInQ',
+        videoId: roomData.videoId || '',
         avatarId: selectedAvatarId,
         lastVisited: Date.now(),
       });
@@ -406,7 +406,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
             </div>
             <div className="home-header-profile-text">
               <span className="home-header-profile-name">{currentAvatar.name}</span>
-              <span className="home-header-profile-series">{currentAvatar.series}</span>
             </div>
             <ChevronDown size={14} className="home-header-profile-arrow" />
           </div>
@@ -645,8 +644,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
           ) : (
             <div className="stored-parties-grid">
               {storedParties.map((party) => {
-                const videoId = party.videoId || 'LXb3EKWsInQ';
-                const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                const videoId = party.videoId || '';
+                const thumbUrl = videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '';
                 const isHost = party.role === 'HOST';
 
                 return (
@@ -656,16 +655,19 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
                     onClick={() => handleRejoinParty(party)}
                   >
                     <div className="stored-party-thumb-wrap">
-                      <img
-                        src={thumbUrl}
-                        alt={`Watch party ${party.roomId}`}
-                        className="stored-party-thumb"
-                        loading="lazy"
-                        onError={(e) => {
-                          // Fallback to medium resolution thumbnail if HQ unavailable
-                          (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-                        }}
-                      />
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={`Watch party ${party.roomId}`}
+                          className="stored-party-thumb"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                          }}
+                        />
+                      ) : (
+                        <div className="stored-party-thumb video-thumb-empty">No video selected</div>
+                      )}
                       <span className="stored-party-time-badge">
                         <Clock size={11} />
                         <span>{formatTimeAgo(party.lastVisited)}</span>
