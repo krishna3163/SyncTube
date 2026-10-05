@@ -41,17 +41,17 @@ export function extractYouTubeId(input: string): string | null {
       }
     }
 
-    // youtube.com (or youtube-nocookie.com)
-    if (hostname === 'youtube.com' || hostname === 'youtube-nocookie.com') {
+    // youtube.com (or youtube-nocookie.com, music.youtube.com)
+    if (hostname === 'youtube.com' || hostname === 'youtube-nocookie.com' || hostname === 'music.youtube.com') {
       // /watch?v=ID
       const v = url.searchParams.get('v');
       if (v && isValidYouTubeId(v)) {
         return v;
       }
 
-      // /embed/ID or /v/ID or /shorts/ID
+      // /embed/ID or /v/ID or /shorts/ID or /live/ID
       const parts = url.pathname.split('/').filter(Boolean);
-      if (parts.length >= 2 && ['embed', 'v', 'shorts'].includes(parts[0])) {
+      if (parts.length >= 2 && ['embed', 'v', 'shorts', 'live'].includes(parts[0])) {
         const id = parts[1];
         if (isValidYouTubeId(id)) {
           return id;
@@ -60,7 +60,7 @@ export function extractYouTubeId(input: string): string | null {
     }
   } catch {
     // Fall back to regex search for robust matching
-    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([a-zA-Z0-9_-]{11})/);
+    const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
     if (match && match[1] && isValidYouTubeId(match[1])) {
       return match[1];
     }

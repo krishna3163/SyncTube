@@ -1,4 +1,4 @@
-import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest } from '../types.js';
+import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest, ChatMessage } from '../types.js';
 
 export interface ServerPlaylistItem {
   id: string;
@@ -42,6 +42,7 @@ export class Room {
   private socketToUserId: Map<string, string> = new Map();
   private removedUserIds: Set<string> = new Set();
   private pendingRequests: Map<string, PendingActionRequest> = new Map();
+  private chatMessages: ChatMessage[] = [];
 
   constructor(id: string, initialVideoId: string = 'LXb3EKWsInQ') {
     this.id = id;
@@ -166,23 +167,31 @@ export class Room {
         }
       }
       this.hostUserId = targetUserId;
-    } else if (this.hostUserId === targetUserId) {
-      // Demoting current host, elect a new host
-      this.electNewHost();
+      participant.role = 'HOST';
+    } else {
+      participant.role = newRole;
+      if (this.hostUserId === targetUserId) {
+        // Demoting current host, elect a new host among remaining participants
+        this.hostUserId = null;
+        this.electNewHost(targetUserId);
+      }
     }
 
-    participant.role = newRole;
     return participant;
   }
 
-  private electNewHost(): void {
-    if (this.participants.size === 0) {
+  private electNewHost(excludeUserId?: string): void {
+    const eligible = Array.from(this.participants.values()).filter(
+      (p) => !excludeUserId || p.userId !== excludeUserId
+    );
+
+    if (eligible.length === 0) {
       this.hostUserId = null;
       return;
     }
 
     // Prefer a Moderator first
-    for (const participant of this.participants.values()) {
+    for (const participant of eligible) {
       if (participant.role === 'MODERATOR') {
         participant.role = 'HOST';
         this.hostUserId = participant.userId;
@@ -190,8 +199,8 @@ export class Room {
       }
     }
 
-    // Otherwise, pick the oldest participant
-    const oldest = Array.from(this.participants.values()).sort((a, b) => a.joinedAt - b.joinedAt)[0];
+    // Otherwise, pick the oldest participant among eligible
+    const oldest = eligible.sort((a, b) => a.joinedAt - b.joinedAt)[0];
     if (oldest) {
       oldest.role = 'HOST';
       this.hostUserId = oldest.userId;
@@ -346,6 +355,34 @@ export class Room {
       if (req.requesterId === userId) {
         this.pendingRequests.delete(id);
       }
+    }
+  }
+
+  // ── Chat & Message Reactions ─────────────────────────────
+  public addChatMessage(message: ChatMessage): void {
+    this.chatMessages.push(message);
+    if (this.chatMessages.length > 100) {
+      this.chatMessages.shift();
+    }
+  }
+
+  public getChatMessages(): ChatMessage[] {
+    return [...this.chatMessages];
+  }
+
+  public toggleMessageReaction(messageId: string, emoji: string, userId: string): void {
+    const msg = this.chatMessages.find((m) => m.id === messageId);
+    if (!msg) return;
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+    const idx = msg.reactions[emoji].indexOf(userId);
+    if (idx > -1) {
+      msg.reactions[emoji].splice(idx, 1);
+      if (msg.reactions[emoji].length === 0) {
+        delete msg.reactions[emoji];
+      }
+    } else {
+      msg.reactions[emoji].push(userId);
     }
   }
 }

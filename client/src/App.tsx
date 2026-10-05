@@ -22,16 +22,19 @@ export function App() {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Check URL on load (e.g. /?room=ABC123)
+  // Check URL on load (supports both ?room=ABC123 and path /ABC123)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get('room');
+    const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
+    const roomFromUrl = (urlRoom || (pathMatch ? pathMatch[1] : null))?.toUpperCase();
+
     const storedUsername = sessionStorage.getItem('synctube_username');
     if (storedUsername) {
       setUsername(storedUsername);
     }
-    if (urlRoom && storedUsername) {
-      setRoomId(urlRoom.toUpperCase());
+    if (roomFromUrl && storedUsername) {
+      setRoomId(roomFromUrl);
     }
   }, []);
 
@@ -51,15 +54,14 @@ export function App() {
     setRoomId(targetRoomId);
     setUsername(user);
     sessionStorage.setItem('synctube_username', user);
-    // Update URL query string without reloading
-    const newUrl = `${window.location.pathname}?room=${targetRoomId}`;
+    // Update URL pathname cleanly without reloading
+    const newUrl = `/${targetRoomId}`;
     window.history.pushState({ path: newUrl }, '', newUrl);
   }, []);
 
   const handleLeaveRoom = React.useCallback(() => {
     setRoomId(null);
-    const newUrl = window.location.pathname;
-    window.history.pushState({ path: newUrl }, '', newUrl);
+    window.history.pushState({ path: '/' }, '', '/');
   }, []);
 
   return (

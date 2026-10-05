@@ -402,6 +402,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         rememberParticipantCharacter(p.username, p.userId, p.avatarId);
       });
       setParticipants(data.participants);
+      const myParticipant = data.participants?.find((p) => p.userId === userId);
+      if (myParticipant && myParticipant.role !== userRoleRef.current) {
+        setUserRole(myParticipant.role);
+        if (myParticipant.role === 'HOST') {
+          onNotifyRef.current('You are now the Host of the room!', 'success');
+        }
+      }
       addActivityRef.current(`${data.username} left the room.`, 'left', {
         username: data.username,
         userId: data.userId,
@@ -432,6 +439,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onNotifyRef.current('You were removed from this room by the host.', 'error');
         onLeaveRoomRef.current();
       } else {
+        const myParticipant = data.participants?.find((p) => p.userId === userId);
+        if (myParticipant && myParticipant.role !== userRoleRef.current) {
+          setUserRole(myParticipant.role);
+          if (myParticipant.role === 'HOST') {
+            onNotifyRef.current('You are now the Host of the room!', 'success');
+          }
+        }
         addActivityRef.current('A participant was removed by the host.', 'removed');
       }
     };
@@ -512,6 +526,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       setChatMessages((prev) => [...prev.slice(-99), data]);
     };
 
+    // chat_history: authoritative sync of room messages on joining
+    const onChatHistory = (data: { messages: ChatMessage[] }) => {
+      if (Array.isArray(data?.messages)) {
+        setChatMessages(data.messages);
+        data.messages.forEach((m) => {
+          rememberParticipantCharacter(m.username, m.userId, m.avatarId);
+        });
+      }
+    };
+
     // participant_avatar_updated: user updated profile character
     const onAvatarUpdated = (data: { userId: string; username: string; avatarId: string; participants: ParticipantPublic[] }) => {
       rememberParticipantCharacter(data.username, data.userId, data.avatarId);
@@ -576,6 +600,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('action_requested', onActionRequested);
     socket.on('action_request_resolved', onActionRequestResolved);
     socket.on('chat_message', onChatMessage);
+    socket.on('chat_history', onChatHistory);
     socket.on('message_reaction_updated', onMessageReactionUpdated);
     socket.on('reaction_received', onReactionReceived);
     socket.on('user_joined', onUserJoined);
@@ -604,6 +629,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('action_requested', onActionRequested);
       socket.off('action_request_resolved', onActionRequestResolved);
       socket.off('chat_message', onChatMessage);
+      socket.off('chat_history', onChatHistory);
       socket.off('message_reaction_updated', onMessageReactionUpdated);
       socket.off('reaction_received', onReactionReceived);
       socket.off('user_joined', onUserJoined);

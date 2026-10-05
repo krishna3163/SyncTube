@@ -27,6 +27,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
 
   const launcherRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const justToggledRef = useRef(false);
   const dragStartRef = useRef<{
     startX: number;
     startY: number;
@@ -190,6 +191,10 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
 
       if (!wasDragging) {
         // Pure tap or click without dragging: toggle reactions palette
+        justToggledRef.current = true;
+        setTimeout(() => {
+          justToggledRef.current = false;
+        }, 250);
         setIsOpen((prev) => !prev);
       }
     };
@@ -259,6 +264,11 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           type="button"
           className="reaction-toggle-btn"
           onPointerDown={handlePointerDown}
+          onClick={() => {
+            if (!isDraggingRef.current && !justToggledRef.current) {
+              setIsOpen((prev) => !prev);
+            }
+          }}
           title={isOpen ? 'Close reactions · Drag anywhere to move' : 'Send live reactions · Drag anywhere to move'}
           aria-label="Toggle Live Reactions (Draggable)"
         >

@@ -33,6 +33,20 @@ describe('Room & RoomManager Models', () => {
       expect(roomManager.removeRoom('DEL001')).toBe(true);
       expect(roomManager.hasRoom('DEL001')).toBe(false);
     });
+
+    it('cleans up stale inactive empty rooms', () => {
+      const room1 = roomManager.createRoom('STALE1');
+      const room2 = roomManager.createRoom('ACTIVE1');
+      room2.addParticipant('u1', 's1', 'User 1');
+
+      // Simulate room1 being inactive for 2 hours
+      room1.updatedAt = Date.now() - (2 * 60 * 60 * 1000);
+
+      const cleaned = roomManager.cleanupStaleRooms(60 * 60 * 1000);
+      expect(cleaned).toBe(1);
+      expect(roomManager.hasRoom('STALE1')).toBe(false);
+      expect(roomManager.hasRoom('ACTIVE1')).toBe(true);
+    });
   });
 
   describe('Room lifecycle', () => {
@@ -117,6 +131,41 @@ describe('Room & RoomManager Models', () => {
       // Moderator user-3 should become the new HOST
       expect(room.hostUserId).toBe('user-3');
       expect(room.getParticipant('user-3')?.role).toBe('HOST');
+    });
+
+    it('handles host demoting themselves and electing a new host', () => {
+      room.addParticipant('user-1', 'socket-1', 'Alice');
+      room.addParticipant('user-2', 'socket-2', 'Bob');
+
+      expect(room.hostUserId).toBe('user-1');
+      room.assignRole('user-1', 'PARTICIPANT');
+
+      // user-2 should now be the new HOST
+      expect(room.hostUserId).toBe('user-2');
+      expect(room.getParticipant('user-2')?.role).toBe('HOST');
+      expect(room.getParticipant('user-1')?.role).toBe('PARTICIPANT');
+    });
+
+    it('buffers chat messages and manages reactions', () => {
+      room.addChatMessage({
+        id: 'msg-1',
+        userId: 'user-1',
+        username: 'Alice',
+        role: 'HOST',
+        text: 'Hello watch party!',
+        timestamp: Date.now(),
+      });
+
+      expect(room.getChatMessages()).toHaveLength(1);
+      expect(room.getChatMessages()[0].text).toBe('Hello watch party!');
+
+      // Toggle reaction on
+      room.toggleMessageReaction('msg-1', '🔥', 'user-2');
+      expect(room.getChatMessages()[0].reactions?.['🔥']).toEqual(['user-2']);
+
+      // Toggle reaction off
+      room.toggleMessageReaction('msg-1', '🔥', 'user-2');
+      expect(room.getChatMessages()[0].reactions?.['🔥']).toBeUndefined();
     });
   });
 });

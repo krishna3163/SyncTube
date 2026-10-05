@@ -118,10 +118,13 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
       if (!room && dbService) {
         const dbRecord = await dbService.getRoom(roomId);
         if (dbRecord) {
-          room = roomManager.createRoom(dbRecord.id, dbRecord.video_id);
-          room.playState = dbRecord.play_state as any;
-          room.currentTime = dbRecord.current_time;
-          room.updatedAt = Number(dbRecord.updated_at);
+          room = roomManager.getRoom(roomId);
+          if (!room) {
+            room = roomManager.createRoom(dbRecord.id, dbRecord.video_id);
+            room.playState = dbRecord.play_state as any;
+            room.currentTime = dbRecord.current_time;
+            room.updatedAt = Number(dbRecord.updated_at);
+          }
         }
       }
 

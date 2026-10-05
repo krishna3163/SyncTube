@@ -46,4 +46,21 @@ export class RoomManager {
   public getRoomCount(): number {
     return this.rooms.size;
   }
+
+  /**
+   * Cleans up rooms that have no participants and have been inactive for maxInactiveMs.
+   * Default timeout: 1 hour.
+   * Returns the count of deleted rooms.
+   */
+  public cleanupStaleRooms(maxInactiveMs: number = 60 * 60 * 1000): number {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [id, room] of this.rooms.entries()) {
+      if (room.getParticipantCount() === 0 && now - room.updatedAt > maxInactiveMs) {
+        this.rooms.delete(id);
+        cleaned++;
+      }
+    }
+    return cleaned;
+  }
 }

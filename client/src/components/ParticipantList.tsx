@@ -33,7 +33,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     switch (role) {
       case 'HOST':
         return (
-          <span className="badge badge-host">
+          <span className="badge badge-host host-badge role-badge">
             <Crown size={12} />
             Host
           </span>

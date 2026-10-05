@@ -100,12 +100,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
     setStoredParties(getStoredParties(userToFilter || activeUsername || undefined));
   };
 
-  // Check if URL has ?room=ABC123
+  // Check if URL has ?room=ABC123 or pathname /ABC123
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const roomParam = params.get('room');
-    if (roomParam) {
-      setJoinRoomCode(roomParam.toUpperCase());
+    const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
+    const detectedRoom = roomParam || (pathMatch ? pathMatch[1] : null);
+    if (detectedRoom) {
+      setJoinRoomCode(detectedRoom.toUpperCase());
     }
   }, []);
 
@@ -348,11 +350,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onEnterRoom, onNotify }) => 
       {/* Top Navbar */}
       <header className="home-top-navbar">
         <div className="home-nav-left">
-          <div className="brand">
+          <div className="brand brand-logo">
             <div className="brand-icon">
               <Tv size={20} color="#ffd21f" />
             </div>
-            <span className="brand-title">SyncTube</span>
+            <span className="brand-title brand-text">SyncTube</span>
           </div>
         </div>
 

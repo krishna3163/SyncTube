@@ -32,6 +32,13 @@ describe('YouTube Utility', () => {
     // Mobile URL
     expect(extractYouTubeId('https://m.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
 
+    // Live URL
+    expect(extractYouTubeId('https://www.youtube.com/live/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(extractYouTubeId('https://youtube.com/live/dQw4w9WgXcQ?si=abc123xyz')).toBe('dQw4w9WgXcQ');
+
+    // YouTube Music URL
+    expect(extractYouTubeId('https://music.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+
     // Invalid URLs
     expect(extractYouTubeId('https://vimeo.com/12345')).toBeNull();
     expect(extractYouTubeId('not a url')).toBeNull();

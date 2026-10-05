@@ -65,8 +65,18 @@ async function bootstrap() {
     console.log(`[Server] Health check available at http://${HOST}:${PORT}/health`);
   });
 
+  // Periodically clean up empty rooms older than 1 hour (runs every 15 minutes)
+  const cleanupInterval = setInterval(() => {
+    const cleaned = roomManager.cleanupStaleRooms(60 * 60 * 1000);
+    if (cleaned > 0) {
+      console.log(`[Server] Cleaned up ${cleaned} inactive room(s) from memory.`);
+    }
+  }, 15 * 60 * 1000);
+  cleanupInterval.unref();
+
   const shutdown = async () => {
     console.log('[Server] Shutting down gracefully...');
+    clearInterval(cleanupInterval);
     await dbService.close();
     server.close(() => {
       console.log('[Server] Closed.');

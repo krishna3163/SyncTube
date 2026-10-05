@@ -280,8 +280,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   };
 
   // Reconcile whenever syncState updates from server
+  const lastProcessedSyncStateRef = useRef<SyncStatePayload | null>(null);
   useEffect(() => {
-    if (syncState) {
+    if (syncState && syncState !== lastProcessedSyncStateRef.current) {
+      lastProcessedSyncStateRef.current = syncState;
       localReceivedAtRef.current = Date.now();
       receivedAnchorTimeRef.current = syncState.currentTime;
     }
@@ -309,19 +311,20 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           const elapsed = Math.max(0, (Date.now() - localReceivedAtRef.current) / 1000);
           const expected = receivedAnchorTimeRef.current + elapsed;
           const drift = time - expected; // positive = ahead, negative = behind
+          const baseRate = targetPlaybackRateRef.current || 1.0;
 
           if (Math.abs(drift) > 3.0) {
             // Large drift: hard seek
             ignoreStateChangesUntilRef.current = Date.now() + 1200;
             playerRef.current.seekTo(expected, true);
-            try { playerRef.current.setPlaybackRate(1.0); } catch {}
+            try { playerRef.current.setPlaybackRate(baseRate); } catch {}
           } else if (Math.abs(drift) > 0.5) {
             // Medium drift: rate adjustment only (no buffering!)
-            const rate = drift > 0 ? 0.92 : 1.08;
+            const rate = drift > 0 ? baseRate * 0.92 : baseRate * 1.08;
             try { playerRef.current.setPlaybackRate(rate); } catch {}
           } else {
             // In sync
-            try { playerRef.current.setPlaybackRate(1.0); } catch {}
+            try { playerRef.current.setPlaybackRate(baseRate); } catch {}
           }
         }
       } catch {}

@@ -75,10 +75,13 @@ export function setupSocketHandlers(
         if (!room && dbService) {
           const dbRecord = await dbService.getRoom(normalizedRoomId);
           if (dbRecord) {
-            room = roomManager.createRoom(dbRecord.id, dbRecord.video_id);
-            room.playState = dbRecord.play_state as any;
-            room.currentTime = dbRecord.current_time;
-            room.updatedAt = Number(dbRecord.updated_at);
+            room = roomManager.getRoom(normalizedRoomId);
+            if (!room) {
+              room = roomManager.createRoom(dbRecord.id, dbRecord.video_id);
+              room.playState = dbRecord.play_state as any;
+              room.currentTime = dbRecord.current_time;
+              room.updatedAt = Number(dbRecord.updated_at);
+            }
           }
         }
 
@@ -109,6 +112,8 @@ export function setupSocketHandlers(
         socket.emit('playlist_sync', { playlist: room.playlist });
         // Send current pending action requests
         socket.emit('pending_requests_sync', { requests: room.getPendingRequests() });
+        // Send recent chat message history
+        socket.emit('chat_history', { messages: room.getChatMessages() });
 
         // Broadcast to everyone in the room that a user joined
         io.to(normalizedRoomId).emit('user_joined', {
@@ -699,6 +704,7 @@ export function setupSocketHandlers(
           participant.avatarId = parsed.data.avatarId;
         }
 
+        room.addChatMessage(message);
         io.to(room.id).emit('chat_message', message);
       } catch (err) {
         sendError('INTERNAL_ERROR', (err as Error).message);
@@ -734,6 +740,8 @@ export function setupSocketHandlers(
 
         const parsed = ToggleMessageReactionSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid toggle_message_reaction payload.');
+
+        room.toggleMessageReaction(parsed.data.messageId, parsed.data.emoji, participant.userId);
 
         io.to(room.id).emit('message_reaction_updated', {
           messageId: parsed.data.messageId,

@@ -136,7 +136,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const renderRoleBadge = () => {
     if (userRole === 'HOST') {
       return (
-        <span className="controls-role-badge host">
+        <span className="controls-role-badge host host-badge role-badge">
           <Crown size={12} /> Host
         </span>
       );

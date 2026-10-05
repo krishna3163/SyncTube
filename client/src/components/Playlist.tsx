@@ -102,7 +102,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
   };
 
   return (
-    <div className="glass-panel sidebar-card upnext-panel">
+    <div className="glass-panel sidebar-card upnext-panel playlist-container playlist-panel-v2">
       {/* Top Header Bar matching sample photo */}
       <div className="upnext-header">
         <div className="upnext-title-wrap">
@@ -203,7 +203,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
             return (
               <div
                 key={item.id}
-                draggable={canControl && !sortByVotes}
+                draggable={canControl && !sortByVotes && !searchQuery.trim()}
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
@@ -211,7 +211,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
               >
                 {/* Index Number */}
                 <div className="upnext-index-col">
-                  {canControl && !sortByVotes && (
+                  {canControl && !sortByVotes && !searchQuery.trim() && (
                     <span title="Drag to reorder" className="upnext-grip">
                       <GripVertical size={13} />
                     </span>
