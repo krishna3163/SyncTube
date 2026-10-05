@@ -49,6 +49,8 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState('Yes, No');
   const lastSentAtRef = useRef(0);
+  const recentCountsRef = useRef<Record<string, number>>({});
+  const particleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const launcherRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -64,6 +66,10 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     pointerId: number;
     target: HTMLElement;
   } | null>(null);
+
+  useEffect(() => {
+    recentCountsRef.current = recentCounts;
+  }, [recentCounts]);
 
   // Initialize and restore position (remembers user preference across views)
   useEffect(() => {
@@ -166,31 +172,40 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
   useEffect(() => {
     if (!socket) return;
 
-    const handleReactionReceived = (data: { emoji: string; username: string; id?: string }) => {
+    const handleReactionReceived = (data: { emoji?: string; username?: string; id?: string }) => {
+      if (typeof data?.emoji !== 'string' || !data.emoji.trim()) return;
+
       const newParticle: ReactionParticle = {
         id: data.id || `rx_${Date.now()}_${Math.random()}`,
         emoji: data.emoji,
-        username: data.username,
+        username: typeof data.username === 'string' && data.username.trim() ? data.username : 'Guest',
         x: Math.floor(Math.random() * 45) + 40, // 40% to 85%
         rotation: (Math.random() - 0.5) * 40,
         scale: 0.85 + Math.random() * 0.4,
       };
 
-      const activeCount = recentCounts[data.emoji] || 0;
+      const activeCount = recentCountsRef.current[data.emoji] || 0;
       newParticle.scale = activeCount >= 2 ? 1.25 : newParticle.scale;
       setParticles((prev) => [...prev.slice(-25), newParticle]);
-      setRecentCounts((prev) => ({ ...prev, [data.emoji]: (prev[data.emoji] || 0) + 1 }));
+      setRecentCounts((prev) => {
+        const next = { ...prev, [data.emoji as string]: (prev[data.emoji as string] || 0) + 1 };
+        recentCountsRef.current = next;
+        return next;
+      });
 
       // Remove after 2.4s animation
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setParticles((prev) => prev.filter((p) => p.id !== newParticle.id));
         setRecentCounts((prev) => {
           const next = { ...prev };
-          if (next[data.emoji] <= 1) delete next[data.emoji];
-          else next[data.emoji] -= 1;
+          const emoji = data.emoji as string;
+          if (!next[emoji] || next[emoji] <= 1) delete next[emoji];
+          else next[emoji] -= 1;
+          recentCountsRef.current = next;
           return next;
         });
       }, 2400);
+      particleTimersRef.current.push(timer);
     };
 
     socket.on('reaction_received', handleReactionReceived);
@@ -200,7 +215,12 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       socket.off('reaction_received', handleReactionReceived);
       socket.off('poll_updated', handlePoll);
     };
-  }, [socket, recentCounts]);
+  }, [socket]);
+
+  useEffect(() => () => {
+    particleTimersRef.current.forEach((timer) => clearTimeout(timer));
+    particleTimersRef.current = [];
+  }, []);
 
   const createPoll = () => {
     const options = pollOptions.split(',').map((item) => item.trim()).filter(Boolean);
