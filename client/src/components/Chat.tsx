@@ -3,7 +3,7 @@ import { Send, Smile, Reply, X, BarChart3 } from 'lucide-react';
 import { ChatMessage, ChatReplyPreview, Role, RoomPoll } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { EmojiPicker } from './EmojiPicker.js';
-import { getParticipantCharacterId, rememberParticipantCharacter } from '../utils/characterMemory.js';
+import { getParticipantCharacterId } from '../utils/characterMemory.js';
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -17,7 +17,6 @@ interface ChatProps {
   onSendReaction: (emoji: string) => void;
 }
 
-const QUICK_REACTIONS = ['❤️', '🔥', '😂', '👏', '🎉', '🚀', '😍', '💯'];
 const MSG_EMOJIS = ['❤️', '🔥', '😂', '👍', '😮', '🎉'];
 
 const ROLE_COLORS: Record<Role, string> = {

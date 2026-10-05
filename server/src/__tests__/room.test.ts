@@ -29,7 +29,7 @@ describe('Room & RoomManager Models', () => {
     });
 
     it('removes rooms', () => {
-      const room = roomManager.createRoom('DEL001');
+      roomManager.createRoom('DEL001');
       expect(roomManager.removeRoom('DEL001')).toBe(true);
       expect(roomManager.hasRoom('DEL001')).toBe(false);
     });

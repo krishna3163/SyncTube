@@ -65,7 +65,7 @@ describe('Express REST API Endpoints', () => {
 
   describe('GET /api/rooms/:roomId', () => {
     it('returns room details for existing room', async () => {
-      const room = roomManager.createRoom('TEST99', 'M7lc1UVf-VE');
+      roomManager.createRoom('TEST99', 'M7lc1UVf-VE');
       const res = await request(app).get('/api/rooms/TEST99');
       expect(res.status).toBe(200);
       expect(res.body.exists).toBe(true);

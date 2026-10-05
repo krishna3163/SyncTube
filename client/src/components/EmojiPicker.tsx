@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Search, Sparkles } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 
 interface EmojiPickerProps {
   isOpen: boolean;
@@ -115,10 +115,9 @@ export const EmojiPicker: React.FC<EmojiPickerProps> = ({
     if (!searchQuery.trim()) {
       return EMOJI_CATEGORIES.find((c) => c.id === activeCategory)?.emojis || [];
     }
-    const q = searchQuery.toLowerCase();
     // Search across all emojis in all categories
     const all = EMOJI_CATEGORIES.flatMap((c) => c.emojis);
-    return Array.from(new Set(all)).filter(() => true); // Show all when searching if no metadata
+    return Array.from(new Set(all));
   }, [activeCategory, searchQuery]);
 
   if (!isOpen) return null;

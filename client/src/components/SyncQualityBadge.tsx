@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Zap, RefreshCw, AlertCircle } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { SyncStatePayload } from '../types.js';
 
 interface SyncQualityBadgeProps {

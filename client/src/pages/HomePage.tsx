@@ -21,8 +21,6 @@ import {
   HelpCircle,
   Settings,
   Sun,
-  Layers,
-  CheckCircle2,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
 import {

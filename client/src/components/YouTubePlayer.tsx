@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { PlayState, Role, SyncStatePayload } from '../types.js';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { Role, SyncStatePayload } from '../types.js';
 
 declare global {
   interface Window {

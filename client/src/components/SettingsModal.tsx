@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, User, Sliders, Shield, Trash2, Check, Sparkles } from 'lucide-react';
+import { X, User, Sliders, Trash2, Check, Sparkles } from 'lucide-react';
 import { UserSettings, RoomSettingsData, Role } from '../types.js';
 import { AvatarPicker } from './AnimeAvatar.js';
 

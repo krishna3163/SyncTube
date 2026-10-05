@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   ListMusic,
   Plus,
@@ -6,7 +6,6 @@ import {
   Trash2,
   ArrowUp,
   GripVertical,
-  SkipForward,
   Shuffle,
   ThumbsUp,
   Search,

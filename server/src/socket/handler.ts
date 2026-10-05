@@ -489,6 +489,8 @@ export function setupSocketHandlers(
         if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
         if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
           return sendError('FORBIDDEN', 'Only Host/Mod can shuffle playlist.');
+        if (!PlaylistShuffleSchema.safeParse(rawPayload).success)
+          return sendError('BAD_REQUEST', 'Invalid playlist_shuffle payload.');
 
         room.shufflePlaylist();
         io.to(room.id).emit('playlist_update', { playlist: room.playlist });
@@ -504,6 +506,8 @@ export function setupSocketHandlers(
         if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
         if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
           return sendError('FORBIDDEN', 'Only Host/Mod can clear playlist.');
+        if (!PlaylistClearSchema.safeParse(rawPayload).success)
+          return sendError('BAD_REQUEST', 'Invalid playlist_clear payload.');
 
         room.clearPlaylist();
         io.to(room.id).emit('playlist_update', { playlist: room.playlist });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { serverSentry } from '../services/sentry.js';
 
 describe('Sentry Backend Service', () => {

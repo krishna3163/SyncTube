@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { clientSentry } from '../services/sentry.js';
 import { RefreshCw, Home, AlertTriangle } from 'lucide-react';
 

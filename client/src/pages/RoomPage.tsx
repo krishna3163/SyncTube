@@ -60,7 +60,6 @@ import { ReactionOverlay } from '../components/ReactionOverlay.js';
 import { FloatingReactions } from '../components/FloatingReactions.js';
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 import { InviteModal } from '../components/InviteModal.js';
-import { extractYouTubeId } from '../utils/youtube.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';

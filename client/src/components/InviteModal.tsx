@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Share2, Copy, Check, X, QrCode, MessageSquare, Send } from 'lucide-react';
+import { Share2, Copy, Check, X, MessageSquare, Send } from 'lucide-react';
 
 interface InviteModalProps {
   isOpen: boolean;

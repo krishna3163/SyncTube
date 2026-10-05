@@ -60,7 +60,7 @@ describe('WebSocket Event Contract & RBAC Integration Tests', () => {
   });
 
   it('handles room join, assigns HOST to first user and PARTICIPANT to second user', async () => {
-    const room = roomManager.createRoom('SYNC01');
+    roomManager.createRoom('SYNC01');
 
     const hostSocket = await createClient();
     const participantSocket = await createClient();
