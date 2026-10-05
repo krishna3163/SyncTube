@@ -43,7 +43,7 @@ export function setupSocketHandlers(
 ): void {
   io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     // Helper to send error to client with Sentry reporting
-    const sendError = (code: 'FORBIDDEN' | 'NOT_FOUND' | 'BAD_REQUEST' | 'INTERNAL_ERROR', message: string) => {
+    const sendError = (code: 'FORBIDDEN' | 'NOT_FOUND' | 'BAD_REQUEST' | 'ALREADY_EXISTS' | 'INTERNAL_ERROR', message: string) => {
       if (code === 'INTERNAL_ERROR') {
         serverSentry.captureMessage(`Socket Error [${code}]: ${message}`, 'error');
       }

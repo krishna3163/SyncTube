@@ -116,6 +116,14 @@ export interface ChatMessage {
   reactions?: Record<string, string[]>;
 }
 
+export interface RoomPoll {
+  id: string;
+  question: string;
+  options: string[];
+  votes: Record<string, string[]>;
+  createdBy: string;
+}
+
 export interface EmojiReaction {
   id: string;
   emoji: string;

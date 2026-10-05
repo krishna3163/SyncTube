@@ -81,7 +81,6 @@ Browser (React + Vite)
 │   │   └── index.ts            # Server entrypoint & WebSocket listener
 │   └── tsconfig.json           # NodeNext TypeScript configuration
 │
-├── docs/                       # Project specifications and architecture docs
 ├── render.yaml                 # Render backend deployment blueprint
 ├── vercel.json                 # Vercel frontend deployment blueprint
 └── package.json                # Monorepo root workspaces configuration

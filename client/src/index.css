@@ -3905,7 +3905,7 @@ body {
     bottom: calc(100% + 10px);
     right: 0;
     width: min(250px, calc(100vw - 24px));
-    max-height: min(70vh, 390px);
+    max-height: min(65vh, 350px);
     overflow-y: auto;
     padding: 0.65rem;
     z-index: 100;
@@ -5077,6 +5077,249 @@ body.is-dragging-reaction iframe {
   cursor: pointer;
 }
 
+.reaction-create-poll {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 30px;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgba(255, 210, 31, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 210, 31, 0.1);
+  color: var(--accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reaction-create-poll.active {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-main);
+}
+
+.reaction-poll-composer {
+  gap: 0.6rem;
+  padding: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(29, 33, 39, 0.98), rgba(18, 21, 26, 0.98));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.poll-composer-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.reaction-poll-composer .poll-composer-heading {
+  justify-content: flex-start;
+}
+
+.poll-composer-heading > svg {
+  color: var(--accent);
+}
+
+.reaction-poll-composer .poll-composer-heading .poll-composer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.reaction-poll-composer .poll-composer-heading .poll-composer-close:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.poll-composer-field {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.poll-composer-field > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.poll-composer-field small {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.reaction-poll-composer .poll-composer-field input {
+  min-height: 36px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-main);
+  font-size: 0.75rem;
+}
+
+.reaction-poll-composer .poll-composer-field input:focus {
+  outline: 2px solid rgba(255, 210, 31, 0.38);
+  border-color: rgba(255, 210, 31, 0.5);
+}
+
+.reaction-poll-composer .poll-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.15rem;
+}
+
+.poll-option-hint {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.reaction-poll-composer .poll-create-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 210, 31, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 210, 31, 0.15);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.reaction-poll-composer .poll-create-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chat-poll-card {
+  flex: 0 0 auto;
+  margin: 0.65rem 0.75rem 0.35rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 210, 31, 0.32);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(255, 210, 31, 0.1), rgba(255, 255, 255, 0.035));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.chat-poll-heading,
+.chat-poll-heading > div {
+  display: flex;
+  align-items: center;
+}
+
+.chat-poll-heading {
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chat-poll-heading > div {
+  gap: 0.4rem;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+
+.chat-poll-heading > div svg {
+  flex: 0 0 auto;
+}
+
+.chat-poll-total {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.chat-poll-card h3 {
+  margin: 0.55rem 0 0.7rem;
+  color: var(--text-main);
+  font-size: 0.92rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.chat-poll-options {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.chat-poll-option {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  overflow: hidden;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.chat-poll-option:hover,
+.chat-poll-option.selected {
+  border-color: rgba(255, 210, 31, 0.55);
+  background: rgba(255, 210, 31, 0.08);
+}
+
+.chat-poll-option-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 210, 31, 0.14);
+  pointer-events: none;
+  transition: width 180ms ease;
+}
+
+.chat-poll-option-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 0.7rem;
+  font-size: 0.78rem;
+}
+
+.chat-poll-option-content > span {
+  overflow-wrap: anywhere;
+}
+
+.chat-poll-option-content small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.chat-poll-hint {
+  margin: 0.55rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
 .reaction-count {
   position: absolute;
   top: -3px;
@@ -5124,26 +5367,121 @@ body.is-dragging-reaction iframe {
   color: var(--text-main);
 }
 
-/* Keep the desktop reaction palette compact beside the playback controls. */
-.controls-overlay .controls-reaction-slot .inline-reactions-launcher .reactions-palette {
-  position: fixed;
-  left: 1rem;
-  right: auto;
-  top: auto;
-  bottom: 1rem;
-  width: min(420px, calc(100vw - 32px));
-  max-width: min(420px, calc(100vw - 32px));
-  max-height: min(260px, calc(100vh - 120px));
-  overflow: hidden;
-  margin: 0;
-  flex-direction: column;
-  align-items: stretch;
-  z-index: 1000;
+.settings-reaction-control {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.controls-overlay .controls-reaction-slot .reaction-options {
+.settings-reaction-label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.settings-reaction-control .controls-reaction-slot,
+.settings-reaction-control .inline-reactions-launcher {
+  position: relative;
+  width: 100%;
+}
+
+.settings-reaction-control .inline-reactions-launcher {
+  align-items: stretch !important;
+  touch-action: auto;
+  z-index: 1;
+}
+
+.settings-reaction-control .reaction-toggle-btn {
+  width: 100%;
+  min-height: 34px;
+  justify-content: flex-start;
+  padding-inline: 0.65rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.settings-reaction-control .reaction-toggle-label {
+  display: inline;
+}
+
+.local-quality-section {
+  margin-top: 0.35rem;
+}
+
+.local-quality-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.42rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.local-quality-current {
+  flex: 1;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.local-quality-toggle svg {
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.local-quality-toggle svg.is-expanded {
+  transform: rotate(180deg);
+}
+
+.local-quality-options {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.25rem;
+}
+
+.settings-reaction-control .reactions-palette {
+  position: static !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: min(32vh, 220px);
+  overflow-y: auto;
+  margin: 0.35rem 0 0 !important;
+  padding: 0.45rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  transform: none;
+  z-index: 1;
+}
+
+.local-video-settings {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(65vh, 350px);
+  overflow-y: auto;
+  padding: 0.65rem;
+  z-index: 100;
+  border-radius: 12px;
+  background: var(--surface-elevated, rgba(24, 27, 36, 0.98));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(16px);
+}
+
+.settings-reaction-control .reaction-options {
   flex-wrap: wrap;
-  overflow-x: hidden;
+  overflow: visible;
   justify-content: flex-start;
 }
 
@@ -5802,6 +6140,15 @@ body.is-dragging-reaction iframe {
     width: auto !important;
     max-width: none !important;
     transform: none !important;
+  }
+
+  .mobile-playback-dock .local-video-settings .settings-reaction-control .reactions-palette {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: min(32vh, 220px) !important;
+    margin: 0.35rem 0 0 !important;
   }
 
   .home-page-wrapper {

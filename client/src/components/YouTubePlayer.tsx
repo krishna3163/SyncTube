@@ -9,7 +9,6 @@ declare global {
 }
 
 export interface YouTubePlayerHandle {
-  toggleMute: () => void;
   resync: () => void;
   isMuted: () => boolean;
   setQuality: (quality: string) => void;
@@ -25,6 +24,7 @@ interface YouTubePlayerProps {
   syncState: SyncStatePayload | null;
   userRole: Role;
   playbackSpeed?: number;
+  isMuted?: boolean;
   onLocalPlay: (time: number) => void;
   onLocalPause: (time: number) => void;
   onLocalSeek: (time: number) => void;
@@ -37,6 +37,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   syncState,
   userRole,
   playbackSpeed = 1,
+  isMuted = false,
   onLocalPlay,
   onLocalPause,
   onLocalSeek,
@@ -46,6 +47,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   const playerRef = useRef<any>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const [playerReady, setPlayerReady] = useState(false);
+  const mutedRef = useRef(isMuted);
+  mutedRef.current = isMuted;
   const targetPlaybackRateRef = useRef<number>(playbackSpeed);
 
   useEffect(() => {
@@ -56,6 +59,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       } catch {}
     }
   }, [playbackSpeed, playerReady]);
+
+  useEffect(() => {
+    if (!playerReady || !playerRef.current) return;
+    try {
+      if (isMuted) playerRef.current.mute();
+      else playerRef.current.unMute();
+    } catch {
+      // Keep the requested state; the player will receive it on the next ready event.
+    }
+  }, [isMuted, playerReady]);
 
   // Dynamic refs to avoid stale closures in YouTube callbacks
   const userRoleRef = useRef<Role>(userRole);
@@ -106,8 +119,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           disablekb: 1,
         },
         events: {
-          onReady: () => {
+          onReady: (event: any) => {
             if (isMounted) {
+              if (mutedRef.current) event.target.mute();
+              else event.target.unMute();
               setPlayerReady(true);
             }
           },
@@ -334,25 +349,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   }, [playerReady, onCurrentTimeChange]);
 
   useImperativeHandle(ref, () => ({
-    toggleMute: () => {
-      if (!playerRef.current) return;
-      try {
-        if (playerRef.current.isMuted()) {
-          playerRef.current.unMute();
-        } else {
-          playerRef.current.mute();
-        }
-      } catch {}
-    },
     resync: () => {
       reconcileWithServer();
     },
     isMuted: () => {
       try {
-        return playerRef.current?.isMuted() ?? false;
+        const playerMuted = playerRef.current?.isMuted?.();
+        if (typeof playerMuted === 'boolean') mutedRef.current = playerMuted;
       } catch {
-        return false;
+        // Keep last requested mute state if player API is unavailable.
       }
+      return mutedRef.current;
     },
     setQuality: (quality: string) => {
       if (!playerRef.current) return;

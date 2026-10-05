@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Reply, X } from 'lucide-react';
-import { ChatMessage, ChatReplyPreview, Role } from '../types.js';
+import { Send, Smile, Reply, X, BarChart3 } from 'lucide-react';
+import { ChatMessage, ChatReplyPreview, Role, RoomPoll } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { EmojiPicker } from './EmojiPicker.js';
 import { getParticipantCharacterId, rememberParticipantCharacter } from '../utils/characterMemory.js';
@@ -10,6 +10,8 @@ interface ChatProps {
   currentUserId: string;
   currentUserAvatarId?: string;
   viewerCount?: number;
+  activePoll: RoomPoll | null;
+  onVotePoll: (optionIndex: number) => void;
   onSendMessage: (text: string, replyTo?: ChatReplyPreview) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onSendReaction: (emoji: string) => void;
@@ -34,6 +36,8 @@ export const Chat: React.FC<ChatProps> = ({
   messages,
   currentUserId,
   currentUserAvatarId,
+  activePoll,
+  onVotePoll,
   onSendMessage,
   onToggleReaction,
   onSendReaction,
@@ -52,7 +56,7 @@ export const Chat: React.FC<ChatProps> = ({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activePoll?.id]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,6 +258,51 @@ export const Chat: React.FC<ChatProps> = ({
               </div>
             );
           })
+        )}
+        {activePoll && (
+          <section className="chat-poll-card" aria-label="Room poll">
+            <div className="chat-poll-heading">
+              <div>
+                <BarChart3 size={16} />
+                <span>LIVE POLL</span>
+              </div>
+              <span className="chat-poll-total">
+                {Object.values(activePoll.votes).reduce((total, voters) => total + voters.length, 0)} votes
+              </span>
+            </div>
+            <h3>{activePoll.question}</h3>
+            <div className="chat-poll-options">
+              {activePoll.options.map((option, index) => {
+                const voters = activePoll.votes[String(index)] || [];
+                const voteCount = voters.length;
+                const totalVotes = Object.values(activePoll.votes).reduce((total, list) => total + list.length, 0);
+                const percentage = totalVotes ? Math.round((voteCount / totalVotes) * 100) : 0;
+                const isSelected = voters.includes(currentUserId);
+
+                return (
+                  <button
+                    key={`${activePoll.id}-${index}`}
+                    type="button"
+                    className={`chat-poll-option ${isSelected ? 'selected' : ''}`}
+                    onClick={() => onVotePoll(index)}
+                    aria-pressed={isSelected}
+                    aria-label={`${option}, ${percentage} percent, ${voteCount} votes${isSelected ? ', your vote' : ''}`}
+                  >
+                    <span className="chat-poll-option-fill" style={{ width: `${percentage}%` }} />
+                    <span className="chat-poll-option-content">
+                      <span>{option}</span>
+                      <small>{percentage}% · {voteCount}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="chat-poll-hint">
+              {Object.values(activePoll.votes).some((voters) => voters.includes(currentUserId))
+                ? 'Your vote is recorded. Select another option to change it.'
+                : 'Select an option to vote.'}
+            </p>
+          </section>
         )}
         <div ref={messagesEndRef} />
       </div>

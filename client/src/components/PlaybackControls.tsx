@@ -17,6 +17,7 @@ import {
   Shield,
   User,
   Settings2,
+  ChevronDown,
   Subtitles,
   Check,
   Gauge,
@@ -94,6 +95,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   reactionControl,
 }) => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showQualityOptions, setShowQualityOptions] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
 
@@ -284,8 +286,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         <div className="controls-right-group">
           {renderRoleBadge()}
 
-          {reactionControl && <div className="controls-reaction-slot">{reactionControl}</div>}
-
           {onToggleMute && (
             <button
               type="button"
@@ -330,6 +330,13 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                     Local Video Settings
                   </div>
 
+                  {reactionControl && (
+                    <div className="settings-reaction-control">
+                      <div className="settings-reaction-label">Live Reactions</div>
+                      <div className="controls-reaction-slot">{reactionControl}</div>
+                    </div>
+                  )}
+
                   {onToggleCaptions && (
                     <button
                       type="button"
@@ -357,11 +364,20 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                   )}
 
                   {onSetQuality && (
-                    <>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
-                        Local Quality
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <div className="local-quality-section">
+                      <button
+                        type="button"
+                        className="local-quality-toggle"
+                        onClick={() => setShowQualityOptions((shown) => !shown)}
+                        aria-expanded={showQualityOptions}
+                      >
+                        <span>Local Quality</span>
+                        <span className="local-quality-current">
+                          {QUALITIES.find((quality) => quality.value === currentQuality)?.label || 'Auto'}
+                        </span>
+                        <ChevronDown size={14} className={showQualityOptions ? 'is-expanded' : ''} />
+                      </button>
+                      {showQualityOptions && <div className="local-quality-options">
                         {QUALITIES.map((q) => (
                           <button
                             key={q.value}
@@ -388,8 +404,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                             {currentQuality === q.value && <Check size={14} color="var(--accent)" />}
                           </button>
                         ))}
-                      </div>
-                    </>
+                      </div>}
+                    </div>
                   )}
 
                   {onSetPlaybackSpeed && (
@@ -414,6 +430,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                       </div>
                     </div>
                   )}
+
                 </div>
               )}
             </div>

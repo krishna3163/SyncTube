@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
+import { BarChart3, Plus, X } from 'lucide-react';
 import { getAvatarById } from '../utils/animeAvatars.js';
 
 interface FloatingReactionsProps {
@@ -9,6 +10,7 @@ interface FloatingReactionsProps {
   inline?: boolean;
   currentTime?: number;
   userRole?: string;
+  alwaysExpanded?: boolean;
 }
 
 interface ReactionParticle {
@@ -36,7 +38,7 @@ const CHARACTER_REACTIONS: Record<string, string[]> = {
 };
 const STORAGE_KEY = 'synctube_reaction_btn_pos_v2';
 
-export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, username, avatarId, inline = false, currentTime = 0, userRole }) => {
+export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, username, avatarId, inline = false, currentTime = 0, userRole, alwaysExpanded = false }) => {
   const [particles, setParticles] = useState<ReactionParticle[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -44,7 +46,6 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
   const [reactionGroup, setReactionGroup] = useState<keyof typeof REACTION_GROUPS>('Basic');
   const [recentCounts, setRecentCounts] = useState<Record<string, number>>({});
   const [recentReactions, setRecentReactions] = useState<string[]>([]);
-  const [poll, setPoll] = useState<{ id: string; question: string; options: string[]; votes: Record<string, string[]> } | null>(null);
   const [showPollComposer, setShowPollComposer] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState('Yes, No');
@@ -149,7 +150,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
 
   // Clicking outside the launcher or pressing Escape closes the palette.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || alwaysExpanded) return;
 
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!launcherRef.current?.contains(event.target as Node)) {
@@ -166,7 +167,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, alwaysExpanded]);
 
   // Handle incoming reactions from server
   useEffect(() => {
@@ -209,11 +210,8 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     };
 
     socket.on('reaction_received', handleReactionReceived);
-    const handlePoll = (data: typeof poll) => setPoll(data);
-    socket.on('poll_updated', handlePoll);
     return () => {
       socket.off('reaction_received', handleReactionReceived);
-      socket.off('poll_updated', handlePoll);
     };
   }, [socket]);
 
@@ -400,54 +398,70 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           ))}
         </div>
         {userRole === 'HOST' || userRole === 'MODERATOR' ? (
-          <button type="button" className="reaction-create-poll" onClick={() => setShowPollComposer((value) => !value)}>＋ Poll</button>
+          <button
+            type="button"
+            className={`reaction-create-poll ${showPollComposer ? 'active' : ''}`}
+            onClick={() => setShowPollComposer((value) => !value)}
+            aria-expanded={showPollComposer}
+          >
+            <Plus size={14} />
+            <span>{showPollComposer ? 'Cancel poll' : 'Create poll'}</span>
+          </button>
         ) : null}
       </div>
       {showPollComposer && (
         <div className="reaction-poll-composer">
-          <input
-            value={pollQuestion}
-            onChange={(event) => setPollQuestion(event.target.value)}
-            placeholder="Poll question"
-            maxLength={200}
-            aria-label="Poll question"
-          />
-          <input
-            value={pollOptions}
-            onChange={(event) => setPollOptions(event.target.value)}
-            placeholder="Options separated by commas"
-            aria-label="Poll options"
-          />
-          <div>
-            <button type="button" onClick={createPoll} disabled={!pollQuestion.trim() || pollOptions.split(',').filter((item) => item.trim()).length < 2}>Create</button>
-            <button type="button" onClick={() => setShowPollComposer(false)}>Cancel</button>
+          <div className="poll-composer-heading">
+            <BarChart3 size={15} />
+            <span>Start a room poll</span>
+            <button
+              type="button"
+              className="poll-composer-close"
+              onClick={() => setShowPollComposer(false)}
+              aria-label="Close poll composer"
+            >
+              <X size={15} />
+            </button>
           </div>
-        </div>
-      )}
-      {poll && (
-        <div className="reaction-poll">
-          <div className="reaction-poll-title">
-            <span className="reaction-poll-label">ROOM POLL</span>
-            <strong>{poll.question}</strong>
+          <label className="poll-composer-field">
+            <span>Question</span>
+            <input
+              value={pollQuestion}
+              onChange={(event) => setPollQuestion(event.target.value)}
+              placeholder="What should we watch next?"
+              maxLength={200}
+              aria-label="Poll question"
+            />
+          </label>
+          <label className="poll-composer-field">
+            <span>Options <small>Separate with commas</small></span>
+            <input
+              value={pollOptions}
+              onChange={(event) => setPollOptions(event.target.value)}
+              placeholder="Yes, No"
+              aria-label="Poll options"
+            />
+          </label>
+          <div className="poll-composer-actions">
+            <span className="poll-option-hint">
+              {pollOptions.split(',').filter((item) => item.trim()).length} options
+            </span>
+            <button
+              type="button"
+              className="poll-create-submit"
+              onClick={createPoll}
+              disabled={!pollQuestion.trim() || pollOptions.split(',').filter((item) => item.trim()).length < 2}
+            >
+              <Plus size={14} />
+              <span>Create poll</span>
+            </button>
           </div>
-          {poll.options.map((option, index) => {
-            const totalVotes = Object.values(poll.votes).reduce((total, voters) => total + voters.length, 0);
-            const votes = poll.votes[String(index)]?.length || 0;
-            const percentage = totalVotes ? Math.round((votes / totalVotes) * 100) : 0;
-            return (
-              <button key={option} type="button" className="reaction-poll-option" onClick={() => { socket?.emit('vote_poll', { optionIndex: index }); setIsOpen(false); }}>
-                <span className="reaction-poll-option-fill" style={{ width: `${percentage}%` }} />
-                <span className="reaction-poll-option-content">
-                  <span>{option}</span>
-                  <small>{percentage}% · {votes}</small>
-                </span>
-              </button>
-            );
-          })}
         </div>
       )}
       <div className="reaction-options" onWheel={handleReactionOptionsWheel}>
-        <button type="button" className="reaction-close-btn" onClick={() => setIsOpen(false)} aria-label="Close reactions">×</button>
+        {!alwaysExpanded && (
+          <button type="button" className="reaction-close-btn" onClick={() => setIsOpen(false)} aria-label="Close reactions">×</button>
+        )}
         {visibleReactionEmojis.map((emoji) => (
           <button
             key={emoji}
@@ -486,13 +500,17 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
       {/* Draggable React Button Dock */}
       <div
         ref={launcherRef}
-        className={`${inline ? 'inline-reactions-launcher' : 'floating-reactions-launcher'} ${isOpen ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
+        className={`${inline ? 'inline-reactions-launcher' : 'floating-reactions-launcher'} ${isOpen || alwaysExpanded ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
         style={{
-          left: pos ? `${pos.x}px` : undefined,
-          top: pos ? `${pos.y}px` : undefined,
-          right: pos ? 'auto' : undefined,
-          bottom: pos ? 'auto' : undefined,
-          alignItems: isRightSide ? 'flex-end' : 'flex-start',
+          ...(inline
+            ? {}
+            : {
+                left: pos ? `${pos.x}px` : undefined,
+                top: pos ? `${pos.y}px` : undefined,
+                right: pos ? 'auto' : undefined,
+                bottom: pos ? 'auto' : undefined,
+              }),
+          alignItems: inline ? 'stretch' : isRightSide ? 'flex-end' : 'flex-start',
         }}
       >
         {Object.keys(recentCounts).length > 0 && (
@@ -503,12 +521,12 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           </div>
         )}
         {/* If placed near bottom of screen, show emoji palette ABOVE the button */}
-        {isOpen && !inline && isNearBottom && (
+        {(isOpen || alwaysExpanded) && !inline && isNearBottom && (
           renderPalette({ marginBottom: '0.4rem' })
         )}
 
         {/* Draggable React Pill Button */}
-        <button
+        {!alwaysExpanded && <button
           type="button"
           className="reaction-toggle-btn"
           ref={buttonRef}
@@ -528,10 +546,10 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
         >
           <span className="reaction-toggle-emoji">{characterEmoji}</span>
           <span className="reaction-toggle-label">React</span>
-        </button>
+        </button>}
 
         {/* If placed in upper/middle of screen, show emoji palette BELOW the button */}
-        {isOpen && (inline || !isNearBottom) && (
+        {(isOpen || alwaysExpanded) && (inline || !isNearBottom) && (
           renderPalette({ marginTop: '0.4rem' })
         )}
       </div>

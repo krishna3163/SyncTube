@@ -45,6 +45,7 @@ import {
   ChatMessage,
   ChatReplyPreview,
   EmojiReaction,
+  RoomPoll,
 } from '../types.js';
 import { YouTubePlayer, YouTubePlayerHandle } from '../components/YouTubePlayer.js';
 import { PlaybackControls } from '../components/PlaybackControls.js';
@@ -123,6 +124,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Real-time Chat, Reactions, and Action Requests
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [activePoll, setActivePoll] = useState<RoomPoll | null>(null);
+  const activePollIdRef = useRef<string | null>(null);
   const [activeReactions, setActiveReactions] = useState<EmojiReaction[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingActionRequest[]>([]);
 
@@ -287,10 +290,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isMuted, setIsMuted] = useState(false);
 
   const handleToggleMute = useCallback(() => {
-    if (ytPlayerRef.current) {
-      ytPlayerRef.current.toggleMute();
-      setIsMuted(ytPlayerRef.current.isMuted());
-    }
+    setIsMuted((muted) => !muted);
   }, []);
 
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
@@ -386,6 +386,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Connect socket and register listeners
   useEffect(() => {
     socket.connect();
+    setActivePoll(null);
+    activePollIdRef.current = null;
 
     const onConnect = () => {
       setConnectionStatus('connected');
@@ -577,6 +579,24 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       }
     };
 
+    const onPollUpdated = (data: RoomPoll) => {
+      if (
+        !data ||
+        typeof data.id !== 'string' ||
+        typeof data.question !== 'string' ||
+        !Array.isArray(data.options) ||
+        !data.options.every((option) => typeof option === 'string') ||
+        !data.votes ||
+        typeof data.votes !== 'object'
+      ) return;
+
+      if (activePollIdRef.current !== data.id) {
+        activePollIdRef.current = data.id;
+        setActiveSidebarTab('chat');
+      }
+      setActivePoll(data);
+    };
+
     // participant_avatar_updated: user updated profile character
     const onAvatarUpdated = (data: { userId: string; username: string; avatarId: string; participants: ParticipantPublic[] }) => {
       rememberParticipantCharacter(data.username, data.userId, data.avatarId);
@@ -646,6 +666,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('action_request_resolved', onActionRequestResolved);
     socket.on('chat_message', onChatMessage);
     socket.on('chat_history', onChatHistory);
+    socket.on('poll_updated', onPollUpdated);
     socket.on('message_reaction_updated', onMessageReactionUpdated);
     socket.on('reaction_received', onReactionReceived);
     socket.on('playback_speed_updated', onPlaybackSpeedUpdated);
@@ -676,6 +697,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('action_request_resolved', onActionRequestResolved);
       socket.off('chat_message', onChatMessage);
       socket.off('chat_history', onChatHistory);
+      socket.off('poll_updated', onPollUpdated);
       socket.off('message_reaction_updated', onMessageReactionUpdated);
       socket.off('reaction_received', onReactionReceived);
       socket.off('playback_speed_updated', onPlaybackSpeedUpdated);
@@ -1059,6 +1081,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                     syncState={syncState}
                     userRole={userRole}
                     playbackSpeed={playbackSpeed}
+                    isMuted={isMuted}
                     onLocalPlay={handlePlay}
                     onLocalPause={handlePause}
                     onLocalSeek={handleSeek}
@@ -1100,7 +1123,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
                   onRequestAction={handleRequestAction}
                   onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-                  reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline />}
+                  reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
                 />
               </div>
             </div>
@@ -1134,7 +1157,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-              reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline />}
+              reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
             />
           </div>
         </div>
@@ -1212,6 +1235,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserId={userId}
                 currentUserAvatarId={userSettings.avatarId}
                 viewerCount={participants.length}
+                activePoll={activePoll}
+                onVotePoll={(optionIndex) => socket.emit('vote_poll', { optionIndex })}
                 onSendMessage={handleSendChat}
                 onToggleReaction={handleToggleMessageReaction}
                 onSendReaction={handleSendReaction}
