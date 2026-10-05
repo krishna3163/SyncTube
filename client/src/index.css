@@ -5126,10 +5126,11 @@ body.is-dragging-reaction iframe {
 
 /* Keep the desktop reaction palette compact beside the playback controls. */
 .controls-overlay .controls-reaction-slot .inline-reactions-launcher .reactions-palette {
-  position: absolute;
-  top: calc(100% + 0.55rem);
-  right: 0;
-  bottom: auto;
+  position: fixed;
+  left: 1rem;
+  right: auto;
+  top: auto;
+  bottom: 1rem;
   width: min(420px, calc(100vw - 32px));
   max-width: min(420px, calc(100vw - 32px));
   max-height: min(260px, calc(100vh - 120px));
@@ -5137,6 +5138,7 @@ body.is-dragging-reaction iframe {
   margin: 0;
   flex-direction: column;
   align-items: stretch;
+  z-index: 1000;
 }
 
 .controls-overlay .controls-reaction-slot .reaction-options {
@@ -5794,6 +5796,7 @@ body.is-dragging-reaction iframe {
     left: 0.5rem !important;
     right: 0.5rem !important;
     bottom: 7.25rem !important;
+    top: auto !important;
     background: var(--bg-card) !important;
     border-color: var(--border) !important;
     width: auto !important;
