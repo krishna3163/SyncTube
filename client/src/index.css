@@ -533,36 +533,37 @@ body {
   position: relative;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
   border-radius: var(--r-xl);
+  isolation: isolate;
 }
 
 /* Ambient backdrop */
 .ambient-backdrop {
   position: absolute;
-  inset: -28px -40px;
+  inset: -18% -28%;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
   border-radius: calc(var(--r-xl) + 28px);
-  filter: blur(60px) saturate(180%) brightness(1.1);
-  opacity: 0.72;
-  transform: translateZ(0);
+  filter: blur(var(--ambient-blur, 36px)) saturate(190%) brightness(1.12);
+  opacity: 0.9;
+  transform: scale(var(--ambient-spread, 1)) translateZ(0);
   background:
-    radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--ambient-primary, #5b4bb7) 70%, transparent), transparent 55%),
-    radial-gradient(circle at 82% 76%, color-mix(in srgb, var(--ambient-secondary, #1b5c72) 68%, transparent), transparent 58%);
-  transition: opacity 0.8s ease, filter 0.8s ease, background 0.8s ease;
-  will-change: transform, opacity;
+    radial-gradient(ellipse at 14% 48%, color-mix(in srgb, var(--ambient-primary, #5b4bb7) 92%, transparent), transparent 54%),
+    radial-gradient(ellipse at 86% 46%, color-mix(in srgb, var(--ambient-secondary, #1b5c72) 88%, transparent), transparent 54%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--ambient-tertiary, #285b53) 76%, transparent), transparent 58%);
+  transition: opacity 0.8s ease, filter 0.35s ease, transform 0.35s ease, background 0.8s ease;
+  will-change: opacity;
 }
 
 .ambient-backdrop-img {
   position: absolute;
-  top: -20%;
-  left: -20%;
-  width: 140%;
-  height: 140%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  transform: scale(1.1);
+  opacity: 0.66;
   user-select: none;
   pointer-events: none;
 }
@@ -572,9 +573,9 @@ body {
   inset: 0;
   background: radial-gradient(
     ellipse at center,
-    transparent 0%,
-    rgba(11, 13, 14, 0.38) 55%,
-    rgba(11, 13, 14, 0.82) 100%
+    rgba(11, 13, 14, 0.04) 0%,
+    rgba(11, 13, 14, 0.18) 45%,
+    rgba(11, 13, 14, 0.52) 100%
   );
   pointer-events: none;
 }
@@ -584,9 +585,40 @@ body {
 }
 
 @keyframes ambientBreathing {
-  0%   { opacity: 0.62; filter: blur(55px) saturate(165%) brightness(1.05); transform: scale(1); }
-  50%  { opacity: 0.82; filter: blur(72px) saturate(215%) brightness(1.2); transform: scale(1.035); }
-  100% { opacity: 0.68; filter: blur(62px) saturate(185%) brightness(1.1); transform: scale(1.015); }
+  0%   { opacity: 0.82; }
+  100% { opacity: 0.98; }
+}
+
+.ambient-light-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.ambient-light-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: var(--text-main);
+  font-size: 0.8rem;
+}
+
+.ambient-light-control-heading {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+}
+
+.ambient-light-control-heading output {
+  font-variant-numeric: tabular-nums;
+}
+
+.ambient-light-control input[type="range"] {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .stage-card {
@@ -1801,10 +1833,10 @@ body {
     height: 34px;
   }
 
-  /* Ambient backdrop constrained on mobile */
+  /* Keep a restrained color glow around the edge-to-edge mobile player. */
   .ambient-backdrop {
-    inset: 0 !important;
-    filter: blur(24px) saturate(150%) brightness(1.1);
+    inset: -8% -10%;
+    filter: blur(var(--ambient-blur, 36px)) saturate(165%) brightness(1.08);
   }
 
   /* Hide ambient label text on mobile */

@@ -134,7 +134,21 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const saved = localStorage.getItem('synctube_ambient_mode');
     return saved !== null ? saved === 'true' : true; // Default ON
   });
-  const [ambientPalette, setAmbientPalette] = useState({ primary: '#5b4bb7', secondary: '#1b5c72' });
+  const [ambientBlur, setAmbientBlur] = useState(() => {
+    const saved = localStorage.getItem('synctube_ambient_blur');
+    const value = saved === null ? 30 : Number(saved);
+    return Number.isFinite(value) && value >= 0 && value <= 100 ? value : 30;
+  });
+  const [ambientSpread, setAmbientSpread] = useState(() => {
+    const saved = localStorage.getItem('synctube_ambient_spread');
+    const value = saved === null ? 100 : Number(saved);
+    return Number.isFinite(value) && value >= 50 && value <= 150 ? value : 100;
+  });
+  const [ambientPalette, setAmbientPalette] = useState({
+    primary: '#5b4bb7',
+    secondary: '#1b5c72',
+    tertiary: '#285b53',
+  });
 
   const handleAmbientImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
@@ -146,24 +160,41 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       if (!context) return;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      let red = 0;
-      let green = 0;
-      let blue = 0;
-      let count = 0;
-      for (let index = 0; index < pixels.length; index += 16) {
-        red += pixels[index];
-        green += pixels[index + 1];
-        blue += pixels[index + 2];
-        count += 1;
-      }
-      if (!count) return;
-      const average = [red, green, blue].map((value) => Math.round(value / count));
-      const primary = `rgb(${average[0]}, ${average[1]}, ${average[2]})`;
-      const secondary = `rgb(${Math.round(average[2] * 0.7)}, ${Math.round(average[0] * 0.55)}, ${Math.round(average[1] * 0.65)})`;
-      setAmbientPalette({ primary, secondary });
+      const sampleRegion = (startX: number, endX: number, startY: number, endY: number) => {
+        let red = 0;
+        let green = 0;
+        let blue = 0;
+        let count = 0;
+        for (let y = startY; y < endY; y += 1) {
+          for (let x = startX; x < endX; x += 1) {
+            const index = (y * canvas.width + x) * 4;
+            red += pixels[index];
+            green += pixels[index + 1];
+            blue += pixels[index + 2];
+            count += 1;
+          }
+        }
+        if (!count) return null;
+        return `rgb(${Math.round(red / count)}, ${Math.round(green / count)}, ${Math.round(blue / count)})`;
+      };
+      const primary = sampleRegion(0, 8, 2, 12);
+      const secondary = sampleRegion(16, 24, 2, 12);
+      const tertiary = sampleRegion(7, 17, 8, 14);
+      if (!primary || !secondary || !tertiary) return;
+      setAmbientPalette({ primary, secondary, tertiary });
     } catch {
       // YouTube may disallow canvas sampling; the image backdrop remains the fallback.
     }
+  }, []);
+
+  const handleAmbientBlurChange = useCallback((value: number) => {
+    setAmbientBlur(value);
+    localStorage.setItem('synctube_ambient_blur', String(value));
+  }, []);
+
+  const handleAmbientSpreadChange = useCallback((value: number) => {
+    setAmbientSpread(value);
+    localStorage.setItem('synctube_ambient_spread', String(value));
   }, []);
 
   const handleToggleAmbientMode = useCallback(() => {
@@ -1049,6 +1080,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             style={{
               '--ambient-primary': ambientPalette.primary,
               '--ambient-secondary': ambientPalette.secondary,
+              '--ambient-tertiary': ambientPalette.tertiary,
+              '--ambient-blur': `${ambientBlur * 1.2}px`,
+              '--ambient-spread': ambientSpread / 100,
             } as React.CSSProperties}
           >
           {/* Ambient Mode Backdrop — only shown after server confirms state */}
@@ -1281,6 +1315,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onDeleteRoom={handleDeleteRoom}
         ambientMode={ambientMode}
         onToggleAmbientMode={handleToggleAmbientMode}
+        ambientBlur={ambientBlur}
+        ambientSpread={ambientSpread}
+        onAmbientBlurChange={handleAmbientBlurChange}
+        onAmbientSpreadChange={handleAmbientSpreadChange}
       />
 
       {/* Floating Animated Emojis & Live Reaction Dock */}

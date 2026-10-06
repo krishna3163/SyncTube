@@ -14,6 +14,10 @@ interface SettingsModalProps {
   onDeleteRoom: () => void;
   ambientMode?: boolean;
   onToggleAmbientMode?: () => void;
+  ambientBlur?: number;
+  ambientSpread?: number;
+  onAmbientBlurChange?: (value: number) => void;
+  onAmbientSpreadChange?: (value: number) => void;
 }
 
 const PRESET_COLORS = [
@@ -46,6 +50,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDeleteRoom,
   ambientMode = true,
   onToggleAmbientMode,
+  ambientBlur = 30,
+  ambientSpread = 100,
+  onAmbientBlurChange,
+  onAmbientSpreadChange,
 }) => {
   const [activeTab, setActiveTab] = useState<'user' | 'room'>('user');
   const [localUser, setLocalUser] = useState<UserSettings>(userSettings);
@@ -228,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Ambient Mode</span>
                   </label>
                   <p className="settings-description">
-                    Projects a soft, dynamic glow of the video's colors around the player like YouTube.
+                    Spreads sampled colors from the current video's thumbnail around the player.
                   </p>
                   <label className="checkbox-row" style={{ cursor: 'pointer' }}>
                     <input
@@ -238,6 +246,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                     <span>Enable Ambient Mode</span>
                   </label>
+                  {ambientMode && (
+                    <div className="ambient-light-controls">
+                      <label className="ambient-light-control" htmlFor="ambient-blur">
+                        <span className="ambient-light-control-heading">
+                          <span>Blur</span>
+                          <output htmlFor="ambient-blur">{ambientBlur}%</output>
+                        </span>
+                        <input
+                          id="ambient-blur"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={ambientBlur}
+                          onChange={(event) => onAmbientBlurChange?.(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="ambient-light-control" htmlFor="ambient-spread">
+                        <span className="ambient-light-control-heading">
+                          <span>Spread</span>
+                          <output htmlFor="ambient-spread">{ambientSpread}%</output>
+                        </span>
+                        <input
+                          id="ambient-spread"
+                          type="range"
+                          min="50"
+                          max="150"
+                          value={ambientSpread}
+                          onChange={(event) => onAmbientSpreadChange?.(Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
 
