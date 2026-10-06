@@ -132,7 +132,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Ambient Mode (YouTube-Style Dynamic Video Glow)
   const [ambientMode, setAmbientMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('synctube_ambient_mode');
-    return saved !== null ? saved === 'true' : true; // Default ON
+    return saved !== null ? saved === 'true' : false;
   });
   const [ambientBlur, setAmbientBlur] = useState(() => {
     const saved = localStorage.getItem('synctube_ambient_blur');

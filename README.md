@@ -72,7 +72,7 @@ The invite image contains a temporary room code and a local development link. Cr
 - Hosts and moderators can control playback; participants can send action requests for host/moderator approval.
 - Choose available YouTube playback quality, toggle captions, mute locally, and use supported playback-speed controls.
 - See a live sync-quality indicator and use the resync action when needed.
-- Use fullscreen and theater (dimmed-page) modes. **Ambient mode** spreads color sampled from the current video's thumbnail around the player, with adjustable blur and spread controls.
+- Use fullscreen and theater (dimmed-page) modes. **Ambient mode** is off by default; enable it in user settings to spread colors sampled from the current video's thumbnail around the player, with adjustable blur and spread controls.
 - On phones, use the separate playback dock designed for touch screens.
 
 YouTube itself controls the embedded player, including video availability, ads, autoplay restrictions, captions, and supported quality levels.
