@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -47,26 +48,14 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
 
   app.use(express.json());
 
-  // In-memory sliding rate limiter (OWASP & Semgrep defense against API abuse)
-  const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-  const apiRateLimiter = (scope: string, limit: number, windowMs: number) => {
-    return (req: Request, res: Response, next: NextFunction) => {
-      const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-      const key = `${scope}:${ip}`;
-      const now = Date.now();
-      const record = rateLimitMap.get(key);
-      if (!record || now > record.resetTime) {
-        rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
-        return next();
-      }
-      record.count++;
-      if (record.count > limit) {
-        return res.status(429).json({ error: 'Too many requests. Please slow down.' });
-      }
-      next();
-    };
-  };
-  app.use('/api', apiRateLimiter('api', 120, 60000));
+  const apiRateLimiter = (limit: number, windowMs: number) => rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many requests. Please slow down.' }),
+  });
+  app.use('/api', apiRateLimiter(120, 60000));
 
   // Health check endpoint
   app.get('/health', (_req: Request, res: Response) => {
@@ -79,7 +68,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   });
 
   // Create room endpoint (protected by rate limiter)
-  app.post('/api/rooms', apiRateLimiter('create-room', 30, 60000), async (req: Request, res: Response, next: NextFunction) => {
+  app.post('/api/rooms', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { initialVideoId } = req.body || {};
       let videoId = '';
@@ -236,7 +225,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   ];
 
   // Search YouTube videos endpoint (rate limited + fetch timeouts + sanitization)
-  app.get('/api/youtube/search', apiRateLimiter('youtube-search', 60, 60000), async (req: Request, res: Response, next: NextFunction) => {
+  app.get('/api/youtube/search', apiRateLimiter(60, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const q = String(req.query.q || '').trim();
       if (!q) {
@@ -380,7 +369,13 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
   const clientDist = path.resolve(process.cwd(), '../dist');
   if (fs.existsSync(clientDist)) {
     app.use(express.static(clientDist));
-    app.get('*', apiRateLimiter('spa-fallback', 120, 60000), (_req: Request, res: Response) => {
+    app.get('*', rateLimit({
+      windowMs: 60000,
+      limit: 120,
+      standardHeaders: true,
+      legacyHeaders: false,
+      handler: (_req, res) => res.status(429).json({ error: 'Too many requests. Please slow down.' }),
+    }), (_req: Request, res: Response) => {
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   }

@@ -61,6 +61,14 @@ describe('Express REST API Endpoints', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('Invalid YouTube');
     });
+
+    it('applies the room-creation rate limit', async () => {
+      let response;
+      for (let attempt = 0; attempt < 31; attempt++) {
+        response = await request(app).post('/api/rooms').send({});
+      }
+      expect(response?.status).toBe(429);
+    });
   });
 
   describe('GET /api/rooms/:roomId', () => {
