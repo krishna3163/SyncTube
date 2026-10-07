@@ -1,6 +1,7 @@
 {
   "buildCommand": "npm run build:client",
   "outputDirectory": "client/dist",
+  "installCommand": "npm install",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://synctube-2ar4.onrender.com/api/$1" },
     { "source": "/socket.io/(.*)", "destination": "https://synctube-2ar4.onrender.com/socket.io/$1" },
