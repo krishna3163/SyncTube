@@ -29,6 +29,14 @@ import {
   UpdateAvatarSchema,
   CreatePollSchema,
   VotePollSchema,
+  PartyReadySchema,
+  SyncPlaySchema,
+  SyncPauseSchema,
+  SyncSeekSchema,
+  SyncDriftCheckSchema,
+  MediaChangedSchema,
+  ChatTypingSchema,
+  ExtensionStatusSchema,
 } from './schemas.js';
 import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
 
@@ -139,6 +147,10 @@ export function setupSocketHandlers(
         socket.emit('pending_requests_sync', { requests: room.getPendingRequests() });
         // Send recent chat message history
         socket.emit('chat_history', { messages: room.getChatMessages() });
+
+        // Send V2 Universal state snapshot and readiness
+        socket.emit('sync:state', room.getUniversalSnapshot());
+        socket.emit('party:readiness_update', { readiness: room.universalSync.getAllReadiness() });
 
         // Broadcast to everyone in the room that a user joined
         io.to(normalizedRoomId).emit('user_joined', {
@@ -898,6 +910,268 @@ export function setupSocketHandlers(
       }
     });
 
+    // ── V2 UNIVERSAL SYNC & PARTY EVENT HANDLERS ────────────────
+    
+    // PARTY READINESS
+    socket.on('party:ready', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        const parsed = PartyReadySchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid party:ready payload.');
+        }
+
+        room.universalSync.setParticipantReadiness(
+          participant.userId,
+          participant.username,
+          parsed.data.status,
+          {
+            reportedPosition: parsed.data.reportedPosition,
+            activePlatform: parsed.data.activePlatform,
+            activeMediaId: parsed.data.activeMediaId,
+          }
+        );
+
+        io.to(room.id).emit('party:readiness_update', {
+          readiness: room.universalSync.getAllReadiness(),
+          updatedUserId: participant.userId,
+        });
+
+        // If host enabled auto-play when ready
+        if (room.universalSync.shouldAutoPlayWhenReady()) {
+          room.play(undefined, undefined, 'system_ready');
+          io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+          io.to(room.id).emit('sync:state', room.getUniversalSnapshot());
+        }
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // SYNC:PLAY (V2 with revision conflict check & idempotency)
+    socket.on('sync:play', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'play')) {
+          return sendError('FORBIDDEN', 'Only hosts and moderators can play media.');
+        }
+
+        const parsed = SyncPlaySchema.safeParse(rawPayload || {});
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid sync:play payload.');
+        }
+
+        const currentRev = room.universalSync.getRevision();
+        if (parsed.data?.revision !== undefined && parsed.data.revision < currentRev) {
+          // Reject stale event to prevent race condition
+          socket.emit('sync:rejected', { reason: 'stale_revision', currentRevision: currentRev });
+          socket.emit('sync:state', room.getUniversalSnapshot());
+          return;
+        }
+
+        room.play(parsed.data?.position, parsed.data?.eventId, participant.userId);
+
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+          });
+        }
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('sync:state', room.getUniversalSnapshot());
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // SYNC:PAUSE (V2 with revision conflict check & idempotency)
+    socket.on('sync:pause', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'pause')) {
+          return sendError('FORBIDDEN', 'Only hosts and moderators can pause media.');
+        }
+
+        const parsed = SyncPauseSchema.safeParse(rawPayload || {});
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid sync:pause payload.');
+        }
+
+        const currentRev = room.universalSync.getRevision();
+        if (parsed.data?.revision !== undefined && parsed.data.revision < currentRev) {
+          socket.emit('sync:rejected', { reason: 'stale_revision', currentRevision: currentRev });
+          socket.emit('sync:state', room.getUniversalSnapshot());
+          return;
+        }
+
+        room.pause(parsed.data?.position, parsed.data?.eventId, participant.userId);
+
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+          });
+        }
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('sync:state', room.getUniversalSnapshot());
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // SYNC:SEEK (V2 with revision conflict check)
+    socket.on('sync:seek', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'seek')) {
+          return sendError('FORBIDDEN', 'Only hosts and moderators can seek media.');
+        }
+
+        const parsed = SyncSeekSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid sync:seek payload.');
+        }
+
+        const currentRev = room.universalSync.getRevision();
+        if (parsed.data.revision !== undefined && parsed.data.revision < currentRev) {
+          socket.emit('sync:rejected', { reason: 'stale_revision', currentRevision: currentRev });
+          socket.emit('sync:state', room.getUniversalSnapshot());
+          return;
+        }
+
+        room.seek(parsed.data.position, parsed.data.eventId, participant.userId);
+
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+          });
+        }
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('sync:state', room.getUniversalSnapshot());
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // SYNC:DRIFT_CHECK
+    socket.on('sync:drift_check', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+
+        const parsed = SyncDriftCheckSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        const now = Date.now();
+        const rtt = Math.max(0, now - parsed.data.clientTimestamp);
+        const assessment = room.universalSync.assessDrift(parsed.data.clientPosition, rtt);
+
+        socket.emit('sync:drift_assessment', {
+          ...assessment,
+          serverTimestamp: now,
+          rttMs: rtt,
+          snapshot: room.getUniversalSnapshot(),
+        });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // MEDIA:CHANGED (V2 Universal Media Change)
+    socket.on('media:changed', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only hosts and moderators can change media.');
+        }
+
+        const parsed = MediaChangedSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return sendError('BAD_REQUEST', 'Invalid media:changed payload.');
+        }
+
+        room.changeVideo(parsed.data.mediaId, parsed.data.title, parsed.data.platform);
+
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+          });
+        }
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('sync:state', room.getUniversalSnapshot());
+        io.to(room.id).emit('media:changed', {
+          mediaIdentity: room.universalSync.getMediaIdentity(),
+          changedBy: participant.username,
+        });
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
+    // CHAT:TYPING
+    socket.on('chat:typing', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        const parsed = ChatTypingSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        socket.to(room.id).emit('chat:user_typing', {
+          userId: participant.userId,
+          username: participant.username,
+          isTyping: parsed.data.isTyping,
+        });
+      } catch {
+        // non-critical typing indicator error ignored
+      }
+    });
+
+    // EXTENSION:STATUS
+    socket.on('extension:status', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        const parsed = ExtensionStatusSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        socket.emit('extension:acknowledged', {
+          supportedPlatforms: ['youtube', 'generic', 'netflix', 'prime'],
+          roomMedia: room.universalSync.getMediaIdentity(),
+        });
+      } catch {
+        // non-critical extension status error ignored
+      }
+    });
 
     // DISCONNECT
     socket.on('disconnect', () => {

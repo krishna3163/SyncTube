@@ -122,3 +122,52 @@ export const SendSoundEffectSchema = z.object({
 export const UpdateAvatarSchema = z.object({
   avatarId: z.string().trim().min(1).max(50),
 });
+
+// ── V2 Socket Event Schemas ──────────────────────────────
+export const PartyReadySchema = z.object({
+  status: z.enum(['ready', 'loading', 'buffering', 'desynced', 'not_connected']),
+  reportedPosition: z.number().nonnegative().optional(),
+  activePlatform: z.string().trim().max(50).optional(),
+  activeMediaId: z.string().trim().max(256).optional(),
+});
+
+export const SyncPlaySchema = z.object({
+  position: z.number().nonnegative().optional(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+}).optional();
+
+export const SyncPauseSchema = z.object({
+  position: z.number().nonnegative().optional(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+}).optional();
+
+export const SyncSeekSchema = z.object({
+  position: z.number().nonnegative(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+});
+
+export const SyncDriftCheckSchema = z.object({
+  clientPosition: z.number().nonnegative(),
+  clientTimestamp: z.number().nonnegative(),
+});
+
+export const MediaChangedSchema = z.object({
+  platform: z.string().trim().min(1).max(50),
+  mediaId: z.string().trim().min(1).max(256),
+  title: z.string().trim().max(200).optional(),
+  url: z.string().trim().max(500).optional(),
+  duration: z.number().nonnegative().optional(),
+});
+
+export const ChatTypingSchema = z.object({
+  isTyping: z.boolean(),
+});
+
+export const ExtensionStatusSchema = z.object({
+  installed: z.boolean(),
+  activePlatform: z.string().trim().max(50).optional(),
+  currentTabUrl: z.string().trim().max(500).optional(),
+});
