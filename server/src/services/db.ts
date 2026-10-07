@@ -1,4 +1,5 @@
 import pg from 'pg';
+import type { UserRecord, SessionRecord } from './auth.js';
 
 const { Pool } = pg;
 
@@ -9,6 +10,28 @@ export interface RoomRecord {
   current_time: number;
   updated_at: number;
   created_at?: Date;
+  owner_id?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+  name?: string;
+}
+
+export interface WatchHistoryItem {
+  id: string;
+  userId: string;
+  platform: string;
+  mediaId: string;
+  title: string;
+  watchedAt: number;
+  progress: number;
+}
+
+export interface FriendshipRecord {
+  id: string;
+  requesterId: string;
+  receiverId: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: number;
+  updatedAt: number;
 }
 
 export class DatabaseService {
@@ -25,6 +48,10 @@ export class DatabaseService {
     }
   }
 
+  public isConnectedToDb(): boolean {
+    return this.isConnected && this.pool !== null;
+  }
+
   public async init(): Promise<void> {
     if (!this.pool) {
       console.log('[DB] No DATABASE_URL provided. Running with in-memory state.');
@@ -34,39 +61,94 @@ export class DatabaseService {
     try {
       const client = await this.pool.connect();
       await client.query(`
+        -- Users table
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR(64) PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          username VARCHAR(100) NOT NULL,
+          password_hash TEXT NOT NULL,
+          avatar_id VARCHAR(50),
+          bio TEXT,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL
+        );
+
+        -- Sessions table
+        CREATE TABLE IF NOT EXISTS sessions (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          token_hash VARCHAR(64) UNIQUE NOT NULL,
+          expires_at BIGINT NOT NULL,
+          created_at BIGINT NOT NULL
+        );
+
+        -- Rooms table
         CREATE TABLE IF NOT EXISTS rooms (
           id VARCHAR(32) PRIMARY KEY,
-          video_id VARCHAR(32) NOT NULL,
+          video_id VARCHAR(256) NOT NULL,
           play_state VARCHAR(16) NOT NULL,
           current_time DOUBLE PRECISION NOT NULL,
           updated_at BIGINT NOT NULL,
+          owner_id VARCHAR(64),
+          visibility VARCHAR(16) DEFAULT 'public',
+          name VARCHAR(120),
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Watch History table
+        CREATE TABLE IF NOT EXISTS watch_history (
+          id VARCHAR(64) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          platform VARCHAR(32) NOT NULL,
+          media_id VARCHAR(256) NOT NULL,
+          title TEXT NOT NULL,
+          watched_at BIGINT NOT NULL,
+          progress DOUBLE PRECISION DEFAULT 0
+        );
+
+        -- Friendships table
+        CREATE TABLE IF NOT EXISTS friendships (
+          id VARCHAR(64) PRIMARY KEY,
+          requester_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          receiver_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL,
+          CONSTRAINT unique_friend_pair UNIQUE(requester_id, receiver_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id);
+        CREATE INDEX IF NOT EXISTS idx_friendships_users ON friendships(requester_id, receiver_id);
       `);
       client.release();
       this.isConnected = true;
-      console.log('[DB] PostgreSQL connected and initialized.');
+      console.log('[DB] PostgreSQL connected and initialized with V2 schemas.');
     } catch (err) {
       console.warn('[DB] Failed to connect to PostgreSQL. Falling back to in-memory state:', (err as Error).message);
       this.isConnected = false;
     }
   }
 
+  // Room operations
   public async saveRoom(record: RoomRecord): Promise<void> {
     if (!this.isConnected || !this.pool) return;
 
     try {
       await this.pool.query(
         `
-        INSERT INTO rooms (id, video_id, play_state, current_time, updated_at)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO rooms (id, video_id, play_state, current_time, updated_at, owner_id, visibility, name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
           video_id = EXCLUDED.video_id,
           play_state = EXCLUDED.play_state,
           current_time = EXCLUDED.current_time,
-          updated_at = EXCLUDED.updated_at;
+          updated_at = EXCLUDED.updated_at,
+          owner_id = COALESCE(EXCLUDED.owner_id, rooms.owner_id),
+          visibility = COALESCE(EXCLUDED.visibility, rooms.visibility),
+          name = COALESCE(EXCLUDED.name, rooms.name);
         `,
-        [record.id, record.video_id, record.play_state, record.current_time, record.updated_at]
+        [record.id, record.video_id, record.play_state, record.current_time, record.updated_at, record.owner_id || null, record.visibility || 'public', record.name || null]
       );
     } catch (err) {
       console.error('[DB] Failed to save room to DB:', (err as Error).message);
@@ -83,6 +165,157 @@ export class DatabaseService {
     } catch (err) {
       console.error('[DB] Failed to fetch room from DB:', (err as Error).message);
       return null;
+    }
+  }
+
+  // User operations
+  public async saveUser(user: UserRecord): Promise<void> {
+    if (!this.isConnected || !this.pool) return;
+    try {
+      await this.pool.query(
+        `
+        INSERT INTO users (id, email, username, password_hash, avatar_id, bio, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (id) DO UPDATE SET
+          username = EXCLUDED.username,
+          avatar_id = EXCLUDED.avatar_id,
+          bio = EXCLUDED.bio,
+          updated_at = EXCLUDED.updated_at;
+        `,
+        [user.id, user.email, user.username, user.passwordHash, user.avatarId || null, user.bio || '', user.createdAt, user.updatedAt]
+      );
+    } catch (err) {
+      console.error('[DB] Failed to save user to DB:', (err as Error).message);
+    }
+  }
+
+  public async findUserByEmail(email: string): Promise<UserRecord | null> {
+    if (!this.isConnected || !this.pool) return null;
+    try {
+      const res = await this.pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (res.rows.length === 0) return null;
+      const row = res.rows[0];
+      return {
+        id: row.id,
+        email: row.email,
+        username: row.username,
+        passwordHash: row.password_hash,
+        avatarId: row.avatar_id,
+        bio: row.bio,
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+      };
+    } catch (err) {
+      console.error('[DB] Failed to find user by email:', (err as Error).message);
+      return null;
+    }
+  }
+
+  public async findUserById(id: string): Promise<UserRecord | null> {
+    if (!this.isConnected || !this.pool) return null;
+    try {
+      const res = await this.pool.query('SELECT * FROM users WHERE id = $1', [id]);
+      if (res.rows.length === 0) return null;
+      const row = res.rows[0];
+      return {
+        id: row.id,
+        email: row.email,
+        username: row.username,
+        passwordHash: row.password_hash,
+        avatarId: row.avatar_id,
+        bio: row.bio,
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+      };
+    } catch (err) {
+      console.error('[DB] Failed to find user by id:', (err as Error).message);
+      return null;
+    }
+  }
+
+  // Session operations
+  public async saveSession(session: SessionRecord): Promise<void> {
+    if (!this.isConnected || !this.pool) return;
+    try {
+      await this.pool.query(
+        `
+        INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO NOTHING;
+        `,
+        [session.id, session.userId, session.tokenHash, session.expiresAt, session.createdAt]
+      );
+    } catch (err) {
+      console.error('[DB] Failed to save session:', (err as Error).message);
+    }
+  }
+
+  public async findSessionByTokenHash(tokenHash: string): Promise<SessionRecord | null> {
+    if (!this.isConnected || !this.pool) return null;
+    try {
+      const res = await this.pool.query('SELECT * FROM sessions WHERE token_hash = $1', [tokenHash]);
+      if (res.rows.length === 0) return null;
+      const row = res.rows[0];
+      return {
+        id: row.id,
+        userId: row.user_id,
+        tokenHash: row.token_hash,
+        expiresAt: Number(row.expires_at),
+        createdAt: Number(row.created_at),
+      };
+    } catch (err) {
+      console.error('[DB] Failed to find session:', (err as Error).message);
+      return null;
+    }
+  }
+
+  public async deleteSession(tokenHash: string): Promise<void> {
+    if (!this.isConnected || !this.pool) return;
+    try {
+      await this.pool.query('DELETE FROM sessions WHERE token_hash = $1', [tokenHash]);
+    } catch (err) {
+      console.error('[DB] Failed to delete session:', (err as Error).message);
+    }
+  }
+
+  // Watch history operations
+  public async addWatchHistory(item: WatchHistoryItem): Promise<void> {
+    if (!this.isConnected || !this.pool) return;
+    try {
+      await this.pool.query(
+        `
+        INSERT INTO watch_history (id, user_id, platform, media_id, title, watched_at, progress)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (id) DO UPDATE SET
+          watched_at = EXCLUDED.watched_at,
+          progress = EXCLUDED.progress;
+        `,
+        [item.id, item.userId, item.platform, item.mediaId, item.title, item.watchedAt, item.progress]
+      );
+    } catch (err) {
+      console.error('[DB] Failed to add watch history:', (err as Error).message);
+    }
+  }
+
+  public async getWatchHistory(userId: string, limit: number = 20): Promise<WatchHistoryItem[]> {
+    if (!this.isConnected || !this.pool) return [];
+    try {
+      const res = await this.pool.query(
+        'SELECT * FROM watch_history WHERE user_id = $1 ORDER BY watched_at DESC LIMIT $2',
+        [userId, limit]
+      );
+      return res.rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        platform: row.platform,
+        mediaId: row.media_id,
+        title: row.title,
+        watchedAt: Number(row.watched_at),
+        progress: Number(row.progress),
+      }));
+    } catch (err) {
+      console.error('[DB] Failed to fetch watch history:', (err as Error).message);
+      return [];
     }
   }
 
