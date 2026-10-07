@@ -8,8 +8,10 @@ import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { extractYouTubeId } from './utils/youtube.js';
 import { serverSentry } from './services/sentry.js';
+import { AuthService, UserProfile } from './services/auth.js';
 
-export function createApp(roomManager: RoomManager, dbService?: DatabaseService): Express {
+export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
+  const auth = authService || new AuthService(dbService);
   const app = express();
   app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 
@@ -145,6 +147,212 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService)
         playState: room.playState,
         participantCount: room.getParticipantCount(),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ── V2 REST API ENDPOINTS ──────────────────────────────────
+  const getAuthUser = async (req: Request): Promise<UserProfile | null> => {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) return null;
+    const token = header.slice(7).trim();
+    return auth.validateSession(token);
+  };
+
+  // Supported Platforms & Capabilities
+  app.get('/api/platforms', (_req: Request, res: Response) => {
+    res.status(200).json({
+      platforms: [
+        {
+          id: 'youtube',
+          name: 'YouTube',
+          status: 'SUPPORTED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: true },
+        },
+        {
+          id: 'generic',
+          name: 'HTML5 Video',
+          status: 'SUPPORTED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: true },
+        },
+        {
+          id: 'netflix',
+          name: 'Netflix',
+          status: 'PLANNED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: false },
+        },
+        {
+          id: 'prime',
+          name: 'Prime Video',
+          status: 'PLANNED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: false },
+        },
+      ],
+    });
+  });
+
+  // Room Readiness
+  app.get('/api/rooms/:roomId/readiness', (req: Request, res: Response) => {
+    const roomId = req.params.roomId.toUpperCase();
+    const room = roomManager.getRoom(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    res.status(200).json({
+      roomId: room.id,
+      readiness: room.universalSync.getAllReadiness(),
+      allReady: room.universalSync.areAllParticipantsReady(),
+    });
+  });
+
+  // Universal Sync State Snapshot
+  app.get('/api/rooms/:roomId/sync', (req: Request, res: Response) => {
+    const roomId = req.params.roomId.toUpperCase();
+    const room = roomManager.getRoom(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    res.status(200).json({
+      roomId: room.id,
+      snapshot: room.getUniversalSnapshot(),
+    });
+  });
+
+  // Auth: Register
+  app.post('/api/auth/register', apiRateLimiter(20, 60000), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, username, password, avatarId } = req.body || {};
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'Valid email address is required.' });
+      }
+      if (!username || typeof username !== 'string' || username.trim().length < 2) {
+        return res.status(400).json({ error: 'Username must be at least 2 characters.' });
+      }
+      if (!password || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+      }
+
+      const result = await auth.register(email, username, password, avatarId);
+      res.status(201).json(result);
+    } catch (err: any) {
+      if (err.message?.includes('already registered')) {
+        return res.status(409).json({ error: err.message });
+      }
+      next(err);
+    }
+  });
+
+  // Auth: Login
+  app.post('/api/auth/login', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required.' });
+      }
+
+      const result = await auth.login(email, password);
+      res.status(200).json(result);
+    } catch (err: any) {
+      if (err.message?.includes('Invalid email or password')) {
+        return res.status(401).json({ error: err.message });
+      }
+      next(err);
+    }
+  });
+
+  // Auth: Logout
+  app.post('/api/auth/logout', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const header = req.headers.authorization;
+      if (header?.startsWith('Bearer ')) {
+        const token = header.slice(7).trim();
+        await auth.logout(token);
+      }
+      res.status(200).json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Auth: Current User Profile
+  app.get('/api/me', async (req: Request, res: Response) => {
+    const user = await getAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized: Please login.' });
+    }
+    res.status(200).json({ user });
+  });
+
+  app.get('/api/profile', async (req: Request, res: Response) => {
+    const user = await getAuthUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized: Please login.' });
+    }
+    res.status(200).json({ user });
+  });
+
+  // Auth: Update Profile
+  app.patch('/api/profile', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await getAuthUser(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: Please login.' });
+      }
+
+      const { username, avatarId, bio } = req.body || {};
+      const updated = await auth.updateProfile(user.id, { username, avatarId, bio });
+      res.status(200).json({ user: updated });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Watch History
+  app.get('/api/history', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await getAuthUser(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: Please login.' });
+      }
+
+      if (dbService && dbService.isConnectedToDb()) {
+        const history = await dbService.getWatchHistory(user.id);
+        return res.status(200).json({ history });
+      }
+
+      res.status(200).json({ history: [] });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post('/api/history', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await getAuthUser(req);
+      if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: Please login.' });
+      }
+
+      const { platform, mediaId, title, progress } = req.body || {};
+      if (!platform || !mediaId || !title) {
+        return res.status(400).json({ error: 'Missing required history parameters.' });
+      }
+
+      if (dbService && dbService.isConnectedToDb()) {
+        const id = randomBytes(16).toString('hex');
+        await dbService.addWatchHistory({
+          id,
+          userId: user.id,
+          platform,
+          mediaId,
+          title,
+          watchedAt: Date.now(),
+          progress: typeof progress === 'number' ? progress : 0,
+        });
+      }
+
+      res.status(201).json({ success: true });
     } catch (err) {
       next(err);
     }
