@@ -11,6 +11,8 @@ interface ChatProps {
   currentUserAvatarId?: string;
   viewerCount?: number;
   activePoll: RoomPoll | null;
+  typingUsers?: string[];
+  onTypingChange?: (isTyping: boolean) => void;
   onVotePoll: (optionIndex: number) => void;
   onSendMessage: (text: string, replyTo?: ChatReplyPreview) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
@@ -36,6 +38,8 @@ export const Chat: React.FC<ChatProps> = ({
   currentUserId,
   currentUserAvatarId,
   activePoll,
+  typingUsers,
+  onTypingChange,
   onVotePoll,
   onSendMessage,
   onToggleReaction,
@@ -48,6 +52,7 @@ export const Chat: React.FC<ChatProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,9 +62,27 @@ export const Chat: React.FC<ChatProps> = ({
     scrollToBottom();
   }, [messages, activePoll?.id]);
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    if (onTypingChange) {
+      if (val.trim().length > 0) {
+        onTypingChange(true);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          onTypingChange(false);
+        }, 2000);
+      } else {
+        onTypingChange(false);
+      }
+    }
+  };
+
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    if (onTypingChange) onTypingChange(false);
     onSendMessage(inputText.trim(), replyingTo || undefined);
     setInputText('');
     setReplyingTo(null);
@@ -340,6 +363,14 @@ export const Chat: React.FC<ChatProps> = ({
         </div>
       )}
 
+      {/* Typing Indicator */}
+      {typingUsers && typingUsers.length > 0 && (
+        <div style={{ padding: '0.2rem 0.8rem', fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
+          {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is typing...' : 'are typing...'}
+        </div>
+      )}
+
       {/* Input Bar */}
       <form onSubmit={handleSend} className="chat-input-bar">
         <button
@@ -357,7 +388,7 @@ export const Chat: React.FC<ChatProps> = ({
           className="chat-input-v2"
           placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Type a message..."}
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
+          onChange={handleInputChange}
           maxLength={500}
           autoComplete="off"
         />

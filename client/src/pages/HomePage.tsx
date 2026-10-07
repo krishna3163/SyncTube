@@ -29,11 +29,13 @@ import {
   removeStoredParty,
   clearStoredParties,
 } from '../utils/partyStorage.js';
-import { StoredWatchParty, UserSettings } from '../types.js';
+import { StoredWatchParty, UserSettings, UserProfile } from '../types.js';
 import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
 import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
+import { AuthModal } from '../components/AuthModal.js';
+import { authStorage } from '../utils/authStorage.js';
 
 interface HomePageProps {
   userId: string;
@@ -88,6 +90,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Stored watch parties in browser (filtered by user)
   const [storedParties, setStoredParties] = useState<StoredWatchParty[]>([]);
@@ -402,6 +406,30 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               <Sun size={17} />
             </button>
           )}
+
+          <button
+            type="button"
+            className="auth-header-btn"
+            onClick={() => setIsAuthModalOpen(true)}
+            title={currentUser ? `Signed in as @${currentUser.username}` : 'Sign In / Register'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: currentUser ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+              border: currentUser ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid rgba(255, 255, 255, 0.12)',
+              color: currentUser ? '#38bdf8' : 'var(--text-secondary, #cbd5e1)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <User size={14} />
+            <span>{currentUser ? currentUser.username : 'Sign In'}</span>
+          </button>
 
           <div
             className="home-header-profile"
@@ -869,6 +897,33 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
           </div>
         </div>
       )}
+
+      {/* V2 Auth / Profile Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        apiUrl={getApiUrl()}
+        onAuthSuccess={(user, token) => {
+          setCurrentUser(user);
+          authStorage.setUser(user);
+          authStorage.setToken(token);
+          if (user.avatarId) {
+            setSelectedAvatarId(user.avatarId);
+            rememberParticipantCharacter(user.username, undefined, user.avatarId);
+          }
+          if (user.username) {
+            setCreateUsername(user.username);
+            setJoinUsername(user.username);
+          }
+        }}
+        onLogout={() => {
+          setCurrentUser(null);
+          authStorage.clearToken();
+          authStorage.clearUser();
+        }}
+        onNotify={onNotify}
+      />
     </div>
   );
 };

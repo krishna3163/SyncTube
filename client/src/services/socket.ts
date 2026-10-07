@@ -162,3 +162,69 @@ export const startTimeSync = () => {
     socket.off('time_sync_pong', onPong);
   };
 };
+
+// ── V2 Socket Emitters ──────────────────────────────────────
+export const emitPartyReady = (
+  status: 'ready' | 'loading' | 'buffering' | 'desynced' | 'not_connected',
+  reportedPosition?: number,
+  activePlatform?: string,
+  activeMediaId?: string
+) => {
+  socket.emit('party:ready', {
+    status,
+    reportedPosition,
+    activePlatform,
+    activeMediaId,
+  });
+};
+
+export const emitSyncPlay = (position?: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:play', { position, eventId, revision });
+};
+
+export const emitSyncPause = (position?: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:pause', { position, eventId, revision });
+};
+
+export const emitSyncSeek = (position: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:seek', { position, eventId, revision });
+};
+
+export const emitSyncDriftCheck = (clientPosition: number) => {
+  socket.emit('sync:drift_check', {
+    clientPosition,
+    clientTimestamp: Date.now(),
+  });
+};
+
+export const emitMediaChanged = (
+  platform: string,
+  mediaId: string,
+  title?: string,
+  url?: string,
+  duration?: number
+) => {
+  socket.emit('media:changed', {
+    platform,
+    mediaId,
+    title,
+    url,
+    duration,
+  });
+};
+
+export const emitChatTyping = (isTyping: boolean) => {
+  socket.emit('chat:typing', { isTyping });
+};
+
+export const emitExtensionStatus = (
+  installed: boolean,
+  activePlatform?: string,
+  currentTabUrl?: string
+) => {
+  socket.emit('extension:status', {
+    installed,
+    activePlatform,
+    currentTabUrl,
+  });
+};

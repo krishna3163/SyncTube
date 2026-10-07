@@ -24,6 +24,9 @@ import {
   emitSendReaction,
   emitUpdateAvatar,
   startTimeSync,
+  emitPartyReady,
+  emitSyncDriftCheck,
+  emitChatTyping,
 } from '../services/socket.js';
 import {
   Role,
@@ -46,6 +49,10 @@ import {
   ChatReplyPreview,
   EmojiReaction,
   RoomPoll,
+  UserProfile,
+  ParticipantReadiness,
+  UniversalPlaybackState,
+  DriftAssessment,
 } from '../types.js';
 import { YouTubePlayer, YouTubePlayerHandle } from '../components/YouTubePlayer.js';
 import { PlaybackControls } from '../components/PlaybackControls.js';
@@ -60,6 +67,11 @@ import { ReactionOverlay } from '../components/ReactionOverlay.js';
 import { FloatingReactions } from '../components/FloatingReactions.js';
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 import { InviteModal } from '../components/InviteModal.js';
+import { AuthModal } from '../components/AuthModal.js';
+import { SyncDiagnosticsModal } from '../components/SyncDiagnosticsModal.js';
+import { ExtensionStatusBanner } from '../components/ExtensionStatusBanner.js';
+import { authStorage } from '../utils/authStorage.js';
+import { getApiUrl } from './HomePage.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
@@ -221,6 +233,31 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
+
+  // V2 Features State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState<boolean>(false);
+  const [universalSyncState, setUniversalSyncState] = useState<UniversalPlaybackState | null>(null);
+  const [readinessList, setReadinessList] = useState<ParticipantReadiness[]>([]);
+  const [isCurrentUserReady, setIsCurrentUserReady] = useState<boolean>(true);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [driftAssessment, setDriftAssessment] = useState<DriftAssessment | null>(null);
+  const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
+  const apiUrl = getApiUrl();
+
+  const handleToggleReady = useCallback(() => {
+    setIsCurrentUserReady((prev) => {
+      const next = !prev;
+      emitPartyReady(next ? 'ready' : 'buffering', ytPlayerRef.current?.getCurrentTime() || 0, 'youtube', videoId);
+      onNotifyRef.current(next ? 'Marked as Ready 🟢' : 'Marked as Buffering 🟡', 'info');
+      return next;
+    });
+  }, [videoId]);
+
+  const handleTypingChange = useCallback((isTyping: boolean) => {
+    emitChatTyping(isTyping);
+  }, []);
 
   const handleToggleTheaterMode = useCallback(() => {
     setIsTheaterMode((prev) => {
@@ -430,6 +467,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
       rememberParticipantCharacter(userSettings.name || username, userId, activeAvatar);
       emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar, getRoomIdentityToken(roomId));
+      emitPartyReady('ready', 0, 'youtube', videoId);
       addActivityRef.current('Connected to room session.', 'joined', {
         username: userSettings.name || username,
         userId,
@@ -691,11 +729,49 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       });
     };
 
+    // V2 Universal Listeners
+    const onSyncStateV2 = (data: UniversalPlaybackState) => {
+      setUniversalSyncState(data);
+    };
+
+    const onReadinessUpdate = (data: { readiness: ParticipantReadiness[] }) => {
+      if (Array.isArray(data?.readiness)) {
+        setReadinessList(data.readiness);
+      }
+    };
+
+    const onDriftAssessmentReceived = (data: DriftAssessment & { snapshot?: UniversalPlaybackState }) => {
+      setDriftAssessment(data);
+      if (data.snapshot) setUniversalSyncState(data.snapshot);
+      if (data.action === 'soft_rate_adjust' && data.targetRate) {
+        ytPlayerRef.current?.setPlaybackRate(data.targetRate);
+      } else if (data.action === 'hard_seek' && data.targetPosition !== undefined) {
+        ytPlayerRef.current?.seekTo(data.targetPosition, true);
+        ytPlayerRef.current?.setPlaybackRate(1.0);
+      } else {
+        ytPlayerRef.current?.setPlaybackRate(1.0);
+      }
+    };
+
+    const onUserTyping = (data: { userId: string; username: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => {
+        if (data.isTyping) {
+          return prev.includes(data.username) ? prev : [...prev, data.username];
+        } else {
+          return prev.filter((u) => u !== data.username);
+        }
+      });
+    };
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
     socket.on('sync_state', onSyncState);
     socket.on('sync_pulse', onSyncPulse);
+    socket.on('sync:state', onSyncStateV2);
+    socket.on('party:readiness_update', onReadinessUpdate);
+    socket.on('sync:drift_assessment', onDriftAssessmentReceived);
+    socket.on('chat:user_typing', onUserTyping);
     socket.on('playlist_sync', onPlaylistSync);
     socket.on('playlist_update', onPlaylistUpdate);
     socket.on('pending_requests_sync', onPendingRequestsSync);
@@ -728,6 +804,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('connect_error', onConnectError);
       socket.off('sync_state', onSyncState);
       socket.off('sync_pulse', onSyncPulse);
+      socket.off('sync:state', onSyncStateV2);
+      socket.off('party:readiness_update', onReadinessUpdate);
+      socket.off('sync:drift_assessment', onDriftAssessmentReceived);
+      socket.off('chat:user_typing', onUserTyping);
       socket.off('playlist_sync', onPlaylistSync);
       socket.off('playlist_update', onPlaylistUpdate);
       socket.off('pending_requests_sync', onPendingRequestsSync);
@@ -749,6 +829,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       emitLeaveRoom(roomId);
     };
   }, [roomId, username, userId, userSettings.name, userSettings.avatarId, addActivity]);
+
+  // Periodic drift check calibration every 5 seconds when playing
+  useEffect(() => {
+    if (syncState?.playState !== 'playing') return;
+    const interval = setInterval(() => {
+      emitSyncDriftCheck(currentTimeRef.current);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [syncState?.playState]);
 
   // Actions
   const handlePlay = useCallback((time?: number) => {
@@ -1032,6 +1121,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
+        onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        currentUser={currentUser}
         isTheaterMode={isTheaterMode}
         onToggleTheater={handleToggleTheaterMode}
         syncState={syncState}
@@ -1042,6 +1134,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       <main className="room-container">
         {/* Left Side: Large Theater Video Stage with YouTube Ambient Lighting & Floating Overlay Controls */}
         <div className="stage-area">
+          {/* SyncTube V2 Extension & Media Status */}
+          <ExtensionStatusBanner
+            extensionInstalled={extensionInstalled}
+            partyMedia={universalSyncState?.mediaIdentity || { platform: 'youtube', mediaId: videoId, title: 'YouTube Video' }}
+            activeTabMedia={null}
+          />
+
           {/* Floating Host Approval Alert Banner for incoming Participant requests */}
           {pendingRequests.length > 0 && (userRole === 'HOST' || userRole === 'MODERATOR') && (
             <div className="host-approval-banner">
@@ -1247,6 +1346,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserId={userId}
                 currentUserRole={userRole}
                 currentUserAvatarId={userSettings.avatarId}
+                readinessList={readinessList}
+                isCurrentUserReady={isCurrentUserReady}
+                onToggleReady={handleToggleReady}
                 onAssignRole={handleAssignRole}
                 onRemoveParticipant={handleRemoveParticipant}
               />
@@ -1282,6 +1384,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 onSendMessage={handleSendChat}
                 onToggleReaction={handleToggleMessageReaction}
                 onSendReaction={handleSendReaction}
+                typingUsers={typingUsers}
+                onTypingChange={handleTypingChange}
               />
             )}
 
@@ -1340,6 +1444,35 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onClose={() => setIsInviteModalOpen(false)}
         roomId={roomId}
         onNotify={onNotify}
+      />
+
+      {/* V2 Auth / Profile Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        apiUrl={apiUrl}
+        onAuthSuccess={(user, token) => {
+          setCurrentUser(user);
+          authStorage.setUser(user);
+          authStorage.setToken(token);
+        }}
+        onLogout={() => {
+          setCurrentUser(null);
+          authStorage.clearToken();
+          authStorage.clearUser();
+        }}
+        onNotify={onNotify}
+      />
+
+      {/* V2 Sync Diagnostics Modal */}
+      <SyncDiagnosticsModal
+        isOpen={isDiagnosticsModalOpen}
+        onClose={() => setIsDiagnosticsModalOpen(false)}
+        syncState={universalSyncState}
+        driftAssessment={driftAssessment}
+        rttMs={50}
+        connectionStatus={connectionStatus}
       />
     </div>
   );

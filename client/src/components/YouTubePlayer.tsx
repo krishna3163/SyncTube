@@ -17,6 +17,8 @@ export interface YouTubePlayerHandle {
   isCaptionsOn: () => boolean;
   setPlaybackRate: (rate: number) => void;
   getPlaybackRate: () => number;
+  seekTo: (time: number, allowSeekAhead?: boolean) => void;
+  getCurrentTime: () => number;
 }
 
 interface YouTubePlayerProps {
@@ -416,7 +418,22 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       } catch {
         return targetPlaybackRateRef.current;
       }
-    }
+    },
+    seekTo: (time: number, allowSeekAhead = true) => {
+      try {
+        if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+          ignoreStateChangesUntilRef.current = Date.now() + 1000;
+          playerRef.current.seekTo(time, allowSeekAhead);
+        }
+      } catch {}
+    },
+    getCurrentTime: () => {
+      try {
+        return playerRef.current?.getCurrentTime?.() || 0;
+      } catch {
+        return 0;
+      }
+    },
   }));
 
   return (

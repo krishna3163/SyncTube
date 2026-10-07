@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard } from 'lucide-react';
-import { ConnectionStatus, SyncStatePayload } from '../types.js';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User } from 'lucide-react';
+import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
+import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 
 interface RoomHeaderProps {
   roomId: string;
@@ -11,6 +12,9 @@ interface RoomHeaderProps {
   onOpenSettings: () => void;
   onOpenInvite?: () => void;
   onOpenSearch?: () => void;
+  onOpenDiagnostics?: () => void;
+  onOpenAuth?: () => void;
+  currentUser?: UserProfile | null;
   isTheaterMode?: boolean;
   onToggleTheater?: () => void;
   syncState?: SyncStatePayload | null;
@@ -26,6 +30,9 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onOpenSettings,
   onOpenInvite,
   onOpenSearch,
+  onOpenDiagnostics,
+  onOpenAuth,
+  currentUser,
   isTheaterMode,
   onToggleTheater,
   syncState = null,
@@ -105,6 +112,34 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           >
             <Share2 size={14} />
             <span className="header-btn-text">Invite</span>
+          </button>
+        )}
+
+        {onOpenDiagnostics && (
+          <button
+            className="btn btn-secondary header-btn"
+            onClick={onOpenDiagnostics}
+            title="Sync Diagnostics & Telemetry"
+            aria-label="Diagnostics"
+          >
+            <Activity size={14} color="#06b6d4" />
+            <span className="header-btn-text">Diagnostics</span>
+          </button>
+        )}
+
+        {onOpenAuth && (
+          <button
+            className="btn btn-secondary header-btn"
+            onClick={onOpenAuth}
+            title={currentUser ? `Profile: ${currentUser.username}` : 'Sign in or register'}
+            aria-label="Account"
+          >
+            {currentUser ? (
+              <AnimeAvatarDisplay username={currentUser.username} avatarId={currentUser.avatarId || 'pikachu'} size={18} />
+            ) : (
+              <User size={14} color="#c084fc" />
+            )}
+            <span className="header-btn-text">{currentUser ? currentUser.username : 'Account'}</span>
           </button>
         )}
 
