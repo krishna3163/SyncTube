@@ -1,4 +1,5 @@
 import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest, ChatMessage } from '../types.js';
+import { UniversalSyncSession, MediaIdentity, UniversalPlaybackState } from '../sync/universalSync.js';
 
 export interface ServerPlaylistItem {
   id: string;
@@ -10,6 +11,7 @@ export interface ServerPlaylistItem {
   addedBy?: string;
   addedByAvatarId?: string;
   votes?: string[];
+  platform?: string;
 }
 
 export interface RoomPoll {
@@ -47,6 +49,9 @@ export class Room {
   public hostUserId: string | null = null;
   public playlist: ServerPlaylistItem[] = [];
   public activePoll: RoomPoll | null = null;
+  public universalSync: UniversalSyncSession;
+  public name: string = 'Watch Party';
+  public visibility: 'public' | 'private' | 'unlisted' = 'public';
 
   private participants: Map<string, Participant> = new Map();
   private identityCredentialHashes: Map<string, string> = new Map();
@@ -69,6 +74,9 @@ export class Room {
     if (creatorIdentity) {
       this.identityCredentialHashes.set(creatorIdentity.userId, creatorIdentity.credentialHash);
     }
+    this.universalSync = new UniversalSyncSession(
+      initialVideoId ? { platform: 'youtube', mediaId: initialVideoId, title: 'YouTube Video' } : undefined
+    );
   }
 
   public isRemoved(userId: string): boolean {
@@ -247,7 +255,7 @@ export class Room {
     return this.currentTime;
   }
 
-  public play(time?: number): void {
+  public play(time?: number, eventId?: string, senderId?: string): void {
     if (typeof time === 'number' && !isNaN(time) && time >= 0) {
       this.currentTime = time;
     } else {
@@ -255,9 +263,10 @@ export class Room {
     }
     this.playState = 'playing';
     this.updatedAt = Date.now();
+    this.universalSync.applyPlay(this.currentTime, eventId, senderId);
   }
 
-  public pause(time?: number): void {
+  public pause(time?: number, eventId?: string, senderId?: string): void {
     if (typeof time === 'number' && !isNaN(time) && time >= 0) {
       this.currentTime = time;
     } else {
@@ -265,18 +274,29 @@ export class Room {
     }
     this.playState = 'paused';
     this.updatedAt = Date.now();
+    this.universalSync.applyPause(this.currentTime, eventId, senderId);
   }
 
-  public seek(time: number): void {
+  public seek(time: number, eventId?: string, senderId?: string): void {
     this.currentTime = Math.max(0, time);
     this.updatedAt = Date.now();
+    this.universalSync.applySeek(this.currentTime, eventId, senderId);
   }
 
-  public changeVideo(videoId: string): void {
+  public changeVideo(videoId: string, title?: string, platform: string = 'youtube'): void {
     this.videoId = videoId;
     this.currentTime = 0;
     this.playState = 'paused';
     this.updatedAt = Date.now();
+    this.universalSync.setMediaIdentity({
+      platform,
+      mediaId: videoId,
+      title: title || (platform === 'youtube' ? 'YouTube Video' : 'Media Stream'),
+    });
+  }
+
+  public getUniversalSnapshot(): UniversalPlaybackState {
+    return this.universalSync.getStateSnapshot();
   }
 
   // ── Playlist mutations ────────────────────────────────────
