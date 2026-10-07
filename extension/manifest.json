@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "SyncTube — Universal Watch Party",
+  "version": "2.0.0",
+  "description": "Synchronize video playback across YouTube and web video platforms with friends in real-time.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.youtube.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background/serviceWorker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.youtube.com/*"
+      ],
+      "js": [
+        "src/content/contentScript.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "SyncTube Party",
+    "default_popup": "src/popup/popup.html"
+  }
+}

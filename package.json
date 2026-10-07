@@ -5,19 +5,22 @@
   "type": "module",
   "workspaces": [
     "server",
-    "client"
+    "client",
+    "extension"
   ],
   "scripts": {
     "dev": "concurrently -n \"server,client\" -c \"blue,green\" \"npm run dev -w server\" \"npm run dev -w client\"",
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
-    "build": "npm run build -w server && npm run build -w client",
+    "build": "npm run build -w server && npm run build -w client && npm run build -w extension",
     "build:server": "npm run build -w server",
     "build:client": "npm run build -w client",
+    "build:extension": "npm run build -w extension",
     "start": "npm run start -w server",
-    "test": "npm run test -w server && npm run test -w client",
+    "test": "npm run test -w server && npm run test -w client && npm run test -w extension",
     "test:server": "npm run test -w server",
     "test:client": "npm run test -w client",
+    "test:extension": "npm run test -w extension",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
