@@ -177,13 +177,13 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
     // Always include public Render endpoint as fallback if local/primary fails
     const alreadyHasFallback = endpointsToTry.some((endpoint) => {
       try {
-        return new URL(endpoint, window.location.origin).hostname === 'synctube-2ar4.onrender.com';
+        return new URL(endpoint, window.location.origin).hostname === 'youtube-watch-party-api-buaf.onrender.com';
       } catch {
         return false;
       }
     });
     if (!alreadyHasFallback) {
-      endpointsToTry.push(`https://synctube-2ar4.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
+      endpointsToTry.push(`https://youtube-watch-party-api-buaf.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
     let loadedVideos: SearchResultItem[] | null = null;

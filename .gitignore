@@ -28,3 +28,6 @@ playwright-report/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local spec notes
+temp.md

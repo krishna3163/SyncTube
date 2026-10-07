@@ -2,8 +2,8 @@
   "buildCommand": "npm run build:client",
   "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://synctube-2ar4.onrender.com/api/$1" },
-    { "source": "/socket.io/(.*)", "destination": "https://synctube-2ar4.onrender.com/socket.io/$1" },
+    { "source": "/api/(.*)", "destination": "https://youtube-watch-party-api-buaf.onrender.com/api/$1" },
+    { "source": "/socket.io/(.*)", "destination": "https://youtube-watch-party-api-buaf.onrender.com/socket.io/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
