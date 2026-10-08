@@ -1287,6 +1287,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           onLocalSeek={handleSeek}
                           onCurrentTimeChange={handleTimeChange}
                           onVideoEnded={handleVideoEnded}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
                         />
                       );
                     }

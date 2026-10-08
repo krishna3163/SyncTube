@@ -200,24 +200,24 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
 
 export const CINEMA_SAMPLE_PRESETS = [
   {
-    name: 'Sintel Cinema (4K MP4)',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    name: 'Sintel Trailer (MP4)',
+    url: 'https://media.w3.org/2010/05/sintel/trailer.mp4',
     category: 'direct_stream' as const,
     icon: '🐉',
     badge: 'Direct Stream',
   },
   {
-    name: 'Big Buck Bunny (MP4)',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    name: 'Oceans Nature (4K MP4)',
+    url: 'https://vjs.zencdn.net/v/oceans.mp4',
     category: 'direct_stream' as const,
-    icon: '🐰',
+    icon: '🌊',
     badge: 'Direct Stream',
   },
   {
-    name: 'Tears of Steel (Sci-Fi MP4)',
-    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    name: 'Big Buck Bunny (MP4)',
+    url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4',
     category: 'direct_stream' as const,
-    icon: '🤖',
+    icon: '🐰',
     badge: 'Direct Stream',
   },
   {
