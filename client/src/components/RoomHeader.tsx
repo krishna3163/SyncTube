@@ -72,11 +72,11 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <button
             className="btn btn-secondary header-btn"
             onClick={onOpenSearch}
-            title="Search YouTube Videos"
-            aria-label="Search YouTube"
+            title="Change Video or Search YouTube"
+            aria-label="Change Video"
           >
             <Search size={14} color="var(--accent)" />
-            <span className="header-btn-text">Search</span>
+            <span className="header-btn-text">Change Video</span>
           </button>
         )}
 

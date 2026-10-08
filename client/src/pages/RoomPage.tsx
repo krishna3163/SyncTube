@@ -75,7 +75,7 @@ import { getApiUrl } from './HomePage.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film } from 'lucide-react';
 
 interface RoomPageProps {
   roomId: string;
@@ -1231,9 +1231,26 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   />
                 ) : (
                   <div className="video-empty-state">
-                    <span>No video selected</span>
-                    {(userRole === 'HOST' || userRole === 'MODERATOR') && (
-                      <small>Use "Change Video" to choose a YouTube video.</small>
+                    <div className="video-empty-icon">
+                      <Film size={28} />
+                    </div>
+                    <span className="video-empty-title">No video selected</span>
+                    {(userRole === 'HOST' || userRole === 'MODERATOR') ? (
+                      <>
+                        <small className="video-empty-subtitle">
+                          Choose a YouTube video or search to start the watch party.
+                        </small>
+                        <button
+                          type="button"
+                          className="btn btn-primary video-empty-action-btn"
+                          onClick={() => setIsSearchModalOpen(true)}
+                        >
+                          <Search size={15} />
+                          <span>Change Video</span>
+                        </button>
+                      </>
+                    ) : (
+                      <small className="video-empty-subtitle">Waiting for the host to select a video...</small>
                     )}
                   </div>
                 )}

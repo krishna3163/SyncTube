@@ -171,6 +171,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     ? 'controls-dock-panel'
     : `controls-overlay ${visible ? 'controls-visible' : 'controls-hidden'}`;
 
+  const hasVideo = duration > 0;
+
   return (
     <div className={containerClass}>
       {/* Timeline Slider with glowing progress */}
@@ -182,6 +184,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           max={duration > 0 ? duration : 100}
           step={0.5}
           value={currentTime}
+          disabled={!hasVideo}
           onChange={handleSliderChange}
           className="timeline-slider"
           aria-label="Video timeline seek"
@@ -190,7 +193,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           aria-valuenow={currentTime}
           aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
           style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
-          title={canControl ? 'Seek to position' : 'Click to request seek position'}
+          title={!hasVideo ? 'No video selected' : canControl ? 'Seek to position' : 'Click to request seek position'}
         />
         <span className="time-text total">{formatTime(duration)}</span>
       </div>
@@ -208,8 +211,11 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             type="button"
             className="btn btn-primary control-btn-play"
             onClick={handlePlayPause}
+            disabled={!hasVideo}
             title={
-              canControl
+              !hasVideo
+                ? 'No video selected'
+                : canControl
                 ? playState === 'playing'
                   ? 'Pause Video'
                   : 'Play Video'
@@ -235,7 +241,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             type="button"
             className="btn btn-secondary control-btn-jump"
             onClick={() => handleJump(-10)}
-            title={canControl ? 'Jump back 10 seconds' : 'Request seek -10s'}
+            disabled={!hasVideo}
+            title={!hasVideo ? 'No video selected' : canControl ? 'Jump back 10 seconds' : 'Request seek -10s'}
             aria-label="Back 10 seconds"
           >
             <RotateCcw size={15} />
@@ -246,7 +253,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             type="button"
             className="btn btn-secondary control-btn-jump"
             onClick={() => handleJump(10)}
-            title={canControl ? 'Jump forward 10 seconds' : 'Request seek +10s'}
+            disabled={!hasVideo}
+            title={!hasVideo ? 'No video selected' : canControl ? 'Jump forward 10 seconds' : 'Request seek +10s'}
             aria-label="Forward 10 seconds"
           >
             <RotateCw size={15} />

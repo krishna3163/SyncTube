@@ -68,130 +68,121 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-md p-6 bg-slate-900/90 border border-slate-700/60 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Glow accent */}
-        <div className="absolute -top-16 -right-16 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-xs font-bold text-white bg-gradient-to-r from-purple-500 to-cyan-500 rounded">
-              V2
-            </span>
-            <h2 className="text-lg font-bold text-white">
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card auth-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="auth-modal-header-title">
+            <span className="auth-badge-v2">V2</span>
+            <h2>
               {currentUser ? 'Your Profile' : tab === 'login' ? 'Sign In to SyncTube' : 'Create SyncTube Account'}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="modal-close-btn"
+            title="Close modal"
+            aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X size={18} />
           </button>
         </div>
 
         {currentUser ? (
-          <div className="py-6 flex flex-col items-center gap-4 text-center">
-            <div className="relative w-20 h-20 rounded-full border-2 border-purple-500/50 p-1 bg-slate-800 flex items-center justify-center">
-              <AnimeAvatarDisplay username={currentUser.username} avatarId={currentUser.avatarId || 'pikachu'} size={60} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">{currentUser.username}</h3>
-              <p className="text-xs text-slate-400">{currentUser.email}</p>
-              {currentUser.bio && <p className="text-xs text-slate-300 mt-2 italic">"{currentUser.bio}"</p>}
-            </div>
+          <div className="modal-body auth-modal-body">
+            <div className="auth-profile-card">
+              <div className="auth-profile-avatar-wrap">
+                <AnimeAvatarDisplay username={currentUser.username} avatarId={currentUser.avatarId || 'pikachu'} size={64} />
+              </div>
+              <div className="auth-profile-details">
+                <h3 className="auth-profile-username">{currentUser.username}</h3>
+                <p className="auth-profile-email">{currentUser.email}</p>
+                {currentUser.bio && <p className="auth-profile-bio">"{currentUser.bio}"</p>}
+              </div>
 
-            <button
-              onClick={() => {
-                onLogout();
-                onNotify('Signed out successfully.', 'info');
-                onClose();
-              }}
-              className="mt-4 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl hover:bg-rose-500/20 transition"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
+              <button
+                onClick={() => {
+                  onLogout();
+                  onNotify('Signed out successfully.', 'info');
+                  onClose();
+                }}
+                className="btn btn-secondary auth-logout-btn"
+              >
+                <LogOut size={15} />
+                <span>Sign Out</span>
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="py-4">
+          <div className="modal-body auth-modal-body">
             {/* Tab switch */}
-            <div className="flex p-1 mb-5 bg-slate-950/60 rounded-xl border border-slate-800">
+            <div className="auth-tabs">
               <button
                 type="button"
                 onClick={() => { setTab('login'); setError(null); }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                  tab === 'login' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`auth-tab-btn ${tab === 'login' ? 'active' : ''}`}
               >
-                <LogIn className="w-3.5 h-3.5" />
-                Sign In
+                <LogIn size={14} />
+                <span>Sign In</span>
               </button>
               <button
                 type="button"
                 onClick={() => { setTab('register'); setError(null); }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                  tab === 'register' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`auth-tab-btn ${tab === 'register' ? 'active' : ''}`}
               >
-                <UserPlus className="w-3.5 h-3.5" />
-                Register
+                <UserPlus size={14} />
+                <span>Register</span>
               </button>
             </div>
 
             {error && (
-              <div className="p-3 mb-4 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+              <div className="auth-error-banner">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+            <form onSubmit={handleSubmit} className="auth-form">
+              <div className="auth-form-group">
+                <label className="auth-label">Email Address</label>
+                <div className="auth-input-wrap">
+                  <Mail size={16} className="auth-input-icon" />
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    className="auth-input"
                   />
                 </div>
               </div>
 
               {tab === 'register' && (
                 <>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Username</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                  <div className="auth-form-group">
+                    <label className="auth-label">Username</label>
+                    <div className="auth-input-wrap">
+                      <User size={16} className="auth-input-icon" />
                       <input
                         type="text"
                         required
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="Choose username"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                        className="auth-input"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5">Pick Avatar</label>
-                    <div className="grid grid-cols-6 gap-2 p-2 bg-slate-950/60 border border-slate-800 rounded-xl max-h-28 overflow-y-auto">
+                  <div className="auth-form-group">
+                    <label className="auth-label">Pick Avatar</label>
+                    <div className="auth-avatar-grid">
                       {ANIME_AVATARS.map((opt: AnimeAvatar) => (
                         <button
                           key={opt.id}
                           type="button"
                           onClick={() => setSelectedAvatar(opt.id)}
-                          className={`p-1 rounded-lg border flex items-center justify-center transition ${
-                            selectedAvatar === opt.id
-                              ? 'border-purple-500 bg-purple-500/20'
-                              : 'border-transparent hover:border-slate-700'
-                          }`}
+                          className={`auth-avatar-btn ${selectedAvatar === opt.id ? 'active' : ''}`}
+                          title={opt.name}
                         >
                           <AnimeAvatarDisplay username={opt.name} avatarId={opt.id} size={28} />
                         </button>
@@ -201,10 +192,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </>
               )}
 
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+              <div className="auth-form-group">
+                <label className="auth-label">Password</label>
+                <div className="auth-input-wrap">
+                  <Lock size={16} className="auth-input-icon" />
                   <input
                     type="password"
                     required
@@ -212,7 +203,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                    className="auth-input"
                   />
                 </div>
               </div>
@@ -220,7 +211,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl shadow-lg shadow-purple-600/30 transition disabled:opacity-50"
+                className="btn btn-primary auth-submit-btn"
               >
                 {loading ? 'Processing...' : tab === 'login' ? 'Sign In' : 'Create Account'}
               </button>

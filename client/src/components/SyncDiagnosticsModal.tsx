@@ -22,90 +22,90 @@ export const SyncDiagnosticsModal: React.FC<SyncDiagnosticsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg p-6 bg-slate-900/95 border border-slate-700/60 rounded-2xl shadow-2xl">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-lg font-bold text-white">Sync Diagnostics & Telemetry</h2>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card diagnostics-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="diagnostics-modal-header-title">
+            <Activity size={18} color="var(--accent-cyan)" />
+            <h2>Sync Diagnostics & Telemetry</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="modal-close-btn"
+            title="Close modal"
+            aria-label="Close modal"
           >
-            <X className="w-5 h-5" />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="py-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="modal-body diagnostics-modal-body">
+          <div className="diagnostics-grid">
             {/* Connection Status */}
-            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-1">
-                <Radio className="w-3.5 h-3.5 text-emerald-400" />
-                Connection
+            <div className="diagnostics-metric-card">
+              <div className="diagnostics-metric-header">
+                <Radio size={14} color="var(--green)" />
+                <span>Connection</span>
               </div>
-              <p className="text-base font-bold text-emerald-400 capitalize">{connectionStatus}</p>
+              <p className="diagnostics-metric-value text-green capitalize">{connectionStatus}</p>
             </div>
 
             {/* Network Latency RTT */}
-            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-1">
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                RTT Latency
+            <div className="diagnostics-metric-card">
+              <div className="diagnostics-metric-header">
+                <Zap size={14} color="var(--accent)" />
+                <span>RTT Latency</span>
               </div>
-              <p className="text-base font-bold text-white">{Math.round(rttMs)} ms</p>
+              <p className="diagnostics-metric-value">{Math.round(rttMs)} ms</p>
             </div>
 
             {/* Playback Drift */}
-            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-1">
-                <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                Clock Drift
+            <div className="diagnostics-metric-card">
+              <div className="diagnostics-metric-header">
+                <Activity size={14} color="var(--accent-cyan)" />
+                <span>Clock Drift</span>
               </div>
-              <p className={`text-base font-bold ${Math.abs(driftAssessment?.driftMs || 0) < 250 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <p className={`diagnostics-metric-value ${Math.abs(driftAssessment?.driftMs || 0) < 250 ? 'text-green' : 'text-amber'}`}>
                 {driftAssessment ? `${Math.round(driftAssessment.driftMs)} ms` : '< 100 ms'}
               </p>
             </div>
 
             {/* State Revision */}
-            <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 mb-1">
-                <Server className="w-3.5 h-3.5 text-purple-400" />
-                State Revision
+            <div className="diagnostics-metric-card">
+              <div className="diagnostics-metric-header">
+                <Server size={14} color="#c084fc" />
+                <span>State Revision</span>
               </div>
-              <p className="text-base font-bold text-purple-400">rev #{syncState?.revision ?? 0}</p>
+              <p className="diagnostics-metric-value text-purple">rev #{syncState?.revision ?? 0}</p>
             </div>
           </div>
 
           {/* Universal Protocol Details */}
-          <div className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
-              Universal Sync Protocol State
-            </h3>
-            <div className="text-xs space-y-1.5 text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Platform:</span>
-                <span className="font-semibold text-white uppercase">{syncState?.mediaIdentity?.platform || 'YouTube'}</span>
+          <div className="diagnostics-protocol-card">
+            <div className="diagnostics-protocol-title">
+              <ShieldCheck size={16} color="#c084fc" />
+              <span>Universal Sync Protocol State</span>
+            </div>
+            <div className="diagnostics-protocol-list">
+              <div className="diagnostics-protocol-row">
+                <span className="label">Platform:</span>
+                <span className="val uppercase">{syncState?.mediaIdentity?.platform || 'YouTube'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Media Identity:</span>
-                <span className="font-mono text-cyan-300 truncate max-w-[220px]">
-                  {syncState?.mediaIdentity?.mediaId || 'none'}
-                </span>
+              <div className="diagnostics-protocol-row">
+                <span className="label">Media Identity:</span>
+                <span className="val mono">{syncState?.mediaIdentity?.mediaId || 'none'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Playback State:</span>
-                <span className="font-semibold text-emerald-400">{syncState?.state || 'PAUSED'}</span>
+              <div className="diagnostics-protocol-row">
+                <span className="label">Playback State:</span>
+                <span className="val text-green">{syncState?.state || 'PAUSED'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Playback Rate:</span>
-                <span className="text-white">{syncState?.playbackRate || 1.0}x</span>
+              <div className="diagnostics-protocol-row">
+                <span className="label">Playback Rate:</span>
+                <span className="val">{syncState?.playbackRate || 1.0}x</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Drift Resolution:</span>
-                <span className="text-slate-300 capitalize">
+              <div className="diagnostics-protocol-row">
+                <span className="label">Drift Resolution:</span>
+                <span className="val capitalize">
                   {driftAssessment?.action ? driftAssessment.action.replace(/_/g, ' ') : 'Authoritative in-sync'}
                 </span>
               </div>
