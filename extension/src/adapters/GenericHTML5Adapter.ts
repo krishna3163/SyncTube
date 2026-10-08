@@ -36,7 +36,15 @@ export class GenericHTML5Adapter implements PlatformAdapter {
 
   public getVideoElement(): HTMLVideoElement | null {
     if (typeof document === 'undefined') return null;
-    return (document.querySelector('video') as HTMLVideoElement) || null;
+    if (this.currentVideoElement && document.contains(this.currentVideoElement)) {
+      return this.currentVideoElement;
+    }
+    const video = (document.querySelector('video') as HTMLVideoElement) || null;
+    if (video) {
+      this.currentVideoElement = video;
+      return video;
+    }
+    return null;
   }
 
   public async detectMedia(): Promise<MediaIdentity | null> {
@@ -45,10 +53,25 @@ export class GenericHTML5Adapter implements PlatformAdapter {
     if (!video) return null;
 
     const source = video.currentSrc || video.src || window.location.href;
-    const pageTitle = (typeof document !== 'undefined' && document.title) || 'HTML5 Video Stream';
+    
+    // Detect movie / streaming platform from hostname
+    let platform = 'generic';
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname.includes('netflix')) platform = 'netflix';
+    else if (hostname.includes('primevideo') || hostname.includes('amazon')) platform = 'prime';
+    else if (hostname.includes('disney') || hostname.includes('hotstar')) platform = 'disney';
+    else if (hostname.includes('crunchyroll') || hostname.includes('anime')) platform = 'crunchyroll';
+    else if (hostname.includes('twitch')) platform = 'twitch';
+    else if (hostname.includes('vimeo')) platform = 'vimeo';
+    else if (hostname.includes('dailymotion')) platform = 'dailymotion';
+    else platform = 'movie_stream';
+
+    const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
+    const twitterTitle = document.querySelector('meta[name="twitter:title"]')?.getAttribute('content');
+    const pageTitle = ogTitle || twitterTitle || document.title || 'Movie / Web Video Stream';
 
     return {
-      platform: 'generic',
+      platform,
       mediaId: source,
       title: pageTitle.trim(),
       url: window.location.href,

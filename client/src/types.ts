@@ -14,6 +14,14 @@ export interface SyncStatePayload {
   playState: PlayState;
   currentTime: number;
   updatedAt: number;
+  mediaIdentity?: {
+    platform: string;
+    mediaId: string;
+    title: string;
+    url?: string;
+    duration?: number;
+    thumbnail?: string;
+  };
 }
 
 export interface UserJoinedPayload {

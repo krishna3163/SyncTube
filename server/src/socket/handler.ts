@@ -4,6 +4,7 @@ import { RoomManager } from '../models/RoomManager.js';
 import { DatabaseService } from '../services/db.js';
 import { canPerformAction } from '../services/permissions.js';
 import { extractYouTubeId } from '../utils/youtube.js';
+import { detectMediaSource } from '../utils/media.js';
 import { serverSentry } from '../services/sentry.js';
 import {
   AssignRoleSchema,
@@ -322,17 +323,25 @@ export function setupSocketHandlers(
           return sendError('BAD_REQUEST', 'Invalid change_video payload.');
         }
 
-        const extractedId = extractYouTubeId(parsed.data.videoId);
-        if (!extractedId) {
-          return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
+        const media = detectMediaSource(parsed.data.videoId);
+        if (!media) {
+          return sendError('BAD_REQUEST', 'Invalid YouTube URL, video stream, or movie link.');
         }
 
-        room.changeVideo(extractedId);
+        const mediaTitle = parsed.data.title || media.title;
+        const mediaPlatform = parsed.data.platform || media.platform;
+        room.changeVideo(media.mediaId, mediaTitle, mediaPlatform);
         if (parsed.data.play) {
           room.play(0);
         }
 
         io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('media_changed', {
+          platform: mediaPlatform,
+          mediaId: media.mediaId,
+          title: mediaTitle,
+          url: media.url,
+        });
 
         if (dbService) {
           dbService.saveRoom({
@@ -451,23 +460,24 @@ export function setupSocketHandlers(
         const parsed = PlaylistAddSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_add payload.');
 
-        const { videoId, title, duration, channel, thumbnail } = parsed.data;
-        const extracted = extractYouTubeId(videoId);
-        if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
-        if (room.playlist.some((playlistItem) => playlistItem.videoId === extracted)) {
-          return sendError('ALREADY_EXISTS', 'That video is already in the playlist.');
+        const { videoId, title, duration, channel, thumbnail, platform } = parsed.data;
+        const media = detectMediaSource(videoId);
+        if (!media) return sendError('BAD_REQUEST', 'Invalid YouTube URL, video stream, or movie link.');
+        if (room.playlist.some((playlistItem) => playlistItem.videoId === media.mediaId)) {
+          return sendError('ALREADY_EXISTS', 'That video or movie is already in the playlist.');
         }
 
         const item = {
           id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          videoId: extracted,
-          title: title || `Video (${extracted})`,
+          videoId: media.mediaId,
+          title: title || media.title,
           duration: duration || '',
-          channel: channel || '',
-          thumbnail: thumbnail || `https://img.youtube.com/vi/${extracted}/hqdefault.jpg`,
+          channel: channel || (media.platform === 'youtube' ? '' : media.platform.toUpperCase()),
+          thumbnail: thumbnail || (media.platform === 'youtube' ? `https://img.youtube.com/vi/${media.mediaId}/hqdefault.jpg` : ''),
           addedBy: participant.username,
           addedByAvatarId: participant.avatarId,
           votes: [],
+          platform: platform || media.platform,
         };
         room.addToPlaylist(item);
         io.to(room.id).emit('playlist_update', { playlist: room.playlist });
@@ -649,9 +659,9 @@ export function setupSocketHandlers(
         let extractedVideoId: string | undefined = undefined;
         if (type === 'change_video' || type === 'request_next_video') {
           if (!data?.videoId) return sendError('BAD_REQUEST', `Missing videoId for ${type} request.`);
-          const extracted = extractYouTubeId(data.videoId);
-          if (!extracted) return sendError('BAD_REQUEST', 'Invalid YouTube URL or Video ID.');
-          extractedVideoId = extracted;
+          const media = detectMediaSource(data.videoId);
+          if (!media) return sendError('BAD_REQUEST', 'Invalid YouTube URL, video stream, or movie link.');
+          extractedVideoId = media.mediaId;
         }
 
         const request: PendingActionRequest = {

@@ -70,12 +70,16 @@ import { InviteModal } from '../components/InviteModal.js';
 import { AuthModal } from '../components/AuthModal.js';
 import { SyncDiagnosticsModal } from '../components/SyncDiagnosticsModal.js';
 import { ExtensionStatusBanner } from '../components/ExtensionStatusBanner.js';
+import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
+import { CinemaStageCard } from '../components/CinemaStageCard.js';
+import { BrowserHubModal } from '../components/BrowserHubModal.js';
+import { detectClientMedia } from '../utils/media.js';
 import { authStorage } from '../utils/authStorage.js';
 import { getApiUrl } from './HomePage.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe } from 'lucide-react';
 
 interface RoomPageProps {
   roomId: string;
@@ -244,7 +248,27 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [driftAssessment, setDriftAssessment] = useState<DriftAssessment | null>(null);
   const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
+  const [isBrowserHubOpen, setIsBrowserHubOpen] = useState<boolean>(false);
   const apiUrl = getApiUrl();
+
+  // Extension detection bridge
+  useEffect(() => {
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'SYNCTUBE_EXTENSION_PONG') {
+        setExtensionInstalled(true);
+      }
+    };
+    window.addEventListener('message', handleWindowMessage);
+    const ping = () => {
+      window.postMessage({ type: 'SYNCTUBE_EXTENSION_PING' }, '*');
+    };
+    ping();
+    const interval = setInterval(ping, 4000);
+    return () => {
+      window.removeEventListener('message', handleWindowMessage);
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleToggleReady = useCallback(() => {
     setIsCurrentUserReady((prev) => {
@@ -269,13 +293,43 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isTheaterMode) {
-        setIsTheaterMode(false);
+      if (e.key === 'Escape') {
+        if (isSearchModalOpen) {
+          setIsSearchModalOpen(false);
+          return;
+        }
+        if (isInviteModalOpen) {
+          setIsInviteModalOpen(false);
+          return;
+        }
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+          return;
+        }
+        if (isAuthModalOpen) {
+          setIsAuthModalOpen(false);
+          return;
+        }
+        if (isDiagnosticsModalOpen) {
+          setIsDiagnosticsModalOpen(false);
+          return;
+        }
+        if (isTheaterMode) {
+          setIsTheaterMode(false);
+          return;
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTheaterMode]);
+  }, [
+    isSearchModalOpen,
+    isInviteModalOpen,
+    isSettingsOpen,
+    isAuthModalOpen,
+    isDiagnosticsModalOpen,
+    isTheaterMode,
+  ]);
 
   // User Settings state
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
@@ -1123,6 +1177,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
         currentUser={currentUser}
         isTheaterMode={isTheaterMode}
         onToggleTheater={handleToggleTheaterMode}
@@ -1216,41 +1271,84 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 <ReactionOverlay reactions={activeReactions} />
 
                 {videoId ? (
-                  <YouTubePlayer
-                    ref={ytPlayerRef}
-                    videoId={videoId}
-                    syncState={syncState}
-                    userRole={userRole}
-                    playbackSpeed={playbackSpeed}
-                    isMuted={isMuted}
-                    onLocalPlay={handlePlay}
-                    onLocalPause={handlePause}
-                    onLocalSeek={handleSeek}
-                    onCurrentTimeChange={handleTimeChange}
-                    onVideoEnded={handleVideoEnded}
-                  />
+                  (() => {
+                    const detectedMedia = detectClientMedia(videoId);
+                    if (detectedMedia?.category === 'direct_stream') {
+                      return (
+                        <DirectVideoPlayer
+                          ref={ytPlayerRef}
+                          mediaUrl={videoId}
+                          syncState={syncState}
+                          userRole={userRole}
+                          playbackSpeed={playbackSpeed}
+                          isMuted={isMuted}
+                          onLocalPlay={handlePlay}
+                          onLocalPause={handlePause}
+                          onLocalSeek={handleSeek}
+                          onCurrentTimeChange={handleTimeChange}
+                          onVideoEnded={handleVideoEnded}
+                        />
+                      );
+                    }
+                    if (detectedMedia?.category === 'movie_website') {
+                      return (
+                        <CinemaStageCard
+                          media={detectedMedia}
+                          extensionInstalled={extensionInstalled}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                          onNotify={onNotify}
+                        />
+                      );
+                    }
+                    return (
+                      <YouTubePlayer
+                        ref={ytPlayerRef}
+                        videoId={detectedMedia?.mediaId || videoId}
+                        syncState={syncState}
+                        userRole={userRole}
+                        playbackSpeed={playbackSpeed}
+                        isMuted={isMuted}
+                        onLocalPlay={handlePlay}
+                        onLocalPause={handlePause}
+                        onLocalSeek={handleSeek}
+                        onCurrentTimeChange={handleTimeChange}
+                        onVideoEnded={handleVideoEnded}
+                      />
+                    );
+                  })()
                 ) : (
                   <div className="video-empty-state">
                     <div className="video-empty-icon">
                       <Film size={28} />
                     </div>
-                    <span className="video-empty-title">No video selected</span>
+                    <span className="video-empty-title">No video or movie stream selected</span>
                     {(userRole === 'HOST' || userRole === 'MODERATOR') ? (
                       <>
                         <small className="video-empty-subtitle">
-                          Choose a YouTube video or search to start the watch party.
+                          Watch YouTube, open Browser Hub for Netflix, Prime, Disney+, Crunchyroll, or stream any direct movie URL!
                         </small>
-                        <button
-                          type="button"
-                          className="btn btn-primary video-empty-action-btn"
-                          onClick={() => setIsSearchModalOpen(true)}
-                        >
-                          <Search size={15} />
-                          <span>Change Video</span>
-                        </button>
+                        <div className="video-empty-actions-row">
+                          <button
+                            type="button"
+                            className="btn btn-primary video-empty-action-btn"
+                            onClick={() => setIsSearchModalOpen(true)}
+                          >
+                            <Search size={15} />
+                            <span>YouTube Search</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={() => setIsBrowserHubOpen(true)}
+                            id="empty-state-open-browser-btn"
+                          >
+                            <Globe size={15} color="#60a5fa" />
+                            <span>Browser Hub</span>
+                          </button>
+                        </div>
                       </>
                     ) : (
-                      <small className="video-empty-subtitle">Waiting for the host to select a video...</small>
+                      <small className="video-empty-subtitle">Waiting for the host to select a video or movie stream...</small>
                     )}
                   </div>
                 )}
@@ -1490,6 +1588,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         driftAssessment={driftAssessment}
         rttMs={50}
         connectionStatus={connectionStatus}
+      />
+
+      {/* V2 Universal Browser & Cinema Hub Modal */}
+      <BrowserHubModal
+        isOpen={isBrowserHubOpen}
+        onClose={() => setIsBrowserHubOpen(false)}
+        userRole={userRole}
+        extensionInstalled={extensionInstalled}
+        onSelectMedia={(url, title) => {
+          emitChangeVideo(url, true);
+          addActivity(`Selected stream: ${title || url}`, 'playback');
+          onNotify(`Now playing: ${title || url}`, 'success');
+        }}
+        onNotify={onNotify}
       />
     </div>
   );

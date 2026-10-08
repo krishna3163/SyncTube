@@ -7,6 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { extractYouTubeId } from './utils/youtube.js';
+import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
 
@@ -76,11 +77,16 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       let videoId = '';
 
       if (initialVideoId) {
-        const parsed = extractYouTubeId(initialVideoId);
-        if (!parsed) {
-          return res.status(400).json({ error: 'Invalid YouTube video URL or ID.' });
+        const ytParsed = extractYouTubeId(initialVideoId);
+        if (ytParsed) {
+          videoId = ytParsed;
+        } else {
+          const media = detectMediaSource(initialVideoId);
+          if (!media || media.platform === 'generic') {
+            return res.status(400).json({ error: 'Invalid YouTube video URL or ID.' });
+          }
+          videoId = media.mediaId;
         }
-        videoId = parsed;
       }
 
       const hasCreatorIdentity = Object.hasOwn(req.body || {}, 'creatorUserId');

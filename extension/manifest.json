@@ -9,10 +9,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://*.youtube.com/*"
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "src/background/serviceWorker.js",
@@ -21,11 +18,12 @@
   "content_scripts": [
     {
       "matches": [
-        "https://*.youtube.com/*"
+        "<all_urls>"
       ],
       "js": [
         "src/content/contentScript.js"
       ],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ],

@@ -1,5 +1,6 @@
 import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest, ChatMessage } from '../types.js';
 import { UniversalSyncSession, MediaIdentity, UniversalPlaybackState } from '../sync/universalSync.js';
+import { detectMediaSource } from '../utils/media.js';
 
 export interface ServerPlaylistItem {
   id: string;
@@ -74,8 +75,16 @@ export class Room {
     if (creatorIdentity) {
       this.identityCredentialHashes.set(creatorIdentity.userId, creatorIdentity.credentialHash);
     }
+    const detected = initialVideoId ? detectMediaSource(initialVideoId) : null;
     this.universalSync = new UniversalSyncSession(
-      initialVideoId ? { platform: 'youtube', mediaId: initialVideoId, title: 'YouTube Video' } : undefined
+      detected
+        ? {
+            platform: detected.platform,
+            mediaId: detected.mediaId,
+            title: detected.title,
+            url: detected.url,
+          }
+        : undefined
     );
   }
 
@@ -377,11 +386,22 @@ export class Room {
   public toSyncStatePayload(): SyncStatePayload {
     const isPaused = this.playState === 'paused';
     const effectiveTime = isPaused ? this.currentTime : this.getEffectiveCurrentTime();
+    const media = this.universalSync.getMediaIdentity();
     return {
       videoId: this.videoId,
       playState: this.playState,
       currentTime: Math.round(effectiveTime * 100) / 100,
       updatedAt: Date.now(),
+      mediaIdentity: media
+        ? {
+            platform: media.platform,
+            mediaId: media.mediaId,
+            title: media.title,
+            url: media.url,
+            duration: media.duration,
+            thumbnail: media.thumbnail,
+          }
+        : undefined,
     };
   }
 

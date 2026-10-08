@@ -21,8 +21,10 @@ export const SeekSchema = z.object({
 });
 
 export const ChangeVideoSchema = z.object({
-  videoId: z.string().trim().min(1).max(256),
+  videoId: z.string().trim().min(1).max(2048),
   play: z.boolean().optional().default(false),
+  title: z.string().trim().max(200).optional(),
+  platform: z.string().trim().max(50).optional(),
 });
 
 export const AssignRoleSchema = z.object({
@@ -35,11 +37,12 @@ export const RemoveParticipantSchema = z.object({
 });
 
 export const PlaylistAddSchema = z.object({
-  videoId: z.string().trim().min(1).max(256),
+  videoId: z.string().trim().min(1).max(2048),
   title: z.string().trim().max(200).optional(),
   duration: z.string().trim().max(50).optional(),
   channel: z.string().trim().max(100).optional(),
-  thumbnail: z.string().trim().max(500).optional(),
+  thumbnail: z.string().trim().max(1000).optional(),
+  platform: z.string().trim().max(50).optional(),
 });
 
 export const PlaylistRemoveSchema = z.object({
@@ -68,10 +71,11 @@ export const ActionRequestSchema = z.object({
   data: z
     .object({
       time: z.number().nonnegative().optional(),
-      videoId: z.string().trim().max(256).optional(),
+      videoId: z.string().trim().max(2048).optional(),
       title: z.string().trim().max(200).optional(),
       duration: z.string().trim().max(50).optional(),
       channel: z.string().trim().max(100).optional(),
+      platform: z.string().trim().max(50).optional(),
     })
     .optional(),
 });
@@ -128,7 +132,7 @@ export const PartyReadySchema = z.object({
   status: z.enum(['ready', 'loading', 'buffering', 'desynced', 'not_connected']),
   reportedPosition: z.number().nonnegative().optional(),
   activePlatform: z.string().trim().max(50).optional(),
-  activeMediaId: z.string().trim().max(256).optional(),
+  activeMediaId: z.string().trim().max(2048).optional(),
 });
 
 export const SyncPlaySchema = z.object({
@@ -156,9 +160,9 @@ export const SyncDriftCheckSchema = z.object({
 
 export const MediaChangedSchema = z.object({
   platform: z.string().trim().min(1).max(50),
-  mediaId: z.string().trim().min(1).max(256),
+  mediaId: z.string().trim().min(1).max(2048),
   title: z.string().trim().max(200).optional(),
-  url: z.string().trim().max(500).optional(),
+  url: z.string().trim().max(2048).optional(),
   duration: z.number().nonnegative().optional(),
 });
 
@@ -169,5 +173,5 @@ export const ChatTypingSchema = z.object({
 export const ExtensionStatusSchema = z.object({
   installed: z.boolean(),
   activePlatform: z.string().trim().max(50).optional(),
-  currentTabUrl: z.string().trim().max(500).optional(),
+  currentTabUrl: z.string().trim().max(2048).optional(),
 });

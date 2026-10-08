@@ -76,3 +76,17 @@ if (adapter) {
     });
   }
 }
+
+// Global detection bridge for web application (SyncTube client tab)
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SYNCTUBE_EXTENSION_PING') {
+    window.postMessage(
+      {
+        type: 'SYNCTUBE_EXTENSION_PONG',
+        version: '2.0.0',
+        platformId: adapter ? adapter.platformId : null,
+      },
+      '*'
+    );
+  }
+});

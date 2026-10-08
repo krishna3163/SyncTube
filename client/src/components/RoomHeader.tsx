@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User } from 'lucide-react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
@@ -14,6 +14,7 @@ interface RoomHeaderProps {
   onOpenSearch?: () => void;
   onOpenDiagnostics?: () => void;
   onOpenAuth?: () => void;
+  onOpenBrowserHub?: () => void;
   currentUser?: UserProfile | null;
   isTheaterMode?: boolean;
   onToggleTheater?: () => void;
@@ -32,6 +33,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onOpenSearch,
   onOpenDiagnostics,
   onOpenAuth,
+  onOpenBrowserHub,
   currentUser,
   isTheaterMode,
   onToggleTheater,
@@ -68,6 +70,19 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
       </div>
 
       <div className="header-actions">
+        {onOpenBrowserHub && (
+          <button
+            className="btn btn-secondary header-btn"
+            onClick={onOpenBrowserHub}
+            title="Open Universal Browser & Cinema Hub (Netflix, Prime, Disney+, Crunchyroll, Twitch, Direct Links)"
+            aria-label="Browser Hub"
+            id="browser-hub-header-btn"
+          >
+            <Globe size={14} color="#60a5fa" />
+            <span className="header-btn-text">Browser Hub</span>
+          </button>
+        )}
+
         {onOpenSearch && (
           <button
             className="btn btn-secondary header-btn"
