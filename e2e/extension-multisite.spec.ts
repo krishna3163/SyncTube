@@ -1,9 +1,10 @@
 import { test, expect, chromium } from '@playwright/test';
-import path from 'path';
-import http from 'http';
-import fs from 'fs';
-import os from 'os';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { artifactsDir } from './artifacts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,7 +87,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
 
   test('Test Site 1: SyncTube Room Page (localhost:5173) - Extension handshake & Auto-pairing', async () => {
     page = await context.newPage();
-    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.goto('/');
 
     // Join or create a test room
     const usernameInput = page.locator('input[placeholder*="username" i], input[type="text"]').first();
@@ -96,7 +97,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
     const createBtn = page.getByRole('button', { name: /start|create/i }).first();
     if (await createBtn.isVisible()) {
       await createBtn.click();
-      await page.waitForURL(/localhost:5173\/[A-Z0-9]+/, { timeout: 15000 });
+      await page.waitForURL(/\/[A-Z0-9]{6,8}(?:\?.*)?$/i, { timeout: 15000 });
     }
 
     const currentUrl = page.url();
@@ -124,7 +125,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
     expect(handshakeSuccess.version).toBe('2.0.0');
 
     // Take screenshot of room with extension active
-    await page.screenshot({ path: path.resolve(__dirname, '../dist/test-room-extension.png') });
+    await page.screenshot({ path: path.join(artifactsDir, 'test-room-extension.png') });
   });
 
   test('Test Site 2: Generic HTML5 Video Streaming Site - Media detection & Playback control', async () => {
@@ -194,7 +195,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
     console.log('[Test] Video time after extension SEEK 42s:', videoCurrentTime);
     expect(Math.floor(videoCurrentTime)).toBe(42);
 
-    await videoPage.screenshot({ path: path.resolve(__dirname, '../dist/test-generic-html5-site.png') });
+    await videoPage.screenshot({ path: path.join(artifactsDir, 'test-generic-html5-site.png') });
   });
 
   test('Test Site 3: Extension Popup Interface & Controls Validation', async () => {
@@ -227,7 +228,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
       await expect(popupPage.locator('#roomCodeBadge')).toHaveText('SYNC99');
       await expect(popupPage.locator('#statusText')).toHaveText('Party Active');
 
-      await popupPage.screenshot({ path: path.resolve(__dirname, '../dist/test-popup-active.png') });
+      await popupPage.screenshot({ path: path.join(artifactsDir, 'test-popup-active.png') });
       console.log('[Test] Extension popup verified and screenshot captured.');
     } else {
       console.log('[Test] Extension popup checked via unit & content verification.');

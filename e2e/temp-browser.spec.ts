@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const artifactsDir = '/home/krishna/.gemini/antigravity-ide/brain/1a519faf-ea24-4214-be17-44bb6a95b9d1';
+import path from 'node:path';
+import { artifactsDir } from './artifacts.js';
 
 test.describe('Temporary Browser Feature End-to-End Tests', () => {
   test('User can open Temporary Browser, start an isolated session, navigate, and wipe data', async ({ page }) => {
     // 1. Visit Home Page
-    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.goto('/');
 
     // 2. Click "Temporary Browser" navigation button
     const browserNavBtn = page.getByRole('button', { name: /temporary browser/i }).first();

@@ -20,12 +20,12 @@
     "test:server": "npm run test -w server",
     "test:client": "npm run test -w client",
     "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "build:extension": "npm run build -w extension",
     "test:extension": "npm run test -w extension"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "concurrently": "^9.1.2",
-    "vercel": "^62.2.0"
+    "concurrently": "^10.0.6"
   }
 }

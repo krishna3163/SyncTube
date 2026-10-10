@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
-import path from 'path';
-
-const artifactsDir = '/home/krishna/.gemini/antigravity-ide/brain/1a519faf-ea24-4214-be17-44bb6a95b9d1';
+import path from 'node:path';
+import { artifactsDir } from './artifacts.js';
 
 test.describe('Viewer Features Group A: Live Video Player & Stream Experience', () => {
   test('Verifies live playback controls, latency modes, live edge, StreamInfoBar, share, report modals', async ({ page }) => {
     page.on('console', (msg) => console.log('[PAGE CONSOLE]', msg.text()));
     // 1. Visit Home Page & enter room
-    await page.goto('http://localhost:5173', { waitUntil: 'domcontentloaded' });
+    await page.goto('/');
 
     const usernameInput = page.locator('input[placeholder*="username" i], input[type="text"]').first();
     await expect(usernameInput).toBeVisible({ timeout: 10000 });
