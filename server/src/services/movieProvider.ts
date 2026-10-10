@@ -1,5 +1,23 @@
 import crypto from 'node:crypto';
 
+// ── Simple in-memory cache to avoid upstream rate-limit (MovieBox 429) and reduce latency ──
+interface CacheEntry<T> { value: T; expires: number; }
+const _cache = new Map<string, CacheEntry<any>>();
+function cacheGet<T>(key: string): T | null {
+  const entry = _cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { _cache.delete(key); return null; }
+  return entry.value as T;
+}
+function cacheSet<T>(key: string, value: T, ttlMs: number): void {
+  _cache.set(key, { value, expires: Date.now() + ttlMs });
+  // Prevent unbounded growth — keep at most 200 entries
+  if (_cache.size > 200) {
+    const oldestKey = _cache.keys().next().value;
+    if (oldestKey) _cache.delete(oldestKey);
+  }
+}
+
 const SECRET = Buffer.from([
   0xef, 0xa8, 0x91, 0x97, 0x4e, 0xec, 0xd3, 0x14, 0x8d, 0xf6, 0x3a, 0xa6, 0x11, 0x60, 0x2d, 0xef,
   0xd1, 0x01, 0x25, 0x9b, 0xa5, 0x21, 0x02, 0x2c, 0x57, 0xae, 0x05, 0x66, 0xbd, 0x8e,
@@ -501,6 +519,9 @@ export class MovieProviderService {
     if (isMovieboxFixtureEnabled()) {
       return fixtureTrending(page);
     }
+    const cacheKey = `trending:${page}`;
+    const cached = cacheGet<MovieSearchResult[]>(cacheKey);
+    if (cached) return cached;
     try {
       const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
       const res = await this.requestApi<any>(
@@ -540,7 +561,11 @@ export class MovieProviderService {
           });
         }
       }
-      if (results.length > 0) return results.slice(0, 24);
+      if (results.length > 0) {
+        const sliced = results.slice(0, 24);
+        cacheSet(cacheKey, sliced, 60_000); // 60s cache
+        return sliced;
+      }
     } catch (err) {
       if (isLiveUnavailableError(err)) {
         return fixtureTrending(page);
@@ -559,6 +584,9 @@ export class MovieProviderService {
   public async searchMedia(query: string, page = 1, subjectType = 0): Promise<MovieSearchResult[]> {
     if (!query || !query.trim()) return [];
     if (isMovieboxFixtureEnabled()) return fixtureSearch(query, subjectType);
+    const cacheKey = `search:${query.trim().toLowerCase()}:${page}:${subjectType}`;
+    const cached = cacheGet<MovieSearchResult[]>(cacheKey);
+    if (cached) return cached;
 
     const payload = {
       keyword: query.trim(),
@@ -714,6 +742,10 @@ export class MovieProviderService {
       }
     }
 
+    const cacheKeyDetails = `details:${subjectId}`;
+    const cachedDetails = cacheGet<MovieDetails>(cacheKeyDetails);
+    if (cachedDetails) return cachedDetails;
+
     const fallbackFixtureDetails = (): MovieDetails | null => {
       const entry = FIXTURE_CATALOGUE.find((e) => e.id === subjectId);
       if (!entry) return null;
@@ -794,6 +826,7 @@ export class MovieProviderService {
         }
       }
 
+      cacheSet(cacheKeyDetails, result, 300_000); // 5min cache
       return result;
     } catch (err) {
       const fallback = fallbackFixtureDetails();
@@ -832,6 +865,9 @@ export class MovieProviderService {
     if (subjectId.startsWith('fx-')) {
       return fixtureStreams(subjectId, season, episode, proxyBase);
     }
+    const cacheKeyStreams = `streams:${subjectId}:${season}:${episode}`;
+    const cachedStreams = cacheGet<PlayStreamsResult>(cacheKeyStreams);
+    if (cachedStreams) return cachedStreams;
 
     const query = season > 0 && episode > 0
       ? `subjectId=${encodeURIComponent(subjectId)}&se=${season}&ep=${episode}`
@@ -1078,7 +1114,7 @@ export class MovieProviderService {
       return fixtureStreams(subjectId, season, episode, proxyBase);
     }
 
-    return {
+    const result: PlayStreamsResult = {
       title,
       mediaType: season > 0 && episode > 0 ? 'series' : 'movie',
       season: season > 0 ? season : undefined,
@@ -1088,6 +1124,8 @@ export class MovieProviderService {
       availableQualities,
       adaptive: hasAdaptive,
     };
+    cacheSet(cacheKeyStreams, result, 120_000); // 2min cache
+    return result;
   }
 }
 
