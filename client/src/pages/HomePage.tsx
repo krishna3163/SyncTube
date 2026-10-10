@@ -53,7 +53,9 @@ export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (isLocalhost) {
+    // In Vite dev, always go same-origin so the dev-server proxy hits the local backend
+    // (works for localhost, LAN IPs, and preview hosts alike).
+    if (isLocalhost || import.meta.env.DEV) {
       return '';
     }
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {

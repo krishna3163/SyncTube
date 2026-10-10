@@ -294,7 +294,7 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
               onClick={() => setMediaTab('movies')}
             >
               <Film size={16} />
-              <span>Movies & Series (HD Cinema)</span>
+              <span>Cinema · Movies, Series & Anime</span>
             </button>
             <button
               type="button"

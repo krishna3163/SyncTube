@@ -37,14 +37,95 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const isSyncingFromRemoteRef = useRef(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hevcNotice, setHevcNotice] = useState(false);
+  const [currentQuality, setCurrentQuality] = useState<string>('auto');
+  // Locked pixel height (null = Auto/ABR). Re-applied when the stream (re)initializes.
+  const preferredHeightRef = useRef<number | null>(null);
 
   // Synchronously compute DASH format so <video> never receives raw XML as native src
   const isDashStream = Boolean(mediaUrl && (mediaUrl.includes('.mpd') || mediaUrl.includes('/dash/')));
+
+  // YouTube-style quality label → pixel height (hd1080 → 1080, large → 480, ...)
+  const QUALITY_LABEL_HEIGHTS: Record<string, number> = {
+    hd2160: 2160,
+    hd1080: 1080,
+    hd720: 720,
+    large: 480,
+    medium: 360,
+    small: 240,
+    tiny: 144,
+  };
+
+  const heightToLabel = (height: number | null): string => {
+    if (height == null) return 'auto';
+    const known = Object.entries(QUALITY_LABEL_HEIGHTS).find(([, h]) => h === height);
+    return known ? known[0] : `${height}p`;
+  };
+
+  const parseQualityHint = (url: string): number | null => {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const raw = parsed.searchParams.get('quality');
+      const height = raw ? parseInt(raw, 10) : NaN;
+      return Number.isFinite(height) && height > 0 ? height : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const parseTargetHeight = (quality: string): number | null => {
+    if (!quality || quality === 'auto') return null;
+    if (QUALITY_LABEL_HEIGHTS[quality]) return QUALITY_LABEL_HEIGHTS[quality];
+    const numeric = parseInt(String(quality).replace(/p$/i, ''), 10);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+
+  /**
+   * Apply a quality to the adaptive (DASH) ladder:
+   *  - null  → Auto (ABR adapts to bandwidth, like YouTube "Auto")
+   *  - value → lock the video representation closest to (but not above) that height
+   */
+  const applyDashQuality = (height: number | null) => {
+    const player = dashPlayerRef.current;
+    if (!player || !isDashStream) return;
+    try {
+      if (height == null) {
+        player.updateSettings({
+          streaming: { abr: { autoSwitchBitrate: { video: true, audio: true } } },
+        });
+        return;
+      }
+
+      const reps = player.getRepresentationsByType('video') || [];
+      if (reps.length === 0) return;
+
+      const withHeight = reps.filter((r) => Number(r.height) > 0);
+      let chosenIdx = 0;
+      if (withHeight.length > 0) {
+        const atOrBelow = withHeight.filter((r) => Number(r.height) <= height);
+        const pick =
+          atOrBelow.length > 0
+            ? atOrBelow.reduce((a, b) => (Number(a.height) >= Number(b.height) ? a : b))
+            : withHeight.reduce((a, b) => (Number(a.height) <= Number(b.height) ? a : b));
+        chosenIdx = reps.indexOf(pick);
+      }
+
+      player.updateSettings({
+        streaming: { abr: { autoSwitchBitrate: { video: false, audio: true } } },
+      });
+      player.setRepresentationForTypeByIndex('video', Math.max(0, chosenIdx));
+    } catch {
+      // Stream not ready yet — STREAM_INITIALIZED will re-apply the preference
+    }
+  };
 
   // Initialize stream (DASH via Dash.js or native HTML5 for MP4/HLS)
   useEffect(() => {
     setVideoError(null);
     setHevcNotice(false);
+
+    // A quality lock passed by the stream URL (?quality=720) wins for this stream
+    preferredHeightRef.current = parseQualityHint(mediaUrl);
+    setCurrentQuality(heightToLabel(preferredHeightRef.current));
 
     // Clean up previous dash player
     if (dashPlayerRef.current) {
@@ -79,6 +160,9 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
         });
 
         player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+          // Re-apply the chosen quality (or URL hint) once representations exist
+          applyDashQuality(preferredHeightRef.current);
+
           setTimeout(() => {
             const hasHevcSupport =
               typeof MediaSource !== 'undefined' &&
@@ -198,8 +282,13 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       }
     },
     isMuted: () => Boolean(videoRef.current?.muted),
-    setQuality: () => {},
-    getCurrentQuality: () => 'Original',
+    setQuality: (quality: string) => {
+      const targetHeight = parseTargetHeight(quality);
+      preferredHeightRef.current = targetHeight;
+      setCurrentQuality(quality || 'auto');
+      applyDashQuality(targetHeight);
+    },
+    getCurrentQuality: () => currentQuality,
     toggleCaptions: () => false,
     isCaptionsOn: () => false,
     setPlaybackRate: (rate: number) => {

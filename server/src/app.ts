@@ -12,7 +12,7 @@ import { extractYouTubeId } from './utils/youtube.js';
 import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
-import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
+import { movieProvider, STREAM_REFERER, decodeDashToken, MovieBrowseCategory } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 
 
@@ -716,6 +716,30 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     }
   });
 
+  // GET /api/movies/browse — Browse the cinema catalogue by category
+  //   type: trending | movies | series | anime   page: 1, 2, 3 ...
+  app.get('/api/movies/browse', async (req: Request, res: Response) => {
+    const allowed = ['trending', 'movies', 'series', 'anime'];
+    const type = typeof req.query.type === 'string' ? req.query.type.trim().toLowerCase() : 'trending';
+    if (!allowed.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid type "${type}". Use one of: ${allowed.join(', ')}.`,
+      });
+    }
+
+    const rawPage = parseInt(req.query.page as string, 10);
+    const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+
+    try {
+      const results = await movieProvider.browseMedia(type as MovieBrowseCategory, page);
+      return res.json({ success: true, type, page, results });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(502).json({ success: false, error: err?.message || 'Failed to browse catalogue' });
+    }
+  });
+
   // GET /api/movies/details/:id — Get movie/show details, synopsis, ratings, and seasons
   app.get('/api/movies/details/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -953,6 +977,24 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       }
     }
   });
+
+  // Serve offline Cinema fixture streams (MOVIEBOX_FIXTURE=1 demos / offline dev)
+  const fixtureMediaDir = path.resolve(process.cwd(), 'fixture-media');
+  if (fs.existsSync(fixtureMediaDir)) {
+    app.use(
+      '/fixture-media',
+      express.static(fixtureMediaDir, {
+        index: false,
+        fallthrough: false,
+        maxAge: '1h',
+        setHeaders: (res) => {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Accept-Ranges', 'bytes');
+        },
+      })
+    );
+  }
 
   // Serve static client build if it exists (e.g. monolithic or Render deployment)
   const clientDist = path.resolve(process.cwd(), '../dist');
