@@ -10,6 +10,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Room state is process-local; keep one process per instance unless shared room storage is configured.
+      - key: CLUSTER
+        value: "0"
       - key: FRONTEND_URL
         sync: false
       - key: DATABASE_URL

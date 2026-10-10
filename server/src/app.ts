@@ -17,6 +17,7 @@ import { AuthService, UserProfile } from './services/auth.js';
 import { movieProvider, STREAM_REFERER, decodeDashToken, MovieBrowseCategory } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 import { isAllowedOrigin } from './utils/cors.js';
+import { isClusterEnabled } from './utils/cluster.js';
 
 
 function sanitizeProxyUrl(url: string): string {
@@ -88,7 +89,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       capacity: {
         maxRooms: parseInt(process.env.MAX_ROOMS || '20000', 10),
         pgPoolMax: parseInt(process.env.PG_POOL_MAX || '20', 10),
-        cluster: process.env.CLUSTER || (process.env.NODE_ENV === 'production' ? 'auto' : 'off'),
+        cluster: isClusterEnabled() ? 'enabled' : 'disabled',
         redis: !!(process.env.REDIS_URL || process.env.REDIS_TLS_URL),
       },
     });
