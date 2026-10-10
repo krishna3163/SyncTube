@@ -64,7 +64,10 @@ export function setupSocketHandlers(
       if (code === 'INTERNAL_ERROR') {
         serverSentry.captureMessage(`Socket Error [${code}]: ${message}`, 'error');
       }
-      socket.emit('error', { code, message });
+      const safeMessage = (code === 'INTERNAL_ERROR' && process.env.NODE_ENV === 'production')
+        ? 'An internal server error occurred.'
+        : message;
+      socket.emit('error', { code, message: safeMessage });
     };
 
     // Helper to get active room & participant for this socket
@@ -142,6 +145,7 @@ export function setupSocketHandlers(
         socket.data.roomId = normalizedRoomId;
         socket.data.userId = userId;
         socket.join(normalizedRoomId);
+        room.clearDisconnectTimer(userId);
 
         const isCreator = room.creatorUserId === userId;
         const participant = room.addParticipant(userId, socket.id, username, isCreator, parsed.data.avatarId);
@@ -876,33 +880,50 @@ export function setupSocketHandlers(
     });
 
     socket.on('create_poll', (rawPayload: unknown) => {
-      const { room, participant } = getContext();
-      if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
-      if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') return sendError('FORBIDDEN', 'Only hosts and moderators can create polls.');
-      const parsed = CreatePollSchema.safeParse(rawPayload);
-      if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid poll.');
-      room.activePoll = {
-        id: `poll_${Date.now()}`,
-        question: parsed.data.question,
-        options: parsed.data.options,
-        votes: {},
-        createdBy: participant.userId,
-      };
-      io.to(room.id).emit('poll_updated', room.activePoll);
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') return sendError('FORBIDDEN', 'Only hosts and moderators can create polls.');
+        const parsed = CreatePollSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid poll payload.');
+        room.activePoll = {
+          id: `poll_${Date.now()}`,
+          question: parsed.data.question,
+          options: parsed.data.options,
+          votes: {},
+          createdBy: participant.userId,
+        };
+        io.to(room.id).emit('poll_updated', room.activePoll);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
     });
 
     socket.on('vote_poll', (rawPayload: unknown) => {
-      const { room, participant } = getContext();
-      if (!room || !participant || !room.activePoll) return sendError('NOT_FOUND', 'No active poll.');
-      const parsed = VotePollSchema.safeParse(rawPayload);
-      if (!parsed.success || parsed.data.optionIndex >= room.activePoll.options.length) return sendError('BAD_REQUEST', 'Invalid poll option.');
-      for (const voters of Object.values(room.activePoll.votes)) {
-        const index = voters.indexOf(participant.userId);
-        if (index >= 0) voters.splice(index, 1);
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (!room.activePoll) return sendError('NOT_FOUND', 'No active poll in this room.');
+        const parsed = VotePollSchema.safeParse(rawPayload);
+        if (!parsed.success || parsed.data.optionIndex < 0 || parsed.data.optionIndex >= room.activePoll.options.length) {
+          return sendError('BAD_REQUEST', 'Invalid poll option index.');
+        }
+
+        // Clean existing vote across all option keys
+        for (const [key, voters] of Object.entries(room.activePoll.votes)) {
+          room.activePoll.votes[key] = voters.filter((id) => id !== participant.userId);
+        }
+
+        const selectedKey = String(parsed.data.optionIndex);
+        if (!room.activePoll.votes[selectedKey]) {
+          room.activePoll.votes[selectedKey] = [];
+        }
+        room.activePoll.votes[selectedKey].push(participant.userId);
+
+        io.to(room.id).emit('poll_updated', room.activePoll);
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
       }
-      const key = String(parsed.data.optionIndex);
-      room.activePoll.votes[key] = [...(room.activePoll.votes[key] || []), participant.userId];
-      io.to(room.id).emit('poll_updated', room.activePoll);
     });
 
     // 19. SOUND EFFECT
@@ -1389,12 +1410,12 @@ export function setupSocketHandlers(
 
       const room = roomManager.getRoom(roomId);
       if (room) {
-        // Keep the participant (and especially the host role) during short
-        // network outages so Socket.IO reconnect can restore the same session.
         const userId = socket.data.userId;
+        if (!userId) return;
+
         const reconnectGraceMs = 60_000;
-        setTimeout(() => {
-          const participant = userId ? room.getParticipant(userId) : undefined;
+        const timer = setTimeout(() => {
+          const participant = room.getParticipant(userId);
           if (!participant || participant.socketId !== socket.id) return;
 
           const previousHostUserId = room.hostUserId;
@@ -1418,6 +1439,8 @@ export function setupSocketHandlers(
             }
           }
         }, reconnectGraceMs);
+
+        room.setDisconnectTimer(userId, timer);
       }
     });
   });

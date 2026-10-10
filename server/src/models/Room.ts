@@ -64,6 +64,23 @@ export class Room {
     this.isLive = live;
   }
 
+  // Disconnect grace timers
+  private disconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+
+  public setDisconnectTimer(userId: string, timer: NodeJS.Timeout): void {
+    this.clearDisconnectTimer(userId);
+    this.disconnectTimers.set(userId, timer);
+  }
+
+  public clearDisconnectTimer(userId: string): void {
+    const existing = this.disconnectTimers.get(userId);
+    if (existing) {
+      clearTimeout(existing);
+      this.disconnectTimers.delete(userId);
+    }
+  }
+
+
   private participants: Map<string, Participant> = new Map();
   private identityCredentialHashes: Map<string, string> = new Map();
   private socketToUserId: Map<string, string> = new Map();
