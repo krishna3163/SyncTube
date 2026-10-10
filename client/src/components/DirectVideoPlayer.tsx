@@ -286,7 +286,32 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       const targetHeight = parseTargetHeight(quality);
       preferredHeightRef.current = targetHeight;
       setCurrentQuality(quality || 'auto');
-      applyDashQuality(targetHeight);
+      if (isDashStream) {
+        applyDashQuality(targetHeight);
+        return;
+      }
+      // For direct MP4 fixture streams — switch src locally while preserving timeline (like YouTube quality)
+      const video = videoRef.current;
+      if (video && mediaUrl.includes('/fixture-media/sample_')) {
+        const height = targetHeight || 720;
+        // Map to closest available fixture height (480/720/1080)
+        const available = [480, 720, 1080];
+        const closest = available.reduce((a, b) => Math.abs(b - height) < Math.abs(a - height) ? b : a);
+        const currentTime = video.currentTime;
+        const wasPaused = video.paused;
+        const newUrl = mediaUrl.replace(/sample_\d+\.mp4/, `sample_${closest}.mp4`);
+        if (newUrl !== mediaUrl) {
+          // Update src and restore time after metadata loads
+          video.src = newUrl;
+          video.load();
+          const onLoaded = () => {
+            video.currentTime = currentTime;
+            if (!wasPaused) video.play().catch(() => {});
+            video.removeEventListener('loadedmetadata', onLoaded);
+          };
+          video.addEventListener('loadedmetadata', onLoaded);
+        }
+      }
     },
     getCurrentQuality: () => currentQuality,
     toggleCaptions: () => false,

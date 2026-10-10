@@ -52,9 +52,23 @@ export class DatabaseService {
   constructor(databaseUrl?: string) {
     const url = databaseUrl || process.env.DATABASE_URL;
     if (url) {
+      // Tuned for 10k concurrent users: larger pool, timeouts, keepAlive
+      // For true 10k rps behind a load balancer use PgBouncer (transaction mode) and set DATABASE_URL to its port.
+      const poolMax = parseInt(process.env.PG_POOL_MAX || (process.env.NODE_ENV === 'production' ? '20' : '10'), 10);
+      const poolMin = parseInt(process.env.PG_POOL_MIN || '2', 10);
       this.pool = new Pool({
         connectionString: url,
         ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+        max: Number.isFinite(poolMax) ? poolMax : 20,
+        min: Number.isFinite(poolMin) ? poolMin : 2,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5000,
+        keepAlive: true,
+        // Allow overriding statement timeout for long polling
+        statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT || '10000', 10),
+      });
+      this.pool.on('error', (err) => {
+        console.error('[DB] Unexpected pool error:', err.message);
       });
     }
   }
