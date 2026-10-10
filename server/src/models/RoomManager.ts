@@ -24,6 +24,10 @@ export class RoomManager {
     likes?: number,
     category?: string
   ): Room {
+    const maxRooms = parseInt(process.env.MAX_ROOMS || '20000', 10);
+    if (this.rooms.size >= maxRooms) {
+      throw new Error(`Room capacity reached (${maxRooms}). Please try again later.`);
+    }
     const id = customId ? customId.toUpperCase() : this.generateRoomId();
     if (this.rooms.has(id)) {
       throw new Error(`Room with ID ${id} already exists`);

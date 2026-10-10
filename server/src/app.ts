@@ -2,10 +2,12 @@ import { z } from 'zod';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
+import os from 'node:os';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { extractYouTubeId } from './utils/youtube.js';
@@ -29,6 +31,13 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
   const auth = authService || new AuthService(dbService);
   const app = express();
   app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
+  // Gzip / Brotli compression — critical for 10k rps (JSON + HTML). Threshold 1kb, level 6 balances CPU vs bytes.
+  app.use(compression({ threshold: 1024, level: 6, filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }}));
+  // Disable x-powered-by for security + reduce header bytes at scale
+  app.disable('x-powered-by');
 
   // Security Headers (Satisfies Semgrep and Lighthouse best practices)
   app.use((_req: Request, res: Response, next: NextFunction) => {
@@ -51,22 +60,50 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     limit,
     standardHeaders: true,
     legacyHeaders: false,
+    // In cluster/Redis mode the default MemoryStore is per-worker — counts are not global.
+    // For true 10k global limiting, set REDIS_URL and install rate-limit-redis; otherwise each worker
+    // enforces 1/N of the global budget (acceptable until Redis is added).
     handler: (_req, res) => res.status(429).json({ error: 'Too many requests. Please slow down.' }),
   });
-  app.use('/api', apiRateLimiter(120, 60000));
+  // General API bucket: 120 req/min per IP per worker. For 4 workers ≈ 480 global. Tune via API_RATE_LIMIT.
+  const apiGlobalLimit = parseInt(process.env.API_RATE_LIMIT || '120', 10);
+  app.use('/api', apiRateLimiter(Number.isFinite(apiGlobalLimit) ? apiGlobalLimit : 120, 60000));
 
-  // Health check endpoint
+  // Health check endpoint — also reports capacity hints for 10k readiness probes
   app.get('/health', (_req: Request, res: Response) => {
+    const mem = process.memoryUsage();
     res.status(200).json({
       status: 'ok',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       roomsActive: roomManager.getRoomCount(),
+      pid: process.pid,
+      workerId: (process as any).env?.WORKER_ID || undefined,
+      cpus: os.cpus().length,
+      memory: {
+        rssMB: Math.round(mem.rss / 1024 / 1024),
+        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+      },
+      capacity: {
+        maxRooms: parseInt(process.env.MAX_ROOMS || '20000', 10),
+        pgPoolMax: parseInt(process.env.PG_POOL_MAX || '20', 10),
+        cluster: process.env.CLUSTER || (process.env.NODE_ENV === 'production' ? 'auto' : 'off'),
+        redis: !!(process.env.REDIS_URL || process.env.REDIS_TLS_URL),
+      },
     });
   });
 
-  // Create room endpoint (protected by rate limiter)
-  app.post('/api/rooms', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
+  // Lightweight liveness probe for load balancers (no JSON parsing needed)
+  app.get('/healthz', (_req: Request, res: Response) => res.status(200).send('ok'));
+  app.get('/readyz', (_req: Request, res: Response) => {
+    // In future: check DB/Redis reachability; for now always ready if process is up
+    res.status(200).send('ready');
+  });
+
+  // Create room endpoint (protected by rate limiter) — tunable for 10k bursts via ROOM_CREATE_RATE_LIMIT
+  const roomCreateLimit = parseInt(process.env.ROOM_CREATE_RATE_LIMIT || '30', 10);
+  app.post('/api/rooms', apiRateLimiter(Number.isFinite(roomCreateLimit) ? roomCreateLimit : 30, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { initialVideoId } = req.body || {};
       let videoId = '';
