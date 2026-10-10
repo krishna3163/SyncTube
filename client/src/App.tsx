@@ -26,7 +26,16 @@ export function App() {
     const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
     const roomFromUrl = (urlRoom || (pathMatch ? pathMatch[1] : null))?.toUpperCase();
 
-    const storedUsername = sessionStorage.getItem('synctube_username');
+    const storedSettings = (() => {
+      try {
+        const s = localStorage.getItem('synctube_user_settings');
+        return s ? JSON.parse(s) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const storedUsername = sessionStorage.getItem('synctube_username') || storedSettings?.name;
     if (storedUsername) {
       setUsername(storedUsername);
     }

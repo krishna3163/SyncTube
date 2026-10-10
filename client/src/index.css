@@ -2672,6 +2672,22 @@ body {
   flex-shrink: 0;
 }
 
+.cinejoy-viewer-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-3);
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--st-text-secondary);
+  margin-right: auto;
+}
+
+.cinejoy-viewer-notice svg {
+  color: var(--st-text-muted);
+  flex-shrink: 0;
+}
+
 /* Responsive Breakpoints (639, 640, 768, 1023, 1024) */
 @media (max-width: 639px) {
   .modal-card,

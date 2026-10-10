@@ -706,12 +706,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Modal Actions Footer */}
               <footer className="cinejoy-modal-footer">
+                {!isOwner && (
+                  <div className="cinejoy-viewer-notice">
+                    <Lock size={14} strokeWidth={2} />
+                    <span>View-only: Only the room host can update room settings.</span>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="cinejoy-btn cinejoy-btn-secondary"
                   onClick={onClose}
                 >
-                  Cancel
+                  {isOwner ? 'Cancel' : 'Close'}
                 </button>
                 {isOwner && (
                   <button type="submit" className="cinejoy-btn cinejoy-btn-primary">

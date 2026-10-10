@@ -166,6 +166,12 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
     const detectedRoom = roomParam || (pathMatch ? pathMatch[1] : null);
     if (detectedRoom) {
       setJoinRoomCode(detectedRoom.toUpperCase());
+      setJoinUsername((prev: string) => {
+        if (prev && prev.trim()) return prev;
+        const guestName = `Guest${Math.floor(1000 + Math.random() * 9000)}`;
+        setCreateUsername(guestName);
+        return guestName;
+      });
     }
   }, []);
 
