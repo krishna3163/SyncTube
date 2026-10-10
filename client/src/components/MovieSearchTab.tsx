@@ -52,14 +52,18 @@ interface MovieSearchTabProps {
 }
 
 const PRESET_MOVIES = [
-  'Avatar',
+  '🔥 Trending',
+  '🍿 Top Movies',
+  '📺 TV Series',
+  'Anime',
+  'Action',
+  'Sci-Fi',
+  'Horror',
+  'Comedy',
   'Inception',
   'Interstellar',
-  'Breaking Bad',
-  'The Matrix',
+  'Avatar',
   'Stranger Things',
-  'Avengers',
-  'Spider-Man',
 ];
 
 export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
@@ -86,7 +90,7 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   useEffect(() => {
     inputRef.current?.focus();
     if (results.length === 0 && !query) {
-      performSearch('Inception');
+      performSearch('🔥 Trending');
     }
   }, []);
 
@@ -96,7 +100,14 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
 
     setIsLoading(true);
     const base = getApiUrl() || '';
-    const url = `${base}/api/movies/search?q=${encodeURIComponent(q)}`;
+    let url = `${base}/api/movies/search?q=${encodeURIComponent(q)}`;
+    if (q === '🔥 Trending') {
+      url = `${base}/api/movies/trending`;
+    } else if (q === '🍿 Top Movies') {
+      url = `${base}/api/movies/search?q=movie`;
+    } else if (q === '📺 TV Series') {
+      url = `${base}/api/movies/search?q=series`;
+    }
 
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(10000) });

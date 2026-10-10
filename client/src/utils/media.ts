@@ -1,6 +1,6 @@
 import { extractYouTubeId } from './youtube.js';
 
-export type PlaybackCategory = 'youtube' | 'direct_stream' | 'movie_website' | 'temp_browser' | 'tab_share';
+export type PlaybackCategory = 'youtube' | 'direct_stream' | 'movie_website' | 'tab_share';
 
 export interface MediaBadgeInfo {
   label: string;
@@ -11,7 +11,7 @@ export interface MediaBadgeInfo {
 }
 
 export interface DetectedClientMedia {
-  platform: 'youtube' | 'direct' | 'netflix' | 'prime' | 'disney' | 'crunchyroll' | 'twitch' | 'generic' | 'temp_browser' | 'tab_share';
+  platform: 'youtube' | 'direct' | 'netflix' | 'prime' | 'disney' | 'crunchyroll' | 'twitch' | 'generic' | 'tab_share';
   mediaId: string;
   url?: string;
   title: string;
@@ -26,24 +26,6 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
   if (trimmed.length === 0 || trimmed.length > 2048) return null;
-
-  // 0. Temporary Browser session check
-  if (trimmed.startsWith('tb:') || trimmed.startsWith('browser:')) {
-    return {
-      platform: 'temp_browser',
-      mediaId: trimmed,
-      title: 'Temporary Browser Cinema Stream',
-      isDirectStream: false,
-      category: 'temp_browser',
-      badge: {
-        label: 'Temporary Browser Cinema',
-        badgeClass: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
-        icon: '🌐',
-        description: 'Live composited Chromium cinema stream with synchronized friends',
-        category: 'temp_browser',
-      },
-    };
-  }
 
   // 1. YouTube check
   const ytId = extractYouTubeId(trimmed);
@@ -123,7 +105,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
           label: 'Netflix Cinema',
           badgeClass: 'bg-red-600/20 text-red-300 border border-red-500/30',
           icon: '🍿',
-          description: 'Synchronizes your Netflix playback across tabs via SyncTube extension',
+          description: 'Synchronizes your Netflix playback with friends in watch party',
           category: 'movie_website',
         },
       };
@@ -220,7 +202,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
         label: `${capitalizedHost} Movie Website`,
         badgeClass: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
         icon: '🎬',
-        description: 'Universal Cinema Sync: coordinates play/pause/seek across browser tabs via extension',
+        description: 'Universal Cinema Sync: coordinates play/pause/seek across watch party',
         category: 'movie_website',
       },
     };

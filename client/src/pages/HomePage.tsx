@@ -45,7 +45,6 @@ import { authStorage } from '../utils/authStorage.js';
 interface HomePageProps {
   userId: string;
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
-  onOpenBrowser?: () => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -65,7 +64,7 @@ export const getApiUrl = (): string => {
   return envUrl || 'https://youtube-watch-party-api-buaf.onrender.com';
 };
 
-export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenBrowser, onNotify }) => {
+export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
   // Saved user profile from localStorage
   const savedSettings = (() => {
     try {
@@ -98,36 +97,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [activeTbSession, setActiveTbSession] = useState<{ session: any; token: string } | null>(null);
-
-  // Check for active background browser session
-  useEffect(() => {
-    const raw = sessionStorage.getItem('synctube_active_tb_session');
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed?.session?.id && parsed?.token) {
-          setActiveTbSession(parsed);
-        }
-      } catch {}
-    }
-  }, []);
-
-  const handleDiscardActiveSession = async () => {
-    if (activeTbSession) {
-      try {
-        const apiUrl = getApiUrl();
-        await fetch(`${apiUrl}/api/sessions/${activeTbSession.session.id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${activeTbSession.token}` },
-        });
-      } catch {}
-      sessionStorage.removeItem('synctube_active_tb_session');
-      setActiveTbSession(null);
-      onNotify?.('Background browser session terminated.', 'info');
-    }
-  };
-
   // Form inline validation states (form-design & error-handling-ux)
   const [createNameError, setCreateNameError] = useState<string | null>(null);
   const [joinNameError, setJoinNameError] = useState<string | null>(null);
@@ -486,20 +455,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <Sparkles size={14} />
               <span>Features</span>
             </button>
-            <button
-              type="button"
-              className="home-nav-pill home-nav-pill-browser"
-              onClick={onOpenBrowser}
-              title="Open Temporary Browser"
-              style={{
-                background: 'rgba(56, 189, 248, 0.12)',
-                color: '#38bdf8',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-              }}
-            >
-              <Globe size={14} color="#38bdf8" />
-              <span>Temporary Browser</span>
-            </button>
+            
           </div>
         </nav>
 
@@ -556,78 +512,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
         </div>
       </header>
 
-      {/* Active Workspaces Session Banner */}
-      {activeTbSession && (
-        <div
-          className="active-tb-session-banner"
-          style={{
-            maxWidth: 1200,
-            margin: '12px auto 0',
-            padding: '12px 20px',
-            background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.15), rgba(139, 92, 246, 0.2))',
-            border: '1px solid rgba(56, 189, 248, 0.35)',
-            borderRadius: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            backdropFilter: 'blur(12px)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: '#10b981',
-                boxShadow: '0 0 10px #10b981',
-                display: 'inline-block',
-                animation: 'pulse 1.8s infinite',
-              }}
-            />
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc' }}>
-                Active Workspaces Browser Session in Progress
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary, #cbd5e1)' }}>
-                Session is running in background. You can resume seamlessly or terminate it.
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={onOpenBrowser}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                fontSize: '12px',
-                borderRadius: '8px',
-              }}
-            >
-              <Globe size={13} /> Resume Session ➔
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={handleDiscardActiveSession}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                borderRadius: '8px',
-              }}
-            >
-              Discard
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Hero Section with Ambient Background */}
       <div className="home-container">
         <div className="hero">
@@ -642,20 +526,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <Zap size={13} color="#38bdf8" />
               <span>Ultra-Low Latency Sync</span>
             </div>
-            <div
-              className="hero-pill"
-              onClick={onOpenBrowser}
-              style={{
-                cursor: 'pointer',
-                background: 'rgba(56, 189, 248, 0.15)',
-                borderColor: 'rgba(56, 189, 248, 0.35)',
-                color: '#38bdf8',
-              }}
-              title="Launch Temporary Browser"
-            >
-              <Globe size={13} color="#38bdf8" />
-              <span>Temporary Browser ↗</span>
-            </div>
+            
           </div>
 
           <h1 className="hero-title">

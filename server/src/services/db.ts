@@ -1,3 +1,12 @@
+export interface BookmarkRecord {
+  id: string;
+  roomId: string;
+  userId: string;
+  timestamp: number;
+  label: string;
+  createdAt: number;
+}
+
 import pg from 'pg';
 import type { UserRecord, SessionRecord } from './auth.js';
 
@@ -125,6 +134,16 @@ export class DatabaseService {
           CONSTRAINT unique_friend_pair UNIQUE(requester_id, receiver_id)
         );
 
+                -- Bookmarks table
+        CREATE TABLE IF NOT EXISTS bookmarks (
+          id VARCHAR(64) PRIMARY KEY,
+          room_id VARCHAR(32) NOT NULL,
+          user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          timestamp DOUBLE PRECISION NOT NULL,
+          label TEXT NOT NULL,
+          created_at BIGINT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_room ON bookmarks(room_id);
         CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
         CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id);
         CREATE INDEX IF NOT EXISTS idx_friendships_users ON friendships(requester_id, receiver_id);
@@ -356,6 +375,77 @@ export class DatabaseService {
       }));
     } catch (err) {
       console.error('[DB] Failed to fetch watch history:', (err as Error).message);
+      return [];
+    }
+  }
+
+  // Bookmark operations
+  public async addBookmark(bookmark: BookmarkRecord): Promise<void> {
+    if (!this.isConnected || !this.pool) return;
+    try {
+      await this.pool.query(
+        `INSERT INTO bookmarks (id, room_id, user_id, timestamp, label, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING;`,
+        [bookmark.id, bookmark.roomId, bookmark.userId, bookmark.timestamp, bookmark.label, bookmark.createdAt]
+      );
+    } catch (err) {
+      console.error('[DB] Failed to save bookmark:', (err as Error).message);
+    }
+  }
+
+  public async getBookmarks(roomId: string): Promise<BookmarkRecord[]> {
+    if (!this.isConnected || !this.pool) return [];
+    try {
+      const res = await this.pool.query('SELECT * FROM bookmarks WHERE room_id = $1 ORDER BY timestamp ASC', [roomId]);
+      return res.rows.map((row) => ({
+        id: row.id,
+        roomId: row.room_id,
+        userId: row.user_id,
+        timestamp: Number(row.timestamp),
+        label: row.label,
+        createdAt: Number(row.created_at),
+      }));
+    } catch (err) {
+      console.error('[DB] Failed to get bookmarks:', (err as Error).message);
+      return [];
+    }
+  }
+
+  // Friend operations
+  public async sendFriendRequest(requesterId: string, receiverId: string): Promise<boolean> {
+    if (!this.isConnected || !this.pool) return true;
+    try {
+      const id = `${requesterId}_${receiverId}`;
+      const now = Date.now();
+      await this.pool.query(
+        `INSERT INTO friendships (id, requester_id, receiver_id, status, created_at, updated_at)
+         VALUES ($1, $2, $3, 'pending', $4, $5)
+         ON CONFLICT (requester_id, receiver_id) DO UPDATE SET status = 'pending', updated_at = $5;`,
+        [id, requesterId, receiverId, now, now]
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  public async getFriends(userId: string): Promise<FriendshipRecord[]> {
+    if (!this.isConnected || !this.pool) return [];
+    try {
+      const res = await this.pool.query(
+        `SELECT * FROM friendships WHERE (requester_id = $1 OR receiver_id = $1) AND status = 'accepted'`,
+        [userId]
+      );
+      return res.rows.map((row) => ({
+        id: row.id,
+        requesterId: row.requester_id,
+        receiverId: row.receiver_id,
+        status: row.status,
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
+      }));
+    } catch {
       return [];
     }
   }

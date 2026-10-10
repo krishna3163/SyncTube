@@ -12573,3 +12573,265 @@ body.is-dragging-reaction iframe {
 
 
 
+
+/* ==========================================================================
+   MULTI-DEVICE RESPONSIVE ENHANCEMENTS: PHONE, TABLET, LAPTOP & SMART TV
+   ========================================================================== */
+
+/* Universal smooth scaling and touch-friendly controls */
+:root {
+  --tv-focus-glow: 0 0 0 3px #ffd21f, 0 0 25px rgba(255, 210, 31, 0.6);
+}
+
+/* TV & Remote Navigation Focus Styles (10-foot UI / Smart TV Experience) */
+@media (min-width: 1441px) {
+  :focus-visible {
+    outline: 3px solid var(--accent, #ffd21f) !important;
+    outline-offset: 4px !important;
+    box-shadow: var(--tv-focus-glow) !important;
+    transform: scale(1.02);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+}
+
+/* 4K & Ultra-HD Big Screens / Smart TVs (>= 1920px) */
+@media (min-width: 1920px) {
+  .room-container {
+    max-width: 2200px !important;
+    grid-template-columns: 1fr 420px !important;
+    gap: 1.75rem !important;
+    padding: 0 2rem !important;
+  }
+
+  .home-page-wrapper .home-container {
+    max-width: 1400px !important;
+  }
+
+  .hero-title {
+    font-size: 3.5rem !important;
+  }
+
+  .hero-desc {
+    font-size: 1.25rem !important;
+    max-width: 720px !important;
+  }
+
+  .home-card {
+    padding: 2.25rem !important;
+  }
+
+  .control-btn-play,
+  .control-btn-jump,
+  .control-btn-next {
+    font-size: 1rem !important;
+    padding: 0.6rem 1.2rem !important;
+  }
+
+  .btn-icon {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
+/* Laptop & Desktop screens (1025px - 1919px) - Clean Grid with no horizontal overflow */
+@media (min-width: 1025px) and (max-width: 1919px) {
+  .room-container {
+    max-width: 1540px;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 1.25rem;
+    margin: 1rem auto;
+    padding: 0 1.25rem;
+  }
+
+  .stage-area {
+    min-width: 0;
+  }
+
+  .sidebar {
+    min-width: 0;
+  }
+}
+
+/* Tablets (iPad, Android tablets, foldables: 641px - 1024px) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .room-container {
+    grid-template-columns: 1fr !important;
+    max-width: 100% !important;
+    padding: 0 1.25rem !important;
+    gap: 1.25rem !important;
+  }
+
+  .stage-area {
+    width: 100% !important;
+    order: 1 !important;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    order: 2 !important;
+    max-height: 520px;
+  }
+
+  .home-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  .movie-search-results-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  }
+}
+
+/* Mobile Phones (Portrait & Landscape: <= 640px) */
+@media (max-width: 640px) {
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+
+  .app-root-shell {
+    overflow-x: hidden !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  .home-page-wrapper {
+    overflow-x: hidden !important;
+    width: 100% !important;
+  }
+
+  .home-top-navbar {
+    padding: 0.65rem 0.85rem !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .home-nav-center {
+    order: 3 !important;
+    width: 100% !important;
+    justify-content: center !important;
+    margin-top: 0.25rem !important;
+  }
+
+  .home-nav-pills {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  .home-nav-pill {
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.78rem !important;
+  }
+
+  .home-container {
+    padding: 0 0.85rem !important;
+    margin: 0.5rem auto 2rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .hero {
+    padding: 1.25rem 0.5rem 1rem !important;
+  }
+
+  .hero-title {
+    font-size: 1.75rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .hero-desc {
+    font-size: 0.88rem !important;
+    line-height: 1.5 !important;
+    padding: 0 0.25rem !important;
+  }
+
+  .home-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+    width: 100% !important;
+  }
+
+  .home-card {
+    padding: 1.25rem !important;
+    border-radius: 16px !important;
+  }
+
+  .room-container {
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 0.5rem !important;
+    margin: 0.4rem auto !important;
+    width: 100% !important;
+    gap: 0.85rem !important;
+    box-sizing: border-box !important;
+  }
+
+  .stage-area {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .stage-card {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+  }
+
+  .video-wrapper {
+    aspect-ratio: 16 / 9 !important;
+    width: 100% !important;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-radius: 14px !important;
+  }
+
+  .app-header {
+    padding: 0.5rem 0.75rem !important;
+    gap: 0.4rem !important;
+  }
+
+  .header-room-chip {
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .header-invite-btn span,
+  .header-btn span {
+    display: none !important;
+  }
+
+  .header-invite-btn,
+  .header-btn {
+    padding: 0.45rem !important;
+    min-width: 36px !important;
+    height: 36px !important;
+  }
+
+  .buttons-row {
+    flex-wrap: wrap !important;
+    gap: 0.4rem !important;
+  }
+
+  .controls-right-group {
+    margin-left: auto !important;
+  }
+
+  .movie-search-results-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.75rem !important;
+  }
+
+  .movie-card-poster-wrap {
+    height: 200px !important;
+  }
+
+  .modal-card {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 1rem auto !important;
+    max-height: 90vh !important;
+    padding: 1rem !important;
+  }
+}

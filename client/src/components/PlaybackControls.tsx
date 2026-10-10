@@ -26,6 +26,9 @@ import {
   Zap,
   Radio,
   Sparkles,
+  Sliders,
+  Repeat,
+  Repeat1,
 } from 'lucide-react';
 import { Role, PlayState } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
@@ -633,6 +636,19 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                         <span>0.25x</span>
                         <strong>{playbackSpeed.toFixed(2).replace(/\.00$/, '')}x</strong>
                         <span>2x</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                        {[0.5, 0.75, 1, 1.25, 1.5, 2].map((sp) => (
+                          <button
+                            key={sp}
+                            type="button"
+                            className={`btn btn-sm ${playbackSpeed === sp ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ flex: 1, padding: '2px 4px', fontSize: '10px' }}
+                            onClick={() => onSetPlaybackSpeed(sp)}
+                          >
+                            {sp}x
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}

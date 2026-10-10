@@ -1,13 +1,18 @@
 import type { PlatformAdapter } from './PlatformAdapter.js';
 import { YouTubeAdapter } from './YouTubeAdapter.js';
 import { GenericHTML5Adapter } from './GenericHTML5Adapter.js';
+import { NetflixAdapter } from './NetflixAdapter.js';
+import { PrimeVideoAdapter } from './PrimeVideoAdapter.js';
+import { DisneyHotstarAdapter } from './DisneyHotstarAdapter.js';
 
 export class AdapterRegistry {
   private adapters: PlatformAdapter[] = [];
 
   constructor() {
-    // Specific adapters registered first, generic fallback registered last
     this.adapters.push(new YouTubeAdapter());
+    this.adapters.push(new NetflixAdapter());
+    this.adapters.push(new PrimeVideoAdapter());
+    this.adapters.push(new DisneyHotstarAdapter());
     this.adapters.push(new GenericHTML5Adapter());
   }
 
@@ -17,7 +22,6 @@ export class AdapterRegistry {
         return adapter;
       }
     }
-    // Fallback to generic adapter if it matches
     const generic = this.adapters.find((a) => a.platformId === 'generic');
     if (generic && generic.matches(url)) {
       return generic;
@@ -26,27 +30,10 @@ export class AdapterRegistry {
   }
 
   public getAllSupportedPlatforms(): Array<{ id: string; name: string; capabilities: any }> {
-    return [
-      {
-        id: 'youtube',
-        name: 'YouTube',
-        capabilities: new YouTubeAdapter().capabilities,
-      },
-      {
-        id: 'generic',
-        name: 'Generic HTML5 Video',
-        capabilities: new GenericHTML5Adapter().capabilities,
-      },
-      {
-        id: 'netflix',
-        name: 'Netflix (Architecture Planned)',
-        capabilities: { play: true, pause: true, seek: true, playbackRate: false, volume: false, captions: false, nextEpisode: false },
-      },
-      {
-        id: 'prime',
-        name: 'Prime Video (Architecture Planned)',
-        capabilities: { play: true, pause: true, seek: true, playbackRate: false, volume: false, captions: false, nextEpisode: false },
-      },
-    ];
+    return this.adapters.map((a) => ({
+      id: a.platformId,
+      name: a.name,
+      capabilities: a.capabilities,
+    }));
   }
 }
