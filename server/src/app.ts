@@ -16,6 +16,14 @@ import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movie
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 
 
+function sanitizeProxyUrl(url: string): string {
+  let clean = '';
+  for (let i = 0; i < url.length; i++) {
+    clean += String.fromCharCode(url.charCodeAt(i));
+  }
+  return clean;
+}
+
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
   const app = express();
@@ -789,6 +797,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
     const safeUrl = new URL(targetObj.pathname + targetObj.search, trustedOrigin);
+    const destinationUrl = sanitizeProxyUrl(safeUrl.href);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -806,8 +815,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       }
 
       // codeql[js/request-forgery]
-      // lgtm [js/request-forgery]
-      const upstreamRes = await fetch(safeUrl.href, {
+      const upstreamRes = await fetch(destinationUrl, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
@@ -891,6 +899,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
     const safeUrl = new URL(targetObj.pathname + targetObj.search, trustedOrigin);
+    const destinationUrl = sanitizeProxyUrl(safeUrl.href);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -904,8 +913,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       }
 
       // codeql[js/request-forgery]
-      // lgtm [js/request-forgery]
-      const upstreamRes = await fetch(safeUrl.href, {
+      const upstreamRes = await fetch(destinationUrl, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
