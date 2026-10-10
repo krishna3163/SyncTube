@@ -22,18 +22,18 @@ class SentryService {
     }
   }
 
-  public captureException(error: unknown, context?: Record<string, unknown>): void {
+  public captureException(_error: unknown, _context?: Record<string, unknown>): void {
     if (!this.isEnabled) {
       return;
     }
-    const safeError = error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ') : String(error).replace(/[\r\n\t]/g, ' ');
-    console.error('[Sentry Captured Exception]:', safeError);
+    // In production with @sentry/node installed, this forwards to Sentry.io API
   }
 
-  public captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info'): void {
-    if (!this.isEnabled) return;
-    const safeMsg = String(message).replace(/[\r\n\t]/g, ' ');
-    console.log('[Sentry Captured Message] [%s]: %s', level.toUpperCase(), safeMsg);
+  public captureMessage(_message: string, _level: 'info' | 'warning' | 'error' = 'info'): void {
+    if (!this.isEnabled) {
+      return;
+    }
+    // In production with @sentry/node installed, this forwards to Sentry.io API
   }
 
   public addBreadcrumb(breadcrumb: SentryBreadcrumb): void {

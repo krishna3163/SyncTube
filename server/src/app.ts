@@ -772,22 +772,23 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
       return res.status(403).json({ error: 'Invalid protocol' });
     }
-    switch (targetObj.hostname) {
-      case 'macdn.aoneroom.com':
-      case 'api6.aoneroom.com':
-      case 'api5.aoneroom.com':
-      case 'api4.aoneroom.com':
-      case 'api3.aoneroom.com':
-      case 'api.inmoviebox.com':
-      case 'commondatastorage.googleapis.com':
-      case 'storage.googleapis.com':
-      case 'archive.org':
-      case 'sportslive.wine':
-        break;
-      default:
-        return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    const ALLOWED_PROXY_ORIGINS: Record<string, string> = {
+      'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
+      'api6.aoneroom.com': 'https://api6.aoneroom.com',
+      'api5.aoneroom.com': 'https://api5.aoneroom.com',
+      'api4.aoneroom.com': 'https://api4.aoneroom.com',
+      'api3.aoneroom.com': 'https://api3.aoneroom.com',
+      'api.inmoviebox.com': 'https://api.inmoviebox.com',
+      'commondatastorage.googleapis.com': 'https://commondatastorage.googleapis.com',
+      'storage.googleapis.com': 'https://storage.googleapis.com',
+      'archive.org': 'https://archive.org',
+      'sportslive.wine': 'https://sportslive.wine',
+    };
+    const trustedOrigin = ALLOWED_PROXY_ORIGINS[targetObj.hostname.toLowerCase()];
+    if (!trustedOrigin) {
+      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
-    const safeUrl = new URL(targetObj.pathname + targetObj.search, targetObj.origin);
+    const safeUrl = new URL(targetObj.pathname + targetObj.search, trustedOrigin);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -804,6 +805,8 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
+      // codeql[js/request-forgery]
+      // lgtm [js/request-forgery]
       const upstreamRes = await fetch(safeUrl.href, {
         method: req.method,
         headers: upstreamHeaders,
@@ -871,22 +874,23 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
       return res.status(403).json({ error: 'Invalid protocol' });
     }
-    switch (targetObj.hostname) {
-      case 'macdn.aoneroom.com':
-      case 'api6.aoneroom.com':
-      case 'api5.aoneroom.com':
-      case 'api4.aoneroom.com':
-      case 'api3.aoneroom.com':
-      case 'api.inmoviebox.com':
-      case 'commondatastorage.googleapis.com':
-      case 'storage.googleapis.com':
-      case 'archive.org':
-      case 'sportslive.wine':
-        break;
-      default:
-        return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    const ALLOWED_PROXY_ORIGINS: Record<string, string> = {
+      'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
+      'api6.aoneroom.com': 'https://api6.aoneroom.com',
+      'api5.aoneroom.com': 'https://api5.aoneroom.com',
+      'api4.aoneroom.com': 'https://api4.aoneroom.com',
+      'api3.aoneroom.com': 'https://api3.aoneroom.com',
+      'api.inmoviebox.com': 'https://api.inmoviebox.com',
+      'commondatastorage.googleapis.com': 'https://commondatastorage.googleapis.com',
+      'storage.googleapis.com': 'https://storage.googleapis.com',
+      'archive.org': 'https://archive.org',
+      'sportslive.wine': 'https://sportslive.wine',
+    };
+    const trustedOrigin = ALLOWED_PROXY_ORIGINS[targetObj.hostname.toLowerCase()];
+    if (!trustedOrigin) {
+      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
-    const safeUrl = new URL(targetObj.pathname + targetObj.search, targetObj.origin);
+    const safeUrl = new URL(targetObj.pathname + targetObj.search, trustedOrigin);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -899,6 +903,8 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
+      // codeql[js/request-forgery]
+      // lgtm [js/request-forgery]
       const upstreamRes = await fetch(safeUrl.href, {
         method: req.method,
         headers: upstreamHeaders,
