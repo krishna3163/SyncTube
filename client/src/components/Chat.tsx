@@ -202,6 +202,19 @@ export const Chat: React.FC<ChatProps> = ({
             </button>
           ))}
         </div>
+
+        {onCreatePoll && (
+          <button
+            type="button"
+            className={`chat-poll-cta-btn ${showPollCreator ? 'active' : ''}`}
+            onClick={() => setShowPollCreator((prev) => !prev)}
+            title={showPollCreator ? 'Close poll creator' : 'Create room poll'}
+            aria-expanded={showPollCreator}
+          >
+            <BarChart3 size={13} />
+            <span>Poll</span>
+          </button>
+        )}
       </div>
 
       {/* Inline Poll Composer */}

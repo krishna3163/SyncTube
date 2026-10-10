@@ -1586,24 +1586,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   )
                 )}
 
-                {/* Stage Quick Reactions floating pill overlay */}
-                <div
-                  className={`stage-quick-reactions-dock ${isControlsVisible ? 'dock-visible' : ''}`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <span className="dock-hint">React</span>
-                  {['❤️', '🔥', '😂', '👏', '😮', '🎉', '🍿'].map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      className="stage-dock-rx-btn"
-                      onClick={() => handleSendReaction(emoji)}
-                      title={`Send ${emoji} to room`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+
 
                 {/* Reconnecting to Live Broadcast Banner */}
                 {connectionStatus !== 'connected' && (
