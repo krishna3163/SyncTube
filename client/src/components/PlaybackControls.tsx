@@ -77,6 +77,7 @@ export interface PlaybackControlsProps {
 
 const QUALITIES = [
   { label: 'Auto', value: 'auto' },
+  { label: '4K', value: 'hd2160' },
   { label: '1080p HD', value: 'hd1080' },
   { label: '720p HD', value: 'hd720' },
   { label: '480p', value: 'large' },

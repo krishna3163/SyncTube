@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
   Plus,
@@ -10,6 +10,9 @@ import {
   Clock,
   Layers,
   X,
+  Flame,
+  Gauge,
+  Rocket,
 } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../pages/HomePage.js';
@@ -30,10 +33,44 @@ export interface MovieStreamItem {
   title: string;
   format: string;
   resolution: string;
+  /** Numeric pixel height when known (e.g. 1080). */
+  height?: number;
+  /** True when this entry is the adaptive DASH manifest (ABR quality ladder). */
+  adaptive?: boolean;
   codec?: string;
   sizeBytes?: number;
   streamUrl: string;
   proxiedUrl: string;
+}
+
+export interface MovieQualityItem {
+  label: string;
+  height: number;
+  adaptive: boolean;
+}
+
+type BrowseCategory = 'trending' | 'movies' | 'series' | 'anime';
+
+interface ResolvedStreams {
+  streams: MovieStreamItem[];
+  qualities: MovieQualityItem[];
+  adaptive: boolean;
+}
+
+interface PendingPlay extends ResolvedStreams {
+  item: MovieSearchResultItem;
+  season: number;
+  episode: number;
+  title: string;
+}
+
+interface QualityRow {
+  key: string;
+  label: string;
+  stream: MovieStreamItem;
+  /** When set, the adaptive manifest is locked to this pixel height via ?quality=. */
+  lockHeight?: number;
+  chips: string[];
 }
 
 interface MovieSearchTabProps {
@@ -48,20 +85,91 @@ interface MovieSearchTabProps {
   onCloseModal?: () => void;
 }
 
-const PRESET_MOVIES = [
-  '🔥 Trending',
-  '🍿 Top Movies',
-  '📺 TV Series',
-  'Anime',
+const BROWSE_CATEGORIES: Array<{ id: BrowseCategory; label: string; icon: React.ReactNode }> = [
+  { id: 'trending', label: '🔥 Trending', icon: <Flame size={12} /> },
+  { id: 'movies', label: '🎬 Movies', icon: <Film size={12} /> },
+  { id: 'series', label: '📺 Web Series', icon: <Tv size={12} /> },
+  { id: 'anime', label: '🍥 Anime', icon: <Sparkles size={12} /> },
+];
+
+const GENRE_CHIPS = [
   'Action',
   'Sci-Fi',
   'Horror',
   'Comedy',
+  'Drama',
   'Inception',
   'Interstellar',
-  'Avatar',
   'Stranger Things',
 ];
+
+function formatSize(bytes?: number): string {
+  if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return '';
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  const mb = bytes / (1024 ** 2);
+  if (mb >= 1) return `${mb.toFixed(0)} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+function qualityChips(stream: MovieStreamItem, adaptive: boolean): string[] {
+  const chips: string[] = [];
+  if (adaptive) chips.push('ABR Auto');
+  chips.push((stream.format || 'MP4').toUpperCase());
+  if (stream.codec) chips.push(stream.codec.toUpperCase());
+  const size = formatSize(stream.sizeBytes);
+  if (size) chips.push(size);
+  return chips;
+}
+
+/**
+ * Build the YouTube-style quality ladder for a resolved title:
+ * [Auto (adaptive)] + 4K/1080p/720p/... rungs, each mapped to a playable stream.
+ */
+function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
+  const { streams, qualities, adaptive } = resolved;
+  const adaptiveStream = streams.find((s) => s.adaptive);
+  const rows: QualityRow[] = [];
+
+  if (adaptive && adaptiveStream) {
+    rows.push({
+      key: 'auto',
+      label: 'Auto',
+      stream: adaptiveStream,
+      chips: qualityChips(adaptiveStream, true),
+    });
+  }
+
+  const ladder: MovieQualityItem[] =
+    qualities.length > 0
+      ? qualities
+      : [...new Set(streams.map((s) => s.height).filter((h): h is number => Boolean(h)))]
+          .sort((a, b) => b - a)
+          .map((h) => ({
+            label: `${h}p`,
+            height: h,
+            adaptive: !streams.some((s) => s.height === h && !s.adaptive),
+          }));
+
+  for (const q of ladder) {
+    const exact = streams.find((s) => s.height === q.height && !s.adaptive);
+    const stream = exact || (q.adaptive ? adaptiveStream : undefined);
+    if (!stream) continue;
+    const lockHeight = exact ? undefined : q.height;
+    const row: QualityRow = {
+      key: `q-${q.height}`,
+      label: q.label,
+      stream,
+      lockHeight,
+      chips: qualityChips(stream, Boolean(lockHeight)),
+    };
+    rows.push(row);
+  }
+
+  // De-duplicate keys (auto row can share the underlying stream with a rung)
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.key) ? false : (seen.add(r.key), true)));
+}
 
 export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   userRole,
@@ -75,6 +183,9 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   const [results, setResults] = useState<MovieSearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<BrowseCategory>('trending');
+  // true when the grid shows free-text search results instead of a browse category
+  const [searchMode, setSearchMode] = useState(false);
 
   // Series episode selector modal state
   const [selectedSeries, setSelectedSeries] = useState<MovieSearchResultItem | null>(null);
@@ -82,29 +193,53 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   const [seriesSeasons, setSeriesSeasons] = useState<Array<{ seasonNumber: number; episodeCount: number }>>([]);
   const [activeSeason, setActiveSeason] = useState<number>(1);
 
+  // Quality picker modal state (YouTube-style quality menu before playback)
+  const [pendingPlay, setPendingPlay] = useState<PendingPlay | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
     if (results.length === 0 && !query) {
-      performSearch('🔥 Trending');
+      loadCategory('trending');
     }
   }, []);
+
+  const loadCategory = async (category: BrowseCategory) => {
+    setIsLoading(true);
+    setActiveCategory(category);
+    setSearchMode(false);
+    const base = getApiUrl() || '';
+    try {
+      const res = await fetch(`${base}/api/movies/browse?type=${category}`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.results)) {
+          setResults(data.results);
+          if (data.results.length === 0) {
+            onNotify('Nothing found in this category right now. Try another tab.', 'info');
+          }
+        }
+      } else {
+        onNotify('Could not load this category. Please try again.', 'error');
+      }
+    } catch {
+      onNotify('Could not connect to the cinema service.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const performSearch = async (searchTerm: string) => {
     const q = searchTerm.trim();
     if (!q) return;
 
     setIsLoading(true);
+    setSearchMode(true);
     const base = getApiUrl() || '';
-    let url = `${base}/api/movies/search?q=${encodeURIComponent(q)}`;
-    if (q === '🔥 Trending') {
-      url = `${base}/api/movies/trending`;
-    } else if (q === '🍿 Top Movies') {
-      url = `${base}/api/movies/search?q=movie`;
-    } else if (q === '📺 TV Series') {
-      url = `${base}/api/movies/search?q=series`;
-    }
+    const url = `${base}/api/movies/search?q=${encodeURIComponent(q)}`;
 
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -125,7 +260,68 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!query.trim()) return;
     performSearch(query);
+  };
+
+  const buildEpisodeTitle = (item: MovieSearchResultItem, season: number, episode: number): string =>
+    season > 0 && episode > 0
+      ? `${item.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
+      : item.title;
+
+  const resolveStreams = async (
+    item: MovieSearchResultItem,
+    season: number,
+    episode: number
+  ): Promise<ResolvedStreams | null> => {
+    const base = getApiUrl() || '';
+    const streamQuery =
+      season > 0 && episode > 0
+        ? `id=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`
+        : `id=${encodeURIComponent(item.id)}`;
+
+    const res = await fetch(`${base}/api/movies/streams?${streamQuery}`);
+    if (!res.ok) {
+      throw new Error('Failed to fetch stream links');
+    }
+    const data = await res.json();
+    const streams: MovieStreamItem[] = Array.isArray(data.streams) ? data.streams : [];
+    if (streams.length === 0) return null;
+
+    return {
+      streams,
+      qualities: Array.isArray(data.availableQualities) ? data.availableQualities : [],
+      adaptive: Boolean(data.adaptive),
+    };
+  };
+
+  const executePlay = (stream: MovieStreamItem, title: string, lockHeight?: number, duration?: string) => {
+    let streamUrl = stream.proxiedUrl.startsWith('http')
+      ? stream.proxiedUrl
+      : `${window.location.origin}${stream.proxiedUrl}`;
+
+    // Lock the adaptive (DASH) ladder to the chosen rung — mirrors YouTube quality selection
+    if (lockHeight && stream.adaptive) {
+      streamUrl += `${streamUrl.includes('?') ? '&' : '?'}quality=${lockHeight}`;
+    }
+
+    if (userRole === 'HOST' || userRole === 'MODERATOR') {
+      onPlayStream(streamUrl, title);
+      const suffix = lockHeight ? ` at ${lockHeight}p` : stream.adaptive ? ' on Auto quality' : ` at ${stream.resolution}`;
+      onNotify(`Playing "${title}"${suffix} in the room! 🎬🍿`, 'success');
+      if (onCloseModal) onCloseModal();
+    } else if (onRequestAction) {
+      onRequestAction('change_video', {
+        videoId: streamUrl,
+        title,
+        duration,
+        channel: 'MovieBox Cinema',
+      });
+      onNotify('Stream request sent to Host for approval!', 'info');
+      if (onCloseModal) onCloseModal();
+    } else {
+      onNotify('Only Hosts and Moderators can start movie playback.', 'error');
+    }
   };
 
   const handleSelectMedia = async (item: MovieSearchResultItem, season = 0, episode = 0) => {
@@ -156,53 +352,32 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
       return;
     }
 
-    // Resolve streams
+    // Resolve live stream links (MovieBox play-info + resources)
     setResolvingId(`${item.id}_${season}_${episode}`);
-    const base = getApiUrl() || '';
-    const streamQuery =
-      season > 0 && episode > 0
-        ? `id=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`
-        : `id=${encodeURIComponent(item.id)}`;
-
     try {
-      const res = await fetch(`${base}/api/movies/streams?${streamQuery}`);
-      if (!res.ok) {
-        throw new Error('Failed to fetch stream links');
-      }
-      const data = await res.json();
-      const streams: MovieStreamItem[] = data.streams || [];
-      if (streams.length === 0) {
+      const resolved = await resolveStreams(item, season, episode);
+      if (!resolved) {
         onNotify('No playable streams available for this title.', 'error');
         return;
       }
 
-      // Pick highest quality stream
-      const bestStream = streams[0];
-      const streamUrl = bestStream.proxiedUrl.startsWith('http')
-        ? bestStream.proxiedUrl
-        : `${window.location.origin}${bestStream.proxiedUrl}`;
+      const title = buildEpisodeTitle(item, season, episode);
+      const rows = buildQualityRows(resolved);
 
-      const title =
-        season > 0 && episode > 0
-          ? `${item.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
-          : item.title;
-
-      if (userRole === 'HOST' || userRole === 'MODERATOR') {
-        onPlayStream(streamUrl, title);
-        onNotify(`Playing "${title}" in the room! 🎬🍿`, 'success');
-        if (onCloseModal) onCloseModal();
-      } else if (onRequestAction) {
-        onRequestAction('change_video', {
-          videoId: streamUrl,
-          title,
-          duration: item.duration,
-          channel: 'MovieBox Cinema',
-        });
-        onNotify('Stream request sent to Host for approval!', 'info');
-        if (onCloseModal) onCloseModal();
-      } else {
-        onNotify('Only Hosts and Moderators can start movie playback.', 'error');
+      if (rows.length === 0) {
+        onNotify('No playable streams available for this title.', 'error');
+        return;
       }
+
+      if (rows.length === 1) {
+        // Single quality — play immediately without the picker
+        executePlay(rows[0].stream, title, rows[0].lockHeight, item.duration);
+        return;
+      }
+
+      // Multiple qualities → show the quality picker (like YouTube's quality menu)
+      setSelectedSeries(null);
+      setPendingPlay({ ...resolved, item, season, episode, title });
     } catch {
       onNotify('Could not resolve stream URL for this movie.', 'error');
     } finally {
@@ -210,32 +385,27 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
     }
   };
 
+  const handleQualityPick = (row: QualityRow) => {
+    if (!pendingPlay) return;
+    const { title, item } = pendingPlay;
+    setPendingPlay(null);
+    executePlay(row.stream, title, row.lockHeight, item.duration);
+  };
+
   const handleQueueMedia = async (item: MovieSearchResultItem, season = 0, episode = 0) => {
     setResolvingId(`${item.id}_${season}_${episode}_q`);
-    const base = getApiUrl() || '';
-    const streamQuery =
-      season > 0 && episode > 0
-        ? `id=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`
-        : `id=${encodeURIComponent(item.id)}`;
-
     try {
-      const res = await fetch(`${base}/api/movies/streams?${streamQuery}`);
-      const data = await res.json();
-      const streams: MovieStreamItem[] = data.streams || [];
-      if (streams.length === 0) {
+      const resolved = await resolveStreams(item, season, episode);
+      if (!resolved) {
         onNotify('No stream available to queue.', 'error');
         return;
       }
-      const best = streams[0];
+      const best = resolved.streams[0];
       const streamUrl = best.proxiedUrl.startsWith('http')
         ? best.proxiedUrl
         : `${window.location.origin}${best.proxiedUrl}`;
 
-      const title =
-        season > 0 && episode > 0
-          ? `${item.title} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
-          : item.title;
-
+      const title = buildEpisodeTitle(item, season, episode);
       onAddToPlaylist(streamUrl, title, item.duration, 'MovieBox Cinema', item.coverUrl);
       onNotify(`Added "${title}" to room playlist!`, 'success');
     } catch {
@@ -244,6 +414,8 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
       setResolvingId(null);
     }
   };
+
+  const qualityRows = useMemo(() => (pendingPlay ? buildQualityRows(pendingPlay) : []), [pendingPlay]);
 
   return (
     <div className="movie-search-tab-container">
@@ -270,9 +442,29 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
         </button>
       </form>
 
-      {/* Preset Pills */}
+      {/* Category Browse Tabs (movies / web series / anime — MovieBox catalogue) */}
+      <div className="movie-category-bar" role="tablist" aria-label="Cinema categories">
+        {BROWSE_CATEGORIES.map((cat) => (
+          <button
+            key={cat.id}
+            type="button"
+            role="tab"
+            aria-selected={!searchMode && activeCategory === cat.id}
+            className={`yt-preset-pill movie-cat-pill ${!searchMode && activeCategory === cat.id ? 'active' : ''}`}
+            onClick={() => {
+              setQuery('');
+              loadCategory(cat.id);
+            }}
+          >
+            {cat.icon}
+            <span>{cat.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Genre quick chips (free-text search) */}
       <div className="yt-search-presets">
-        {PRESET_MOVIES.map((tag) => (
+        {GENRE_CHIPS.map((tag) => (
           <button
             key={tag}
             type="button"
@@ -376,23 +568,88 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
                       )}
                       <span>{item.mediaType === 'series' ? 'Episodes' : 'Play in Room'}</span>
                     </button>
-                    {item.mediaType === 'movie' && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        title="Add to Playlist"
-                        disabled={isResolving}
-                        onClick={() => handleQueueMedia(item)}
-                      >
-                        <Plus size={13} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      title="Add to Playlist"
+                      disabled={isResolving}
+                      onClick={() => handleQueueMedia(item)}
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
       </div>
+
+      {/* Quality Picker Overlay (YouTube-style: Auto / 4K / 1080p / 720p ...) */}
+      {pendingPlay && (
+        <div className="series-episodes-overlay" onClick={() => setPendingPlay(null)}>
+          <div
+            className="series-episodes-card quality-picker-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="series-episodes-header">
+              <div>
+                <h3 className="series-episodes-title">{pendingPlay.title}</h3>
+                <span className="series-episodes-subtitle">Select video quality</span>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setPendingPlay(null)}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="quality-options-list">
+              {qualityRows.map((row) => (
+                <button
+                  key={row.key}
+                  type="button"
+                  className="quality-option-btn"
+                  onClick={() => handleQualityPick(row)}
+                >
+                  <span className="quality-option-main">
+                    <span className="quality-option-label">
+                      {row.key === 'auto' ? (
+                        <>
+                          <Gauge size={14} /> Auto
+                        </>
+                      ) : (
+                        row.label
+                      )}
+                    </span>
+                    <span className="quality-option-chips">
+                      {row.chips.map((chip) => (
+                        <span
+                          key={chip}
+                          className={`quality-chip ${chip === 'ABR Auto' ? 'quality-chip-adaptive' : ''}`}
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                  <span className="quality-option-action">
+                    <Play size={14} />
+                    <span>Play</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <p className="quality-picker-hint">
+              <Rocket size={12} /> Quality is applied locally for you — the room stays in sync. Auto
+              adapts to your connection like YouTube.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Series Season & Episode Modal Overlay */}
       {selectedSeries && (

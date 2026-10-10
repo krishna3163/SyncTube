@@ -118,11 +118,24 @@ export interface MovieStreamOption {
   title: string;
   format: string;
   resolution: string;
+  /** Numeric pixel height (e.g. 1080) when known. */
+  height?: number;
+  /** True when this entry is the adaptive DASH manifest (quality ladder handled client-side). */
+  adaptive?: boolean;
   codec?: string;
   sizeBytes?: number;
   streamUrl: string;
   proxiedUrl: string;
 }
+
+export interface MovieQualityOption {
+  label: string;
+  height: number;
+  /** True when this height is only reachable through the adaptive (ABR) manifest. */
+  adaptive: boolean;
+}
+
+export type MovieBrowseCategory = 'trending' | 'movies' | 'series' | 'anime';
 
 export interface MovieSubtitle {
   language: string;
@@ -152,6 +165,10 @@ export interface PlayStreamsResult {
   episode?: number;
   streams: MovieStreamOption[];
   subtitles: MovieSubtitle[];
+  /** Quality ladder for this title, sorted highest → lowest (MovieBox-Tui resolution picker). */
+  availableQualities: MovieQualityOption[];
+  /** True when an adaptive DASH manifest is available (Auto quality / in-player switching). */
+  adaptive: boolean;
 }
 
 function randomHex(len: number): string {
@@ -160,6 +177,150 @@ function randomHex(len: number): string {
 
 function randomUuid(): string {
   return `${randomHex(8)}-${randomHex(4)}-${randomHex(4)}-${randomHex(4)}-${randomHex(12)}`;
+}
+
+// ── Offline fixture catalogue (MOVIEBOX_FIXTURE=1) ───────────────────────────
+// Serves sample Cinema catalogue data + locally hosted streams (server/fixture-media)
+// so the movies/series/anime section can be exercised without reaching MovieBox.
+
+export function isMovieboxFixtureEnabled(): boolean {
+  const value = process.env.MOVIEBOX_FIXTURE;
+  return value === '1' || (typeof value === 'string' && value.toLowerCase() === 'true');
+}
+
+interface FixtureEntry {
+  id: string;
+  title: string;
+  kind: 'movie' | 'series' | 'anime';
+  mediaType: 'movie' | 'series';
+  year: string;
+  duration: string;
+  genre: string;
+  seasonCount?: number;
+  description: string;
+  posterFrom: string;
+  posterTo: string;
+  emoji: string;
+}
+
+function fixturePoster(entry: FixtureEntry): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${entry.posterFrom}"/><stop offset="1" stop-color="${entry.posterTo}"/>` +
+    `</linearGradient></defs>` +
+    `<rect width="300" height="450" fill="url(#g)"/>` +
+    `<text x="150" y="200" font-size="72" text-anchor="middle">${entry.emoji}</text>` +
+    `<text x="150" y="290" font-size="24" font-family="sans-serif" font-weight="700" fill="#ffffff" text-anchor="middle">${entry.title}</text>` +
+    `<text x="150" y="325" font-size="15" font-family="sans-serif" fill="rgba(255,255,255,0.75)" text-anchor="middle">${entry.year} · ${entry.genre}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+const FIXTURE_CATALOGUE: FixtureEntry[] = [
+  { id: 'fx-001', title: 'Neon Horizon', kind: 'movie', mediaType: 'movie', year: '2024', duration: '2h 08m', genre: 'Action · Sci-Fi', description: 'A courier races across a sleepless megacity to deliver the last uncorrupted data shard.', posterFrom: '#7c3aed', posterTo: '#0ea5e9', emoji: '🌆' },
+  { id: 'fx-002', title: 'Glass Empire', kind: 'series', mediaType: 'series', year: '2024', duration: '52m/ep', genre: 'Crime · Drama', seasonCount: 3, description: 'Two rival dynasties battle for control of a city built entirely on borrowed glass.', posterFrom: '#b45309', posterTo: '#111827', emoji: '🏢' },
+  { id: 'fx-003', title: 'Blade of Dawn', kind: 'anime', mediaType: 'movie', year: '2025', duration: '1h 55m', genre: 'Anime · Action Fantasy', description: 'A wandering swordswoman guards the final shrine before the eternal night arrives.', posterFrom: '#be123c', posterTo: '#1e293b', emoji: '⚔️' },
+  { id: 'fx-004', title: 'Orbit Nine', kind: 'series', mediaType: 'series', year: '2023', duration: '45m/ep', genre: 'Sci-Fi · Mystery', seasonCount: 2, description: 'Nine stations, one missing crew, and a signal that should not exist.', posterFrom: '#0f766e', posterTo: '#020617', emoji: '🛰️' },
+  { id: 'fx-005', title: 'The Last Lighthouse', kind: 'movie', mediaType: 'movie', year: '2023', duration: '1h 54m', genre: 'Drama · Adventure', description: 'The keeper of a vanishing coast races one final storm to be heard.', posterFrom: '#0369a1', posterTo: '#0f172a', emoji: '🗼' },
+  { id: 'fx-006', title: 'Spirit Railway', kind: 'anime', mediaType: 'series', year: '2022', duration: '24m/ep', genre: 'Anime · Slice of Life', seasonCount: 2, description: 'A night train carries forgotten memories between towns that no longer appear on maps.', posterFrom: '#15803d', posterTo: '#052e16', emoji: '🚃' },
+  { id: 'fx-007', title: 'Midnight Circuit', kind: 'movie', mediaType: 'movie', year: '2025', duration: '2h 02m', genre: 'Thriller · Heist', description: 'One lap. Three drivers. A vault that moves every sixty seconds.', posterFrom: '#dc2626', posterTo: '#18181b', emoji: '🏎️' },
+  { id: 'fx-008', title: 'Chai & Chaos', kind: 'series', mediaType: 'series', year: '2025', duration: '30m/ep', genre: 'Comedy · Drama', seasonCount: 1, description: 'A crumbling neighbourhood teahouse becomes the unlikely centre of local politics.', posterFrom: '#d97706', posterTo: '#431407', emoji: '☕' },
+  { id: 'fx-009', title: 'Chrome Samurai', kind: 'anime', mediaType: 'movie', year: '2024', duration: '1h 42m', genre: 'Anime · Cyberpunk', description: 'In a rain-soaked arcology, a debt-ridden ronin takes one last contract.', posterFrom: '#4f46e5', posterTo: '#020617', emoji: '🦾' },
+  { id: 'fx-010', title: 'Paper Planets', kind: 'movie', mediaType: 'movie', year: '2022', duration: '1h 47m', genre: 'Romance · Drama', description: 'Two astronomers fall in love while mapping a sky that keeps changing.', posterFrom: '#db2777', posterTo: '#4a044e', emoji: '🪐' },
+  { id: 'fx-011', title: 'Static Kings', kind: 'series', mediaType: 'series', year: '2024', duration: '40m/ep', genre: 'Music · Drama', seasonCount: 2, description: 'A garage band signs a deal that pays in fame, secrets, and silence.', posterFrom: '#9333ea', posterTo: '#1e1b4b', emoji: '🎸' },
+  { id: 'fx-012', title: 'Kite Season', kind: 'anime', mediaType: 'series', year: '2023', duration: '24m/ep', genre: 'Anime · Family', seasonCount: 1, description: 'Every spring, the wind returns with letters nobody remembers writing.', posterFrom: '#0891b2', posterTo: '#083344', emoji: '🪁' },
+];
+
+function fixtureToResult(entry: FixtureEntry): MovieSearchResult {
+  return {
+    id: entry.id,
+    title: entry.title,
+    mediaType: entry.mediaType,
+    year: entry.year,
+    duration: entry.duration,
+    genre: entry.genre,
+    coverUrl: fixturePoster(entry),
+    seasonCount: entry.seasonCount,
+  };
+}
+
+function fixtureSearch(query: string, subjectType: number): MovieSearchResult[] {
+  const q = query.trim().toLowerCase();
+  let matches = FIXTURE_CATALOGUE.filter(
+    (e) =>
+      !q ||
+      e.title.toLowerCase().includes(q) ||
+      e.genre.toLowerCase().includes(q) ||
+      e.kind.includes(q) ||
+      (q.includes('anime') && e.kind === 'anime')
+  );
+  if (subjectType === 1) matches = matches.filter((e) => e.mediaType === 'movie');
+  if (subjectType === 2) matches = matches.filter((e) => e.mediaType === 'series');
+  if (matches.length === 0) matches = FIXTURE_CATALOGUE.slice(0, 8);
+  return matches.slice(0, 24).map(fixtureToResult);
+}
+
+function fixtureBrowse(category: MovieBrowseCategory, page: number): MovieSearchResult[] {
+  let matches: FixtureEntry[];
+  switch (category) {
+    case 'movies':
+      matches = FIXTURE_CATALOGUE.filter((e) => e.kind === 'movie');
+      break;
+    case 'series':
+      matches = FIXTURE_CATALOGUE.filter((e) => e.kind === 'series');
+      break;
+    case 'anime':
+      matches = FIXTURE_CATALOGUE.filter((e) => e.kind === 'anime');
+      break;
+    default:
+      matches = [...FIXTURE_CATALOGUE];
+  }
+  // Rotate per page so paging visibly changes the grid
+  const offset = ((page - 1) * 4) % Math.max(1, matches.length);
+  const rotated = [...matches.slice(offset), ...matches.slice(0, offset)];
+  return rotated.map(fixtureToResult);
+}
+
+const FIXTURE_STREAM_SIZES: Record<number, number> = { 1080: 788038, 720: 430722, 480: 216059 };
+
+function fixtureStreams(
+  subjectId: string,
+  season: number,
+  episode: number,
+  proxyBase: string
+): PlayStreamsResult {
+  const entry = FIXTURE_CATALOGUE.find((e) => e.id === subjectId);
+  const baseTitle = entry?.title || 'Sample Feature';
+  const title =
+    season > 0 && episode > 0
+      ? `${baseTitle} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
+      : baseTitle;
+
+  const heights = [1080, 720, 480];
+  const streams: MovieStreamOption[] = heights.map((h) => ({
+    id: `fx-${subjectId}-${h}`,
+    title: `${title} (${h}p MP4)`,
+    format: 'MP4',
+    resolution: `${h}p`,
+    height: h,
+    adaptive: false,
+    codec: 'h264',
+    sizeBytes: FIXTURE_STREAM_SIZES[h],
+    streamUrl: `/fixture-media/sample_${h}.mp4`,
+    proxiedUrl: `/fixture-media/sample_${h}.mp4?title=${encodeURIComponent(title)}`,
+  }));
+
+  return {
+    title,
+    mediaType: season > 0 && episode > 0 ? 'series' : 'movie',
+    season: season > 0 ? season : undefined,
+    episode: episode > 0 ? episode : undefined,
+    streams,
+    subtitles: [],
+    availableQualities: heights.map((h) => ({ label: `${h}p`, height: h, adaptive: false })),
+    adaptive: false,
+  };
 }
 
 export class MovieProviderService {
@@ -318,9 +479,19 @@ export class MovieProviderService {
     throw new Error(`MovieBox API request failed for ${pathAndQuery}`);
   }
 
-  public async getTrendingMedia(): Promise<MovieSearchResult[]> {
+  public async getTrendingMedia(page = 1): Promise<MovieSearchResult[]> {
+    if (isMovieboxFixtureEnabled()) {
+      const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+      const offset = ((safePage - 1) * 4) % FIXTURE_CATALOGUE.length;
+      const rotated = [...FIXTURE_CATALOGUE.slice(offset), ...FIXTURE_CATALOGUE.slice(0, offset)];
+      return rotated.map(fixtureToResult);
+    }
     try {
-      const res = await this.requestApi<any>('/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=', 'GET');
+      const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+      const res = await this.requestApi<any>(
+        `/wefeed-mobile-bff/tab-operating?page=${safePage}&tabId=0&version=`,
+        'GET'
+      );
       const items = res?.data?.items || res?.items || [];
       const results: MovieSearchResult[] = [];
       const seen = new Set<string>();
@@ -361,14 +532,16 @@ export class MovieProviderService {
     return this.searchMedia('Avatar', 1);
   }
 
-  public async searchMedia(query: string, page = 1): Promise<MovieSearchResult[]> {
+  public async searchMedia(query: string, page = 1, subjectType = 0): Promise<MovieSearchResult[]> {
     if (!query || !query.trim()) return [];
+    if (isMovieboxFixtureEnabled()) return fixtureSearch(query, subjectType);
 
     const payload = {
       keyword: query.trim(),
       page: Math.max(1, page),
       perPage: 15,
-      subjectType: 0,
+      // MovieBox subjectType: 0 = all, 1 = movie, 2 = series (see MovieBox-Tui search payload)
+      subjectType: Math.max(0, Math.min(2, Math.floor(subjectType) || 0)),
     };
 
     const res = await this.requestApi<{
@@ -419,7 +592,91 @@ export class MovieProviderService {
       });
   }
 
+  /**
+   * Category browsing for the in-room cinema section (movies / web series / anime).
+   * Mirrors MovieBox-Tui's home catalogue: keyword-driven search per page with a
+   * subjectType filter, falling back to the trending tab filtered by media type.
+   */
+  private static readonly BROWSE_KEYWORDS: Record<'movies' | 'series' | 'anime', string[]> = {
+    movies: ['action', 'comedy', 'thriller', 'sci-fi', 'horror', 'adventure', 'romance', 'animation'],
+    series: ['drama', 'tv series', 'show', 'mystery', 'fantasy', 'crime'],
+    anime: ['anime', 'anime movie', 'shonen', 'isekai', 'studio'],
+  };
+
+  public async browseMedia(category: MovieBrowseCategory, page = 1): Promise<MovieSearchResult[]> {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+
+    if (isMovieboxFixtureEnabled()) return fixtureBrowse(category, safePage);
+
+    if (category === 'trending') {
+      return this.getTrendingMedia(safePage);
+    }
+
+    const keywords = MovieProviderService.BROWSE_KEYWORDS[category];
+    if (!keywords) {
+      throw new Error(`Unknown browse category: ${category}`);
+    }
+
+    const keyword = keywords[(safePage - 1) % keywords.length];
+    const subjectType = category === 'movies' ? 1 : category === 'series' ? 2 : 0;
+
+    let results: MovieSearchResult[] = [];
+    try {
+      results = await this.searchMedia(keyword, 1, subjectType);
+      if (category === 'movies') results = results.filter((r) => r.mediaType === 'movie');
+      if (category === 'series') results = results.filter((r) => r.mediaType === 'series');
+    } catch {
+      results = [];
+    }
+
+    if (results.length >= 6) return results.slice(0, 24);
+
+    // Fallback / supplement: filter the trending tab by media type (dedup by id)
+    try {
+      const trending = await this.getTrendingMedia(safePage);
+      const wantedType = category === 'movies' ? 'movie' : 'series';
+      const extra = trending.filter(
+        (r) => category === 'anime' || r.mediaType === (wantedType as 'movie' | 'series')
+      );
+      const seen = new Set(results.map((r) => r.id));
+      for (const item of extra) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          results.push(item);
+        }
+      }
+    } catch {
+      // keep whatever the search returned
+    }
+
+    return results.slice(0, 24);
+  }
+
   public async getMediaDetails(subjectId: string): Promise<MovieDetails> {
+    if (isMovieboxFixtureEnabled()) {
+      const entry = FIXTURE_CATALOGUE.find((e) => e.id === subjectId);
+      if (entry) {
+        const result: MovieDetails = {
+          id: entry.id,
+          title: entry.title,
+          description: entry.description,
+          mediaType: entry.mediaType,
+          year: entry.year,
+          duration: entry.duration,
+          genre: entry.genre,
+          coverUrl: fixturePoster(entry),
+        };
+        if (entry.mediaType === 'series') {
+          const seasonCount = entry.seasonCount || 1;
+          result.seasons = Array.from({ length: seasonCount }, (_, i) => ({
+            seasonNumber: i + 1,
+            episodeCount: 8,
+          }));
+        }
+        return result;
+      }
+    }
+
     const details = await this.requestApi<{
       code?: number;
       data?: {
@@ -485,9 +742,23 @@ export class MovieProviderService {
     episode = 0,
     proxyBase = '/api/movies/proxy'
   ): Promise<PlayStreamsResult> {
+    if (isMovieboxFixtureEnabled()) {
+      return fixtureStreams(subjectId, season, episode, proxyBase);
+    }
+
     const query = season > 0 && episode > 0
       ? `subjectId=${encodeURIComponent(subjectId)}&se=${season}&ep=${episode}`
       : `subjectId=${encodeURIComponent(subjectId)}`;
+
+    interface ResourceListItem {
+      resourceId?: string | number;
+      title?: string;
+      resourceLink?: string;
+      resolution?: number;
+      size?: string | number;
+      codecName?: string;
+      extCaptions?: Array<{ lanName?: string; lan?: string; url?: string }>;
+    }
 
     const [playInfo, resourceRes] = await Promise.allSettled([
       this.requestApi<{
@@ -510,46 +781,67 @@ export class MovieProviderService {
       this.requestApi<{
         code?: number;
         data?: {
-          list?: Array<{
-            resourceId?: string | number;
-            title?: string;
-            resourceLink?: string;
-            resolution?: number;
-            size?: string | number;
-            codecName?: string;
-            extCaptions?: Array<{
-              lanName?: string;
-              lan?: string;
-              url?: string;
-            }>;
-          }>;
+          list?: ResourceListItem[];
+          collectionResolutions?: Array<{ resolution?: number }>;
         };
-      }>(`/wefeed-mobile-bff/subject-api/resource?${query}&page=1&perPage=10`, 'GET'),
+      }>(`/wefeed-mobile-bff/subject-api/resource?${query}&page=1&perPage=20`, 'GET'),
     ]);
 
     const playData = playInfo.status === 'fulfilled' ? playInfo.value?.data : null;
-    const resourceList = resourceRes.status === 'fulfilled' ? resourceRes.value?.data?.list || [] : [];
+    const resourceData = resourceRes.status === 'fulfilled' ? resourceRes.value?.data : null;
+    const resourceList = resourceData?.list || [];
 
     const title = (playData?.title || resourceList[0]?.title || 'Movie Stream').trim();
     const streams: MovieStreamOption[] = [];
     const subtitles: MovieSubtitle[] = [];
     const seenUrls = new Set<string>();
 
+    // Quality ladder bookkeeping (MovieBox-Tui: fetch_collection_resolutions + resolution pages)
+    const knownHeights = new Set<number>();
+    const adaptiveHeights = new Set<number>();
+    let hasAdaptive = false;
+    let maxHeight = 0;
+
+    const registerHeight = (value: unknown): number => {
+      const h = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+      if (!Number.isFinite(h) || h <= 0) return 0;
+      knownHeights.add(h);
+      if (h > maxHeight) maxHeight = h;
+      return h;
+    };
+
+    const parseResolutionList = (raw?: string): number[] =>
+      (raw || '')
+        .split(',')
+        .map((r) => parseInt(r.trim(), 10))
+        .filter((r) => Number.isFinite(r) && r > 0);
+
+    // a) collectionResolutions — the full set of qualities offered for this title
+    if (Array.isArray(resourceData?.collectionResolutions)) {
+      for (const col of resourceData.collectionResolutions) {
+        registerHeight(col?.resolution);
+      }
+    }
+
     // 1. Process play-info streams (MovieBox DASH streams & signed cookies)
     if (Array.isArray(playData?.streams)) {
       for (const st of playData.streams) {
+        const resHeights = parseResolutionList(st.resolutions || playData.displayResolutions);
+        for (const h of resHeights) registerHeight(h);
+
         // A. Resolve real DASH manifest from signCookie (Primary full-length movie source)
         if (st.signCookie) {
           const dashManifestUrl = resolveDashManifestFromPolicy(st.signCookie);
           if (dashManifestUrl && !seenUrls.has(dashManifestUrl)) {
             seenUrls.add(dashManifestUrl);
 
-            const resList = (st.resolutions || playData.displayResolutions || '1080,720,480')
-              .split(',')
-              .map((r) => r.trim())
-              .filter(Boolean);
+            const dashHeight = resHeights.length ? Math.max(...resHeights) : 1080;
+            registerHeight(dashHeight);
+            resHeights.forEach((h) => adaptiveHeights.add(h));
+            adaptiveHeights.add(dashHeight);
+            hasAdaptive = true;
 
-            const primaryRes = resList[0] ? `${resList[0]}p` : '1080p';
+            const primaryRes = `${dashHeight}p`;
             const codec = st.codecName || st.codec || 'hevc';
             const format = 'DASH';
 
@@ -561,6 +853,8 @@ export class MovieProviderService {
               title: `${title} (${primaryRes} Ultra HD DASH)`,
               format,
               resolution: primaryRes,
+              height: dashHeight,
+              adaptive: true,
               codec,
               sizeBytes: st.size ? Number(st.size) : undefined,
               streamUrl: dashManifestUrl,
@@ -574,12 +868,9 @@ export class MovieProviderService {
         if (streamUrl && streamUrl.startsWith('http') && !isDeprecationNoticeUrl(streamUrl) && !seenUrls.has(streamUrl)) {
           seenUrls.add(streamUrl);
 
-          const resList = (st.resolutions || playData.displayResolutions || '1080,720,480')
-            .split(',')
-            .map((r) => r.trim())
-            .filter(Boolean);
-
-          const primaryRes = resList[0] ? `${resList[0]}p` : '1080p';
+          const directHeight = resHeights.length ? Math.max(...resHeights) : 1080;
+          registerHeight(directHeight);
+          const primaryRes = `${directHeight}p`;
           const codec = st.codecName || st.codec || 'h264';
           const format = (st.format || 'MP4').toUpperCase();
 
@@ -591,6 +882,8 @@ export class MovieProviderService {
             title: `${title} (${primaryRes} ${format})`,
             format,
             resolution: primaryRes,
+            height: directHeight,
+            adaptive: false,
             codec,
             sizeBytes: st.size ? Number(st.size) : undefined,
             streamUrl,
@@ -600,13 +893,14 @@ export class MovieProviderService {
       }
     }
 
-    // 2. Process resource list items (filter out deprecation notices)
-    for (const resItem of resourceList) {
+    // 2. Process resource list items (one URL per resolution — filter out deprecation notices)
+    const addResourceItem = (resItem: ResourceListItem): void => {
       const link = (resItem.resourceLink || '').trim();
-      if (!link || !link.startsWith('http') || isDeprecationNoticeUrl(link) || seenUrls.has(link)) continue;
+      if (!link || !link.startsWith('http') || isDeprecationNoticeUrl(link) || seenUrls.has(link)) return;
       seenUrls.add(link);
 
-      const resLabel = resItem.resolution ? `${resItem.resolution}p` : '720p';
+      const itemHeight = registerHeight(resItem.resolution) || 720;
+      const resLabel = `${itemHeight}p`;
       const encoded = encodeURIComponent(link);
       const proxiedUrl = `${proxyBase}?url=${encoded}&title=${encodeURIComponent(resItem.title || title)}`;
 
@@ -615,6 +909,8 @@ export class MovieProviderService {
         title: `${resItem.title || title} (${resLabel})`,
         format: link.includes('.m3u8') ? 'HLS' : 'MP4',
         resolution: resLabel,
+        height: itemHeight,
+        adaptive: false,
         codec: resItem.codecName || undefined,
         sizeBytes: resItem.size ? Number(resItem.size) : undefined,
         streamUrl: link,
@@ -632,7 +928,62 @@ export class MovieProviderService {
           }
         }
       }
+    };
+
+    for (const resItem of resourceList) {
+      addResourceItem(resItem);
     }
+
+    // 3. Fetch missing quality rungs directly (MovieBox-Tui resource_page_path with &resolution=).
+    //    Skipped when the adaptive DASH manifest already covers those heights (ABR ladder).
+    const isCovered = (h: number): boolean =>
+      streams.some((s) => s.height === h && !s.adaptive) || (hasAdaptive && adaptiveHeights.has(h));
+
+    const missingHeights = [...knownHeights].filter((h) => !isCovered(h)).sort((a, b) => b - a);
+
+    if (!hasAdaptive && missingHeights.length > 0) {
+      const perResolution = await Promise.allSettled(
+        missingHeights.slice(0, 5).map((h) =>
+          this.requestApi<{
+            code?: number;
+            data?: { list?: ResourceListItem[] };
+          }>(`/wefeed-mobile-bff/subject-api/resource?${query}&page=1&perPage=5&resolution=${h}`, 'GET')
+        )
+      );
+
+      perResolution.forEach((outcome, idx) => {
+        if (outcome.status !== 'fulfilled') return;
+        const items = outcome.value?.data?.list || [];
+        const wantedHeight = missingHeights[idx];
+        const match =
+          items.find((it) => Number(it.resolution) === wantedHeight && it.resourceLink) ||
+          items.find((it) => it.resourceLink);
+        if (match) {
+          addResourceItem({ ...match, resolution: Number(match.resolution) || wantedHeight });
+        }
+      });
+    }
+
+    // 4. Sort highest → lowest resolution; adaptive first on ties (best stream stays streams[0])
+    streams.sort((a, b) => {
+      const heightDiff = (b.height || 0) - (a.height || 0);
+      if (heightDiff !== 0) return heightDiff;
+      return Number(b.adaptive || false) - Number(a.adaptive || false);
+    });
+
+    // 5. Build the quality ladder for the client picker (4K / 1080p / 720p / ... + Auto)
+    const qualityHeights = new Set<number>(knownHeights);
+    for (const s of streams) {
+      if (s.height) qualityHeights.add(s.height);
+    }
+    const availableQualities: MovieQualityOption[] = [...qualityHeights]
+      .filter((h) => streams.some((s) => s.height === h && !s.adaptive) || (hasAdaptive && adaptiveHeights.has(h)))
+      .sort((a, b) => b - a)
+      .map((h) => ({
+        label: `${h}p`,
+        height: h,
+        adaptive: !streams.some((s) => s.height === h && !s.adaptive),
+      }));
 
     return {
       title,
@@ -641,6 +992,8 @@ export class MovieProviderService {
       episode: episode > 0 ? episode : undefined,
       streams,
       subtitles,
+      availableQualities,
+      adaptive: hasAdaptive,
     };
   }
 }

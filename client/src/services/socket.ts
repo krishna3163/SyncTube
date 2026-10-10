@@ -6,7 +6,8 @@ const getSocketUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    if (isLocalhost) {
+    // In Vite dev, connect same-origin — the dev server proxies /socket.io (ws) to the backend.
+    if (isLocalhost || import.meta.env.DEV) {
       return window.location.origin;
     }
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {

@@ -77,6 +77,17 @@ The invite image contains a temporary room code and a local development link. Cr
 
 YouTube itself controls the embedded player, including video availability, ads, autoplay restrictions, captions, and supported quality levels.
 
+### Cinema section: movies, web series & anime (MovieBox backend)
+
+- Browse the in-room **Cinema** tab in the search dialog with four catalogue categories: **🔥 Trending**, **🎬 Movies**, **📺 Web Series**, and **🍥 Anime**, plus genre quick-search chips.
+- The server resolves live stream links through the MovieBox API (the provider used by [MovieBox-Tui](https://github.com/mesamirh/MovieBox-Tui)): search, details, seasons/episodes, and play-info/resources endpoints.
+- Pick a **video quality like YouTube** before you press play: a quality menu lists **Auto (adaptive)**, **4K**, **1080p**, **720p**, **480p**, … with format, codec, and size chips for each option.
+- Quality rungs come from MovieBox `collectionResolutions` and per-resolution resource pages; adaptive titles stream through a proxied DASH manifest whose ladder can also be locked from the player's quality gear during playback.
+- Series open a season/episode picker first; each episode resolves its own quality ladder before playback or queueing.
+- Streams play through the synchronized HTML5/DASH player, so hosts, moderators, and participant requests all share the same room timeline; multi-language subtitles returned by the provider are available on the resolved streams.
+- All media is proxied server-side with SSRF guards and an allow-list of media hosts; SyncTube does not host or distribute video files.
+- Offline demo: run the server with `MOVIEBOX_FIXTURE=1` to browse a sample catalogue (movies, series, and anime) backed by local demo streams in `server/fixture-media` instead of the live MovieBox API.
+
 ### Shared playlist and video search
 
 - Find videos with the in-room YouTube search, use a suggested search, or add a YouTube URL/video ID.
