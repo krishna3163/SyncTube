@@ -2,7 +2,7 @@
 
 **Watch YouTube together, in sync.** Create a room, invite friends, and enjoy shared playback, a collaborative queue, chat, polls, and live reactions from your browser.
 
-[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://youtube-watch-party-api-buaf.onrender.com/health)
+[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://synctube-2ar4.onrender.com/health)
 
 SyncTube is a responsive, browser-based watch-party application. A room has a shared playback state and participant roles; each guest joins with a room code or invite link. No account is needed to try the app.
 

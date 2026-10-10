@@ -5,7 +5,7 @@ let partyState: ExtensionPartyState = {
   roomId: null,
   isHost: false,
   userId: null,
-  serverUrl: 'https://youtube-watch-party-api-buaf.onrender.com',
+  serverUrl: 'https://synctube-2ar4.onrender.com',
   readiness: 'not_connected',
 };
 

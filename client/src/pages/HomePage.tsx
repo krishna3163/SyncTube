@@ -61,9 +61,9 @@ export const getApiUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://youtube-watch-party-api-buaf.onrender.com';
+    return 'https://synctube-2ar4.onrender.com';
   }
-  return envUrl || 'https://youtube-watch-party-api-buaf.onrender.com';
+  return envUrl || 'https://synctube-2ar4.onrender.com';
 };
 
 export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
@@ -222,8 +222,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       });
 
       // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
-      if (res.status === 405 && apiUrl !== 'https://youtube-watch-party-api-buaf.onrender.com') {
-        apiUrl = 'https://youtube-watch-party-api-buaf.onrender.com';
+      if (res.status === 405 && apiUrl !== 'https://synctube-2ar4.onrender.com') {
+        apiUrl = 'https://synctube-2ar4.onrender.com';
         res = await fetch(`${apiUrl}/api/rooms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

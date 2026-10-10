@@ -13,9 +13,9 @@ const getSocketUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://youtube-watch-party-api-buaf.onrender.com';
+    return 'https://synctube-2ar4.onrender.com';
   }
-  return envUrl || 'https://youtube-watch-party-api-buaf.onrender.com';
+  return envUrl || 'https://synctube-2ar4.onrender.com';
 };
 
 
