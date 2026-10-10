@@ -1362,7 +1362,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       {connectionStatus !== 'connected' && (
         <div className={`connection-status-banner ${connectionStatus}`} role="status" aria-live="polite">
           <span className="connection-status-dot" />
-          {connectionStatus === 'connecting' ? 'Connecting to the room…' : 'Connection lost — reconnecting…'}
+          <span>{connectionStatus === 'connecting' ? 'Connecting to room…' : 'Connection lost — reconnecting…'}</span>
+          <button type="button" className="connection-retry-btn" onClick={handleResync} title="Retry connection">
+            <RefreshCw size={11} className={connectionStatus === 'connecting' ? 'spin-icon' : ''} />
+            <span>Retry</span>
+          </button>
         </div>
       )}
       {/* Theater Dim Lights Backdrop */}
@@ -1588,13 +1592,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
 
 
-                {/* Reconnecting to Live Broadcast Banner */}
-                {connectionStatus !== 'connected' && (
+                {/* Reconnecting to Live Broadcast Banner - only during active video media */}
+                {connectionStatus !== 'connected' && Boolean(videoId) && (
                   <div className="player-reconnecting-banner">
-                    <RefreshCw size={14} className="spin-icon" />
-                    <span>Hold tight! The internet had a momentary brain freeze 🥤 Re-syncing your cinema feed...</span>
-                    <button type="button" className="btn btn-xs btn-primary banner-retry-btn" onClick={handleResync}>
-                      Kickstart Connection ⚡
+                    <RefreshCw size={13} className="spin-icon" />
+                    <span>Re-syncing stream…</span>
+                    <button type="button" className="btn btn-xs banner-retry-btn" onClick={handleResync}>
+                      Resync ⚡
                     </button>
                   </div>
                 )}

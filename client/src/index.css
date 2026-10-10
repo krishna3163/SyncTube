@@ -150,30 +150,48 @@ textarea:focus-visible,
 }
 
 .connection-status-banner {
-  position: fixed;
-  top: 0.75rem;
-  left: 50%;
-  z-index: 3000;
-  display: inline-flex;
+  position: relative;
+  z-index: 100;
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
-  max-width: calc(100vw - 1rem);
-  padding: 0.45rem 0.75rem;
-  transform: translateX(-50%);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 999px;
-  background: rgba(38, 28, 8, 0.94);
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.38rem 1rem;
+  background: rgba(38, 28, 8, 0.98);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
   color: #fbbf24;
-  font-size: 0.75rem;
-  font-weight: 700;
-  white-space: nowrap;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 0.76rem;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
 }
 
 .connection-status-banner.connecting {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: rgba(8, 30, 42, 0.94);
+  border-bottom-color: rgba(56, 189, 248, 0.35);
+  background: rgba(8, 30, 42, 0.98);
   color: #7dd3fc;
+}
+
+.connection-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--r-full);
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.connection-retry-btn:hover {
+  background: rgba(245, 158, 11, 0.35);
+  color: #fff;
 }
 
 .connection-status-dot {
@@ -11947,6 +11965,34 @@ body.is-dragging-reaction iframe {
   color: #e2e8f0;
 }
 
+@media (max-width: 768px) {
+  .cinema-waiting-state {
+    padding: 1.5rem 1rem;
+    min-height: 180px;
+  }
+  .cinema-waiting-badge {
+    margin-bottom: 0.6rem;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+  }
+  .cinema-waiting-emoji {
+    font-size: 2.2rem;
+  }
+  .cinema-waiting-title {
+    font-size: 1.05rem;
+    margin: 0.4rem 0 0.3rem;
+  }
+  .cinema-waiting-desc {
+    font-size: 0.78rem;
+    margin-bottom: 0.6rem;
+    line-height: 1.4;
+  }
+  .cinema-waiting-fun-ticker {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.72rem;
+  }
+}
+
 .go-live-stage-btn {
   background: linear-gradient(135deg, #ef4444, #dc2626) !important;
   color: #fff !important;
@@ -12218,36 +12264,42 @@ body.is-dragging-reaction iframe {
 /* Reconnecting Banner */
 .player-reconnecting-banner {
   position: absolute;
-  top: 14px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  background: rgba(245, 158, 11, 0.92);
+  gap: 0.45rem;
+  max-width: calc(100% - 20px);
+  width: max-content;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, 0.94);
   color: #1c1917;
-  padding: 0.38rem 0.85rem;
+  padding: 0.28rem 0.65rem;
   border-radius: var(--r-full);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   backdrop-filter: blur(8px);
 }
 
 .player-reconnecting-banner .spin-icon {
   animation: spin 1s linear infinite;
+  flex-shrink: 0;
 }
 
 .banner-retry-btn {
   background: #1c1917;
   color: #fbbf24;
   border: none;
-  padding: 0.2rem 0.55rem;
+  padding: 0.18rem 0.5rem;
   border-radius: var(--r-full);
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ─────────────────────────────────────────────────────────────
