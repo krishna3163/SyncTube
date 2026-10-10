@@ -8,6 +8,7 @@ import {
   Maximize,
   Minimize,
   Volume2,
+  Volume1,
   VolumeX,
   RefreshCw,
   Bell,
@@ -19,6 +20,12 @@ import {
   Subtitles,
   Check,
   Gauge,
+  Smile,
+  PictureInPicture,
+  Tv,
+  Zap,
+  Radio,
+  Sparkles,
 } from 'lucide-react';
 import { Role, PlayState } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
@@ -35,11 +42,20 @@ export interface PlaybackControlsProps {
   onNextVideo?: () => void;
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
+  isTheaterMode?: boolean;
+  onToggleTheater?: () => void;
   ambientMode?: boolean;
   onToggleAmbient?: () => void;
   onToggleMute?: () => void;
   onResync?: () => void;
   isMuted?: boolean;
+  volume?: number;
+  onSetVolume?: (volume: number) => void;
+  onTogglePiP?: () => void;
+  onGoLive?: () => void;
+  isLive?: boolean;
+  latencyMode?: 'ultra_low' | 'low' | 'normal';
+  onSetLatencyMode?: (mode: 'ultra_low' | 'low' | 'normal') => void;
   onSetQuality?: (quality: string) => void;
   onToggleCaptions?: () => void;
   currentQuality?: string;
@@ -53,6 +69,7 @@ export interface PlaybackControlsProps {
   onOpenRequestsTab?: () => void;
   isDockMode?: boolean;
   reactionControl?: React.ReactNode;
+  roomUptimeSeconds?: number;
 }
 
 const QUALITIES = [
@@ -76,11 +93,20 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onNextVideo,
   onToggleFullscreen,
   isFullscreen = false,
+  isTheaterMode = false,
+  onToggleTheater,
   ambientMode = true,
   onToggleAmbient,
   onToggleMute,
   onResync,
   isMuted = false,
+  volume = 100,
+  onSetVolume,
+  onTogglePiP,
+  onGoLive,
+  isLive = false,
+  latencyMode = 'low',
+  onSetLatencyMode,
   onSetQuality,
   onToggleCaptions,
   currentQuality = 'auto',
@@ -91,21 +117,44 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onOpenRequestsTab,
   isDockMode = false,
   reactionControl,
+  roomUptimeSeconds,
 }) => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showQualityOptions, setShowQualityOptions] = useState(false);
+  const [showLatencyOptions, setShowLatencyOptions] = useState(false);
+  const [showReactionMenu, setShowReactionMenu] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
-  const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
+  const reactionRef = useRef<HTMLDivElement>(null);
+  const isHost = userRole === 'HOST' || userRole === 'MODERATOR';
+  const canControl = isHost;
+  const effectiveIsLive = Boolean(isLive || (playState === 'playing'));
+
+  const handleLiveEdgeClick = () => {
+    if (effectiveIsLive) {
+      // Already live: click does nothing
+      return;
+    }
+    if (isHost && onGoLive) {
+      onGoLive();
+    }
+  };
 
   useEffect(() => {
-    if (!showSettingsMenu) return;
+    if (!showSettingsMenu && !showReactionMenu) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!settingsRef.current?.contains(event.target as Node)) {
+      if (showSettingsMenu && !settingsRef.current?.contains(event.target as Node)) {
         setShowSettingsMenu(false);
+      }
+      if (showReactionMenu && !reactionRef.current?.contains(event.target as Node)) {
+        setShowReactionMenu(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowSettingsMenu(false);
+      if (event.key === 'Escape') {
+        setShowSettingsMenu(false);
+        setShowReactionMenu(false);
+      }
     };
     document.addEventListener('pointerdown', closeOnOutsidePointer);
     document.addEventListener('keydown', closeOnEscape);
@@ -113,7 +162,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [showSettingsMenu]);
+  }, [showSettingsMenu, showReactionMenu]);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const target = parseFloat(e.target.value);
@@ -148,7 +197,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const renderRoleBadge = () => {
     if (userRole === 'HOST') {
       return (
-        <span className="controls-role-badge host host-badge role-badge">
+        <span className="controls-role-badge host">
           <Crown size={12} /> Host
         </span>
       );
@@ -261,6 +310,42 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             <span>+10s</span>
           </button>
 
+          {/* Live Broadcast / GO LIVE Badge Button */}
+          {effectiveIsLive ? (
+            <div
+              className="live-edge-badge-btn is-live"
+              title={`Broadcasting Live • Active for ${formatTime(roomUptimeSeconds || 0)}`}
+              aria-label="Live broadcast"
+            >
+              <span className="live-badge-dot live-dot-pulse" />
+              <span className="live-badge-title">
+                LIVE{typeof roomUptimeSeconds === 'number' && roomUptimeSeconds > 0
+                  ? ` • ${formatTime(roomUptimeSeconds)}`
+                  : ''}
+              </span>
+            </div>
+          ) : isHost ? (
+            <button
+              type="button"
+              className="live-edge-badge-btn is-go-live"
+              onClick={handleLiveEdgeClick}
+              title="Start the live watch party broadcast for all viewers"
+              aria-label="Go Live"
+            >
+              <span className="live-badge-dot live-dot-dvr" />
+              <span className="live-badge-title">GO LIVE</span>
+            </button>
+          ) : (
+            <div
+              className="live-edge-badge-btn is-waiting"
+              title="Waiting for the host to go live"
+              aria-label="Stream starting soon"
+            >
+              <span className="live-badge-dot live-dot-dvr" />
+              <span className="live-badge-title">STARTING SOON</span>
+            </div>
+          )}
+
           {onNextVideo && canControl && (
             <button
               type="button"
@@ -288,22 +373,51 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
           )}
         </div>
 
-        {/* Right Group: Mute, Sync, Role Notice, Settings, Fullscreen */}
+        {/* Right Group: Volume Cluster, Sync, Role, Settings, PiP, Theater, Fullscreen */}
         <div className="controls-right-group">
           {renderRoleBadge()}
 
-          {onToggleMute && (
-            <button
-              type="button"
-              className="btn-icon control-btn-icon"
-              onClick={onToggleMute}
-              title={isMuted ? 'Unmute Video' : 'Mute Video'}
-              style={{ color: isMuted ? 'var(--red)' : 'var(--text-main)' }}
-              aria-label="Toggle Mute"
-            >
-              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
-          )}
+          {/* Interactive Volume Cluster with expandable slider */}
+          <div
+            className="volume-cluster"
+            onMouseEnter={() => setShowVolumeSlider(true)}
+            onMouseLeave={() => setShowVolumeSlider(false)}
+          >
+            {onToggleMute && (
+              <button
+                type="button"
+                className="btn-icon control-btn-icon"
+                onClick={onToggleMute}
+                title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+                style={{ color: isMuted ? 'var(--red)' : 'var(--text-main)' }}
+                aria-label="Toggle Mute"
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX size={18} />
+                ) : volume < 50 ? (
+                  <Volume1 size={18} />
+                ) : (
+                  <Volume2 size={18} />
+                )}
+              </button>
+            )}
+
+            {onSetVolume && (
+              <div className={`volume-slider-box ${showVolumeSlider ? 'slider-open' : ''}`}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => onSetVolume(Number(e.target.value))}
+                  className="volume-range-slider"
+                  aria-label="Volume slider"
+                  title={`Volume: ${isMuted ? 0 : volume}%`}
+                />
+              </div>
+            )}
+          </div>
 
           {onResync && (
             <button
@@ -317,14 +431,52 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             </button>
           )}
 
-          {/* Local Video Settings (Quality, Speed & Captions) */}
-          {(onSetQuality || onToggleCaptions || onSetPlaybackSpeed) && (
+          {/* Dedicated Live Reactions Trigger Button */}
+          {reactionControl && (
+            <div ref={reactionRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className={`btn-icon control-btn-icon reaction-bar-btn ${showReactionMenu ? 'active' : ''}`}
+                onClick={() => {
+                  setShowReactionMenu(!showReactionMenu);
+                  setShowSettingsMenu(false);
+                }}
+                title="Send Live Reaction"
+                aria-label="Send Live Reaction"
+              >
+                <Smile size={18} />
+              </button>
+
+              {showReactionMenu && (
+                <div className="local-reactions-popover card glass">
+                  <div className="local-reactions-popover-header">
+                    <span>Live Reactions</span>
+                    <button
+                      type="button"
+                      className="popover-close-btn"
+                      onClick={() => setShowReactionMenu(false)}
+                      aria-label="Close reactions"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="controls-reaction-slot">{reactionControl}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Local Video Settings Popover */}
+          {(onSetQuality || onToggleCaptions || onSetPlaybackSpeed || onSetLatencyMode || onToggleAmbient) && (
             <div ref={settingsRef} style={{ position: 'relative' }}>
               <button
                 type="button"
                 className={`btn-icon control-btn-icon ${showSettingsMenu ? 'active' : ''}`}
-                onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-                title="Local Video Settings (Quality & Captions)"
+                onClick={() => {
+                  setShowSettingsMenu(!showSettingsMenu);
+                  setShowReactionMenu(false);
+                }}
+                title="Video & Latency Settings"
                 aria-label="Video Settings"
               >
                 <Settings2 size={18} />
@@ -332,43 +484,99 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
               {showSettingsMenu && (
                 <div className="local-video-settings card glass">
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Local Video Settings
+                  <div className="settings-panel-title">
+                    <Radio size={13} color="var(--accent)" />
+                    <span>Player & Stream Settings</span>
                   </div>
 
-                  {reactionControl && (
-                    <div className="settings-reaction-control">
-                      <div className="settings-reaction-label">Live Reactions</div>
-                      <div className="controls-reaction-slot">{reactionControl}</div>
+                  {/* Latency Mode Selector */}
+                  {onSetLatencyMode && (
+                    <div className="local-latency-section">
+                      <button
+                        type="button"
+                        className="local-latency-toggle"
+                        onClick={() => setShowLatencyOptions((shown) => !shown)}
+                        aria-expanded={showLatencyOptions}
+                      >
+                        <span className="setting-label">
+                          <Zap size={14} color="#f59e0b" /> Latency Mode
+                        </span>
+                        <span className="setting-val-tag">
+                          {latencyMode === 'ultra_low'
+                            ? 'Ultra-Low (<1s)'
+                            : latencyMode === 'normal'
+                            ? 'Normal'
+                            : 'Low (Balanced)'}
+                        </span>
+                        <ChevronDown size={14} className={showLatencyOptions ? 'is-expanded' : ''} />
+                      </button>
+                      {showLatencyOptions && (
+                        <div className="local-latency-options">
+                          {[
+                            { id: 'ultra_low', title: 'Ultra-Low Latency', desc: 'Sub-second real-time chat & reactions' },
+                            { id: 'low', title: 'Low Latency (Balanced)', desc: 'Optimal ~2s sync with buffer stability' },
+                            { id: 'normal', title: 'Normal Latency', desc: 'Buffered stream for slow connections' },
+                          ].map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`latency-option-item ${latencyMode === item.id ? 'is-selected' : ''}`}
+                              onClick={() => {
+                                onSetLatencyMode(item.id as any);
+                                setShowLatencyOptions(false);
+                              }}
+                            >
+                              <div className="latency-opt-meta">
+                                <strong>{item.title}</strong>
+                                <small>{item.desc}</small>
+                              </div>
+                              {latencyMode === item.id && <Check size={14} color="var(--accent)" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
+                  {/* Captions Toggle */}
                   {onToggleCaptions && (
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="btn btn-secondary setting-row-btn"
                       onClick={() => {
                         onToggleCaptions();
                         setShowSettingsMenu(false);
                       }}
-                      style={{
-                        width: '100%',
-                        justifyContent: 'space-between',
-                        padding: '0.4rem 0.6rem',
-                        fontSize: '0.8rem',
-                        marginBottom: '0.5rem',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                      }}
                     >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Subtitles size={15} /> Captions / CC
+                      <span className="setting-label">
+                        <Subtitles size={15} /> Captions / Subtitles
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: isCaptionsOn ? 'var(--accent)' : 'var(--text-muted)', fontWeight: 700 }}>
+                      <span className="setting-toggle-status" style={{ color: isCaptionsOn ? 'var(--accent)' : 'var(--text-muted)' }}>
                         {isCaptionsOn ? 'ON' : 'OFF'}
                       </span>
                     </button>
                   )}
 
+                  {/* Ambient Mode Toggle */}
+                  {onToggleAmbient && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary setting-row-btn"
+                      onClick={() => {
+                        onToggleAmbient();
+                        setShowSettingsMenu(false);
+                      }}
+                    >
+                      <span className="setting-label">
+                        <Sparkles size={15} color="#ec4899" /> Ambient Lighting
+                      </span>
+                      <span className="setting-toggle-status" style={{ color: ambientMode ? 'var(--accent)' : 'var(--text-muted)' }}>
+                        {ambientMode ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Quality Selector */}
                   {onSetQuality && (
                     <div className="local-quality-section">
                       <button
@@ -377,47 +585,39 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                         onClick={() => setShowQualityOptions((shown) => !shown)}
                         aria-expanded={showQualityOptions}
                       >
-                        <span>Local Quality</span>
+                        <span className="setting-label">Video Quality</span>
                         <span className="local-quality-current">
                           {QUALITIES.find((quality) => quality.value === currentQuality)?.label || 'Auto'}
                         </span>
                         <ChevronDown size={14} className={showQualityOptions ? 'is-expanded' : ''} />
                       </button>
-                      {showQualityOptions && <div className="local-quality-options">
-                        {QUALITIES.map((q) => (
-                          <button
-                            key={q.value}
-                            type="button"
-                            onClick={() => {
-                              onSetQuality(q.value);
-                              setShowSettingsMenu(false);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '0.35rem 0.6rem',
-                              borderRadius: '6px',
-                              border: 'none',
-                              background: currentQuality === q.value ? 'rgba(255, 210, 31, 0.15)' : 'transparent',
-                              color: currentQuality === q.value ? 'var(--accent)' : 'var(--text-main)',
-                              fontSize: '0.78rem',
-                              cursor: 'pointer',
-                              fontWeight: currentQuality === q.value ? 700 : 500,
-                            }}
-                          >
-                            <span>{q.label}</span>
-                            {currentQuality === q.value && <Check size={14} color="var(--accent)" />}
-                          </button>
-                        ))}
-                      </div>}
+                      {showQualityOptions && (
+                        <div className="local-quality-options">
+                          {QUALITIES.map((q) => (
+                            <button
+                              key={q.value}
+                              type="button"
+                              className={`quality-opt-btn ${currentQuality === q.value ? 'is-selected' : ''}`}
+                              onClick={() => {
+                                onSetQuality(q.value);
+                                setShowSettingsMenu(false);
+                              }}
+                            >
+                              <span>{q.label}</span>
+                              {currentQuality === q.value && <Check size={14} color="var(--accent)" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
+                  {/* Playback Speed Slider */}
                   {onSetPlaybackSpeed && (
-                    <div style={{ marginTop: '0.55rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '0.45rem' }}>
-                      <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Gauge size={13} /> Playback Speed
+                    <div className="playback-speed-block">
+                      <div className="speed-block-header">
+                        <Gauge size={13} />
+                        <span>Playback Speed</span>
                       </div>
                       <input
                         type="range"
@@ -436,18 +636,47 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                       </div>
                     </div>
                   )}
-
                 </div>
               )}
             </div>
           )}
 
+          {/* Picture-in-Picture Button */}
+          {onTogglePiP && (
+            <button
+              type="button"
+              className="btn-icon control-btn-icon pip-btn"
+              onClick={onTogglePiP}
+              title="Picture-in-Picture (PiP)"
+              aria-label="Toggle Picture in Picture"
+            >
+              <PictureInPicture size={18} />
+            </button>
+          )}
+
+          {/* Theater Mode Button */}
+          {onToggleTheater && (
+            <button
+              type="button"
+              className={`btn-icon control-btn-icon theater-btn ${isTheaterMode ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleTheater();
+              }}
+              title={isTheaterMode ? 'Exit Theater Mode (T)' : 'Theater Mode (T)'}
+              aria-label="Toggle Theater Mode"
+            >
+              <Tv size={18} />
+            </button>
+          )}
+
+          {/* Fullscreen Button */}
           {onToggleFullscreen && (
             <button
               type="button"
               className="btn-icon fullscreen-btn"
               onClick={onToggleFullscreen}
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
               aria-label="Toggle Fullscreen"
             >
               {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}

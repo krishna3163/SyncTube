@@ -52,11 +52,26 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
   return (
     <header className="app-header">
-      <div className="brand" onClick={onLeaveRoom}>
-        <div className="brand-icon">
-          <Tv size={20} color="#fff" />
+      {/* Left Cluster: Brand & Room Code Chip */}
+      <div className="header-left-cluster">
+        <div className="brand" onClick={onLeaveRoom} title="SyncTube Home">
+          <div className="brand-icon">
+            <Tv size={18} color="#ffd21f" />
+          </div>
+          <span className="brand-title">SyncTube</span>
         </div>
-        <span className="brand-title">SyncTube</span>
+
+        <button
+          className="header-room-chip"
+          onClick={handleCopyCode}
+          title="Click to copy room code"
+          aria-label={`Copy room code ${roomId}`}
+        >
+          <span className="room-chip-dot" />
+          <span className="room-chip-label">Room</span>
+          <strong className="room-chip-code">{roomId}</strong>
+          {copiedCode ? <Check size={13} className="text-emerald" /> : <Copy size={13} />}
+        </button>
       </div>
 
       {/* Center: Live Sync Quality Badge */}
@@ -69,17 +84,17 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
         />
       </div>
 
+      {/* Right Cluster: Primary Invite + Media Actions + Quick Tools */}
       <div className="header-actions">
-        {onOpenBrowserHub && (
+        {onOpenInvite && (
           <button
-            className="btn btn-secondary header-btn"
-            onClick={onOpenBrowserHub}
-            title="Open Universal Browser & Cinema Hub (Netflix, Prime, Disney+, Crunchyroll, Twitch, Direct Links)"
-            aria-label="Browser Hub"
-            id="browser-hub-header-btn"
+            className="btn btn-primary header-invite-btn"
+            onClick={onOpenInvite}
+            title="Invite friends & Show QR Code"
+            aria-label="Invite Friends"
           >
-            <Globe size={14} color="#60a5fa" />
-            <span className="header-btn-text">Browser Hub</span>
+            <Share2 size={14} />
+            <span className="header-btn-text">Invite</span>
           </button>
         )}
 
@@ -95,88 +110,79 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           </button>
         )}
 
-        {onToggleTheater && (
-          <button
-            className={`btn btn-secondary header-btn ${isTheaterMode ? 'btn-active' : ''}`}
-            onClick={onToggleTheater}
-            title={isTheaterMode ? 'Exit Cinema Theater Mode' : 'Cinema Theater Mode (Dim Lights)'}
-            aria-label="Toggle Theater Mode"
-          >
-            <Clapperboard size={14} color={isTheaterMode ? 'var(--accent)' : 'currentColor'} />
-            <span className="header-btn-text">Theater</span>
-          </button>
-        )}
-
-        <button
-          className="btn btn-secondary header-btn"
-          onClick={handleCopyCode}
-          title="Click to copy room code"
-          aria-label={`Copy room code ${roomId}`}
-        >
-          {copiedCode ? <Check size={14} color="var(--accent-emerald)" /> : <Copy size={14} />}
-          <span className="header-btn-prefix">Room:</span>
-          <strong className="header-room-code">{roomId}</strong>
-        </button>
-
-        {onOpenInvite && (
-          <button
-            className="btn btn-primary header-btn header-invite-btn"
-            onClick={onOpenInvite}
-            title="Invite friends & Show QR Code"
-            aria-label="Invite Friends"
-          >
-            <Share2 size={14} />
-            <span className="header-btn-text">Invite</span>
-          </button>
-        )}
-
-        {onOpenDiagnostics && (
+        {onOpenBrowserHub && (
           <button
             className="btn btn-secondary header-btn"
-            onClick={onOpenDiagnostics}
-            title="Sync Diagnostics & Telemetry"
-            aria-label="Diagnostics"
+            onClick={onOpenBrowserHub}
+            title="Open Universal Browser & Cinema Hub (Netflix, Prime, Disney+, Crunchyroll, Twitch, Direct Links)"
+            aria-label="Browser Hub"
+            id="browser-hub-header-btn"
           >
-            <Activity size={14} color="#06b6d4" />
-            <span className="header-btn-text">Diagnostics</span>
+            <Globe size={14} color="#60a5fa" />
+            <span className="header-btn-text">Browser Hub</span>
           </button>
         )}
 
-        {onOpenAuth && (
+        {/* Quick Tools Cluster */}
+        <div className="header-tools-group">
+          {onToggleTheater && (
+            <button
+              className={`btn-icon header-tool-btn ${isTheaterMode ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleTheater();
+              }}
+              title={isTheaterMode ? 'Exit Cinema Theater Mode' : 'Cinema Theater Mode (Dim Lights)'}
+              aria-label="Toggle Theater Mode"
+            >
+              <Clapperboard size={15} color={isTheaterMode ? 'var(--accent)' : 'currentColor'} />
+            </button>
+          )}
+
+          {onOpenDiagnostics && (
+            <button
+              className="btn-icon header-tool-btn"
+              onClick={onOpenDiagnostics}
+              title="Sync Diagnostics & Telemetry"
+              aria-label="Diagnostics"
+            >
+              <Activity size={15} color="#06b6d4" />
+            </button>
+          )}
+
+          {onOpenAuth && (
+            <button
+              className="btn-icon header-tool-btn"
+              onClick={onOpenAuth}
+              title={currentUser ? `Profile: @${currentUser.username}` : 'Sign in or register'}
+              aria-label="Account"
+            >
+              {currentUser ? (
+                <AnimeAvatarDisplay username={currentUser.username} avatarId={currentUser.avatarId || 'pikachu'} size={20} />
+              ) : (
+                <User size={15} color="#c084fc" />
+              )}
+            </button>
+          )}
+
           <button
-            className="btn btn-secondary header-btn"
-            onClick={onOpenAuth}
-            title={currentUser ? `Profile: ${currentUser.username}` : 'Sign in or register'}
-            aria-label="Account"
+            className="btn-icon header-tool-btn"
+            onClick={onOpenSettings}
+            title="Room & User Settings"
+            aria-label="Settings"
           >
-            {currentUser ? (
-              <AnimeAvatarDisplay username={currentUser.username} avatarId={currentUser.avatarId || 'pikachu'} size={18} />
-            ) : (
-              <User size={14} color="#c084fc" />
-            )}
-            <span className="header-btn-text">{currentUser ? currentUser.username : 'Account'}</span>
+            <Settings size={15} />
           </button>
-        )}
 
-        <button
-          className="btn btn-secondary header-btn"
-          onClick={onOpenSettings}
-          title="Room & User Settings"
-          aria-label="Settings"
-        >
-          <Settings size={14} />
-          <span className="header-btn-text">Settings</span>
-        </button>
-
-        <button
-          className="btn btn-danger header-btn"
-          onClick={onLeaveRoom}
-          title="Leave Room"
-          aria-label="Leave room"
-        >
-          <LogOut size={14} />
-          <span className="header-btn-text">Leave</span>
-        </button>
+          <button
+            className="btn-icon header-tool-btn header-leave-btn"
+            onClick={onLeaveRoom}
+            title="Leave Watch Party"
+            aria-label="Leave room"
+          >
+            <LogOut size={15} color="#f87171" />
+          </button>
+        </div>
       </div>
     </header>
   );

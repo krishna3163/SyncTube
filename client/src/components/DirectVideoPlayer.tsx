@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ExternalLink, Globe, Sparkles } from 'lucide-react';
+import * as dashjs from 'dashjs';
 import { Role, SyncStatePayload } from '../types.js';
 import type { YouTubePlayerHandle } from './YouTubePlayer.js';
 
@@ -31,13 +32,75 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   onOpenBrowserHub,
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const dashPlayerRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const isSeekingLocallyRef = useRef(false);
   const isSyncingFromRemoteRef = useRef(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [hevcNotice, setHevcNotice] = useState(false);
 
-  // Clear error on new URL
+  // Synchronously compute DASH format so <video> never receives raw XML as native src
+  const isDashStream = Boolean(mediaUrl && (mediaUrl.includes('.mpd') || mediaUrl.includes('/dash/')));
+
+  // Initialize stream (DASH via Dash.js or native HTML5 for MP4/HLS)
   useEffect(() => {
     setVideoError(null);
+    setHevcNotice(false);
+
+    // Clean up previous dash player
+    if (dashPlayerRef.current) {
+      dashPlayerRef.current.destroy();
+      dashPlayerRef.current = null;
+    }
+
+    const video = videoRef.current;
+    if (isDashStream && video) {
+      try {
+        const player = dashjs.MediaPlayer().create();
+        dashPlayerRef.current = player;
+
+        player.updateSettings({
+          streaming: {
+            abr: {
+              autoSwitchBitrate: { video: true, audio: true },
+            },
+            buffer: {
+              fastSwitchEnabled: true,
+              bufferTimeAtTopQuality: 25,
+            },
+          },
+        });
+
+        player.initialize(video, mediaUrl, false);
+
+        player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
+          if (e?.error === 'capability' || e?.event === 'capability') {
+            setHevcNotice(true);
+          }
+        });
+
+        player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+          setTimeout(() => {
+            const hasHevcSupport =
+              typeof MediaSource !== 'undefined' &&
+              (MediaSource.isTypeSupported('video/mp4; codecs="hev1"') ||
+                MediaSource.isTypeSupported('video/mp4; codecs="hvc1"'));
+
+            if (!hasHevcSupport && video && video.videoWidth === 0) {
+              setHevcNotice(true);
+            }
+          }, 1500);
+        });
+      } catch (err: any) {
+        setVideoError(`DASH player failed to initialize: ${err?.message || 'Unsupported stream'}`);
+      }
+    }
+
+    return () => {
+      if (dashPlayerRef.current) {
+        dashPlayerRef.current.destroy();
+        dashPlayerRef.current = null;
+      }
+    };
   }, [mediaUrl]);
 
   // Sync playback speed
@@ -150,9 +213,21 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       }
     },
     getCurrentTime: () => videoRef.current?.currentTime || 0,
+    setVolume: (vol: number) => {
+      if (videoRef.current) {
+        videoRef.current.volume = Math.max(0, Math.min(1, vol / 100));
+      }
+    },
+    getVolume: () => {
+      return videoRef.current ? Math.round(videoRef.current.volume * 100) : 100;
+    },
   }));
 
   const handleVideoError = () => {
+    // If Dash.js is managing the stream via MediaSource, ignore native element file format errors
+    if (isDashStream) {
+      return;
+    }
     const err = videoRef.current?.error;
     let msg = 'The video stream could not be loaded.';
     if (err?.code === 1) {
@@ -169,13 +244,57 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
   const handleRetry = () => {
     setVideoError(null);
-    if (videoRef.current) {
+    setHevcNotice(false);
+    if (isDashStream && dashPlayerRef.current) {
+      dashPlayerRef.current.attachSource(mediaUrl);
+    } else if (videoRef.current) {
       videoRef.current.load();
     }
   };
 
   return (
     <div className="video-wrapper direct-video-wrapper">
+      {hevcNotice && !videoError && (
+        <div
+          className="direct-video-warning-banner"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            left: '12px',
+            right: '12px',
+            zIndex: 15,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            padding: '8px 14px',
+            background: 'rgba(15, 23, 42, 0.85)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: '#e2e8f0',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Globe size={16} color="#38bdf8" />
+            <span>
+              <strong>HD Audio Live:</strong> If video is blank on Linux/browser without HEVC, launch in Cloud Cinema:
+            </span>
+          </div>
+          {onOpenBrowserHub && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={onOpenBrowserHub}
+              style={{ padding: '3px 10px', fontSize: '11px', flexShrink: 0 }}
+            >
+              Stream in Cloud Browser 🌐
+            </button>
+          )}
+        </div>
+      )}
+
       {videoError && (
         <div className="direct-video-error-card">
           <div className="direct-video-error-icon">
@@ -218,9 +337,10 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
       <video
         ref={videoRef}
-        src={mediaUrl}
+        src={isDashStream ? undefined : mediaUrl}
         className={`direct-html5-video ${videoError ? 'video-hidden' : ''}`}
         playsInline
+        crossOrigin="anonymous"
         onPlay={handlePlayEvent}
         onPause={handlePauseEvent}
         onSeeked={handleSeekedEvent}

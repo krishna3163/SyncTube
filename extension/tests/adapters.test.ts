@@ -11,6 +11,8 @@ describe('YouTubeAdapter', () => {
     expect(adapter.matches('https://youtube.com/watch?v=abc12345678&t=10s')).toBe(true);
     expect(adapter.matches('https://youtu.be/dQw4w9WgXcQ')).toBe(true);
     expect(adapter.matches('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe(true);
+    expect(adapter.matches('https://www.youtube.com/shorts/xyz123abc45')).toBe(true);
+    expect(adapter.matches('https://www.youtube.com/live/liveStream123')).toBe(true);
   });
 
   it('does not match non-youtube urls', () => {
@@ -23,6 +25,8 @@ describe('YouTubeAdapter', () => {
     expect(adapter.extractVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
     expect(adapter.extractVideoId('https://youtu.be/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
     expect(adapter.extractVideoId('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(adapter.extractVideoId('https://www.youtube.com/shorts/xyz123abc45')).toBe('xyz123abc45');
+    expect(adapter.extractVideoId('https://www.youtube.com/live/liveStream123')).toBe('liveStream123');
     expect(adapter.extractVideoId('https://example.com/')).toBe(null);
   });
 
@@ -40,6 +44,8 @@ describe('GenericHTML5Adapter', () => {
   it('matches valid web urls', () => {
     expect(adapter.matches('https://archive.org/details/sample')).toBe(true);
     expect(adapter.matches('http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')).toBe(true);
+    expect(adapter.matches('https://vimeo.com/channels/staffpicks/987654')).toBe(true);
+    expect(adapter.matches('https://twitch.tv/streamer')).toBe(true);
     expect(adapter.matches('ftp://invalid')).toBe(false);
   });
 });

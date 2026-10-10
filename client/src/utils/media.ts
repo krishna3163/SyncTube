@@ -1,6 +1,6 @@
 import { extractYouTubeId } from './youtube.js';
 
-export type PlaybackCategory = 'youtube' | 'direct_stream' | 'movie_website';
+export type PlaybackCategory = 'youtube' | 'direct_stream' | 'movie_website' | 'temp_browser' | 'tab_share';
 
 export interface MediaBadgeInfo {
   label: string;
@@ -11,7 +11,7 @@ export interface MediaBadgeInfo {
 }
 
 export interface DetectedClientMedia {
-  platform: 'youtube' | 'direct' | 'netflix' | 'prime' | 'disney' | 'crunchyroll' | 'twitch' | 'generic';
+  platform: 'youtube' | 'direct' | 'netflix' | 'prime' | 'disney' | 'crunchyroll' | 'twitch' | 'generic' | 'temp_browser' | 'tab_share';
   mediaId: string;
   url?: string;
   title: string;
@@ -20,12 +20,30 @@ export interface DetectedClientMedia {
   badge: MediaBadgeInfo;
 }
 
-const DIRECT_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg', '.ogv', '.m3u8', '.mov'];
+const DIRECT_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogg', '.ogv', '.m3u8', '.mov', '.mpd'];
 
 export function detectClientMedia(input: string): DetectedClientMedia | null {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
   if (trimmed.length === 0 || trimmed.length > 2048) return null;
+
+  // 0. Temporary Browser session check
+  if (trimmed.startsWith('tb:') || trimmed.startsWith('browser:')) {
+    return {
+      platform: 'temp_browser',
+      mediaId: trimmed,
+      title: 'Temporary Browser Cinema Stream',
+      isDirectStream: false,
+      category: 'temp_browser',
+      badge: {
+        label: 'Temporary Browser Cinema',
+        badgeClass: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
+        icon: '🌐',
+        description: 'Live composited Chromium cinema stream with synchronized friends',
+        category: 'temp_browser',
+      },
+    };
+  }
 
   // 1. YouTube check
   const ytId = extractYouTubeId(trimmed);
@@ -57,11 +75,20 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
     const pathname = url.pathname.toLowerCase();
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
 
-    // Direct Video Stream (MP4 / WebM / HLS)
-    const isDirect = DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`));
+    // Direct Video Stream (MP4 / WebM / HLS / DASH / MovieBox Proxy)
+    const isMovieProxy =
+      pathname.includes('/api/movies/proxy') ||
+      pathname.includes('/movies/proxy') ||
+      pathname.includes('/api/movies/dash') ||
+      pathname.includes('/movies/dash');
+    const isDirect =
+      DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`)) ||
+      isMovieProxy;
+
     if (isDirect) {
+      const paramTitle = url.searchParams.get('title');
       const rawName = pathname.split('/').pop()?.split('?')[0] || 'Direct Stream';
-      const cleanName = decodeURIComponent(rawName);
+      const cleanName = paramTitle ? decodeURIComponent(paramTitle) : decodeURIComponent(rawName);
       return {
         platform: 'direct',
         mediaId: url.toString(),
@@ -70,10 +97,14 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
         isDirectStream: true,
         category: 'direct_stream',
         badge: {
-          label: 'Direct Movie Stream (MP4/HLS)',
-          badgeClass: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30',
-          icon: '🎞️',
-          description: 'Plays directly in-room with synchronized timeline and ultra-low drift',
+          label: isMovieProxy ? 'HD Cinema Stream (MovieBox)' : 'Direct Movie Stream (MP4/HLS)',
+          badgeClass: isMovieProxy
+            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+            : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30',
+          icon: isMovieProxy ? '🎬' : '🎞️',
+          description: isMovieProxy
+            ? 'HD Movie/Show stream with synchronized timeline and real-time Ambient Mode'
+            : 'Plays directly in-room with synchronized timeline and ultra-low drift',
           category: 'direct_stream',
         },
       };

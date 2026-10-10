@@ -19,6 +19,8 @@ export interface YouTubePlayerHandle {
   getPlaybackRate: () => number;
   seekTo: (time: number, allowSeekAhead?: boolean) => void;
   getCurrentTime: () => number;
+  setVolume?: (volume: number) => void;
+  getVolume?: () => number;
 }
 
 interface YouTubePlayerProps {
@@ -432,6 +434,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         return playerRef.current?.getCurrentTime?.() || 0;
       } catch {
         return 0;
+      }
+    },
+    setVolume: (vol: number) => {
+      try {
+        playerRef.current?.setVolume?.(vol);
+      } catch {}
+    },
+    getVolume: () => {
+      try {
+        return playerRef.current?.getVolume?.() ?? 100;
+      } catch {
+        return 100;
       }
     },
   }));

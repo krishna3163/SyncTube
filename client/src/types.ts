@@ -14,6 +14,16 @@ export interface SyncStatePayload {
   playState: PlayState;
   currentTime: number;
   updatedAt: number;
+  createdAt?: number;
+  likes?: number;
+  category?: string;
+  isLive?: boolean;
+  browserSession?: {
+    sessionId: string;
+    guestControl: boolean;
+    currentUrl?: string;
+    currentTitle?: string;
+  };
   mediaIdentity?: {
     platform: string;
     mediaId: string;
@@ -192,6 +202,7 @@ export interface UserProfile {
   avatarId?: string;
   bio?: string;
   createdAt: number;
+  followersCount?: number;
 }
 
 export type ReadinessStatus = 'ready' | 'loading' | 'buffering' | 'desynced' | 'not_connected';

@@ -4,12 +4,16 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { createHash, randomBytes } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { extractYouTubeId } from './utils/youtube.js';
 import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
+import { tempBrowserManager } from './services/tempBrowserManager.js';
+import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
+import { validateSafeUrl } from './utils/ssrfValidator.js';
 
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
@@ -110,12 +114,18 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
           play_state: room.playState,
           current_time: room.currentTime,
           updated_at: room.updatedAt,
+          created_at: room.createdAt,
+          likes: room.likes,
+          category: room.category,
         });
       }
 
       res.status(201).json({
         roomId: room.id,
         videoId: room.videoId,
+        createdAt: room.createdAt,
+        likes: room.likes,
+        category: room.category,
         ...(creatorToken ? { identityToken: creatorToken } : {}),
       });
     } catch (err) {
@@ -134,7 +144,14 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         if (dbRecord) {
           room = roomManager.getRoom(roomId);
           if (!room) {
-            room = roomManager.createRoom(dbRecord.id, dbRecord.video_id);
+            room = roomManager.createRoom(
+              dbRecord.id,
+              dbRecord.video_id,
+              undefined,
+              Number(dbRecord.created_at || Date.now()),
+              Number(dbRecord.likes || 0),
+              dbRecord.category || 'cinema'
+            );
             room.playState = dbRecord.play_state as any;
             room.currentTime = dbRecord.current_time;
             room.updatedAt = Number(dbRecord.updated_at);
@@ -152,6 +169,9 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         videoId: room.videoId,
         playState: room.playState,
         participantCount: room.getParticipantCount(),
+        createdAt: room.createdAt,
+        likes: room.likes,
+        category: room.category,
       });
     } catch (err) {
       next(err);
@@ -576,6 +596,317 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(200).json({ query: q, results: fallbackResults });
     } catch (err) {
       next(err);
+    }
+  });
+
+  // ==========================================
+  // TEMPORARY BROWSER REST API
+  // ==========================================
+
+  const sessionLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({ error: 'Too many browser session requests. Please slow down.' }),
+  });
+
+  // POST /api/sessions — Create a temporary browser session
+  app.post('/api/sessions', sessionLimiter, async (req: Request, res: Response) => {
+    try {
+      const { initialUrl, viewport } = req.body || {};
+      const targetUrl = initialUrl || 'https://duckduckgo.com';
+      const result = await tempBrowserManager.createSession(targetUrl, viewport);
+      return res.status(201).json({
+        success: true,
+        session: result.session,
+        token: result.token,
+      });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(400).json({ success: false, error: err?.message || 'Failed to create temporary browser session' });
+    }
+  });
+
+  // Helper middleware to authenticate per-session token
+  const requireSessionToken = (req: Request, res: Response, next: NextFunction) => {
+    const sessionId = req.params.id;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
+    const token = bearerToken || queryToken;
+
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid or missing temporary session token' });
+    }
+    next();
+  };
+
+  // GET /api/sessions/:id — Check session status
+  app.get('/api/sessions/:id', requireSessionToken, (req: Request, res: Response) => {
+    const info = tempBrowserManager.getSessionPublicInfo(req.params.id);
+    if (!info) {
+      return res.status(404).json({ success: false, error: 'Session not found or already closed' });
+    }
+    return res.json({ success: true, session: info });
+  });
+
+  // POST /api/sessions/:id/navigate — Navigate to a URL
+  app.post('/api/sessions/:id/navigate', requireSessionToken, async (req: Request, res: Response) => {
+    try {
+      const { url } = req.body || {};
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ success: false, error: 'Target URL is required' });
+      }
+      const info = await tempBrowserManager.navigate(req.params.id, url);
+      return res.json({ success: true, session: info });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err?.message || 'Navigation failed' });
+    }
+  });
+
+  // POST /api/sessions/:id/print — Generate PDF of current page via virtual printer redirection
+  app.post('/api/sessions/:id/print', requireSessionToken, async (req: Request, res: Response) => {
+    try {
+      const result = await tempBrowserManager.printToPdf(req.params.id);
+      return res.json({ success: true, data: result.data, filename: result.filename });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Print to PDF failed' });
+    }
+  });
+
+  // GET /api/sessions/:id/downloads — List downloaded files
+  app.get('/api/sessions/:id/downloads', requireSessionToken, (req: Request, res: Response) => {
+    const files = tempBrowserManager.getDownloadedFiles(req.params.id);
+    return res.json({ success: true, files });
+  });
+
+  // GET /api/sessions/:id/downloads/:filename — Download a session file to host
+  app.get('/api/sessions/:id/downloads/:filename', requireSessionToken, (req: Request, res: Response) => {
+    const filePath = tempBrowserManager.getDownloadedFilePath(req.params.id, req.params.filename);
+    if (!filePath) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+    return res.download(filePath, req.params.filename);
+  });
+
+  // DELETE /api/sessions/:id — Terminate and permanently clean up the session
+  app.delete('/api/sessions/:id', requireSessionToken, async (req: Request, res: Response) => {
+    try {
+      await tempBrowserManager.closeSession(req.params.id);
+      return res.json({ success: true, message: 'Temporary browser session closed and all data erased.' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Failed to delete session' });
+    }
+  });
+
+  // ==========================================
+  // MOVIEBOX INTEGRATION & STREAM PROXY ROUTES
+  // ==========================================
+
+  // GET /api/movies/search — Search movies and TV shows
+  app.get('/api/movies/search', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+      const page = parseInt(req.query.page as string, 10) || 1;
+      if (!q) {
+        return res.json({ success: true, results: [] });
+      }
+      const results = await movieProvider.searchMedia(q, page);
+      return res.json({ success: true, results });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(502).json({ success: false, error: err?.message || 'Movie search failed' });
+    }
+  });
+
+  // GET /api/movies/details/:id — Get movie/show details, synopsis, ratings, and seasons
+  app.get('/api/movies/details/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const subjectId = req.params.id;
+      if (!subjectId) {
+        return res.status(400).json({ success: false, error: 'Movie ID is required' });
+      }
+      const details = await movieProvider.getMediaDetails(subjectId);
+      return res.json({ success: true, details });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(502).json({ success: false, error: err?.message || 'Failed to retrieve details' });
+    }
+  });
+
+  // GET /api/movies/streams — Resolve direct streaming URLs and subtitles
+  app.get('/api/movies/streams', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const subjectId = typeof req.query.id === 'string' ? req.query.id : '';
+      const season = parseInt(req.query.season as string, 10) || 0;
+      const episode = parseInt(req.query.episode as string, 10) || 0;
+      if (!subjectId) {
+        return res.status(400).json({ success: false, error: 'Media ID is required' });
+      }
+      const data = await movieProvider.getStreamSources(subjectId, season, episode, '/api/movies/proxy');
+      return res.json({ success: true, ...data });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(502).json({ success: false, error: err?.message || 'Failed to resolve streams' });
+    }
+  });
+
+  // GET/HEAD /api/movies/dash/:token/:file(*) — High-performance DASH manifest and segment streaming proxy
+  app.all('/api/movies/dash/:token/:file(*)?', async (req: Request, res: Response) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const token = req.params.token;
+    const file = req.params.file || 'index.mpd';
+    const decoded = decodeDashToken(token);
+
+    if (!decoded || !decoded.manifestUrl) {
+      return res.status(400).json({ error: 'Invalid or expired DASH token' });
+    }
+
+    // SSRF Check on the manifest URL
+    const validated = await validateSafeUrl(decoded.manifestUrl);
+    if (!validated.safe || !validated.normalizedUrl) {
+      return res.status(403).json({ error: 'Target manifest URL is prohibited' });
+    }
+
+    // Determine target URL for manifest or segment
+    let targetUrl = validated.normalizedUrl;
+    if (file && file !== 'index.mpd') {
+      const baseDir = validated.normalizedUrl.substring(0, validated.normalizedUrl.lastIndexOf('/'));
+      const safeFile = file.replace(/(\.\.[/\\])+/g, '');
+      targetUrl = `${baseDir}/${safeFile}`;
+    }
+
+    try {
+      const upstreamHeaders: Record<string, string> = {
+        Referer: STREAM_REFERER,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      };
+
+      if (decoded.cookie) {
+        upstreamHeaders['Cookie'] = decoded.cookie;
+      }
+
+      if (req.headers.range) {
+        upstreamHeaders['Range'] = req.headers.range;
+      }
+
+      const upstreamRes = await fetch(targetUrl, {
+        method: req.method,
+        headers: upstreamHeaders,
+        signal: AbortSignal.timeout(15000),
+      });
+
+      // Enable CORS and Cross-Origin Resource Policy so Video Ambient Mode and Dash.js can read frames
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      let contentType = upstreamRes.headers.get('content-type') || 'application/octet-stream';
+      if (file.endsWith('.mpd') || targetUrl.endsWith('.mpd')) {
+        contentType = 'application/dash+xml';
+      } else if (file.endsWith('.m4s') || targetUrl.endsWith('.m4s')) {
+        contentType = 'video/iso.segment';
+      }
+      res.setHeader('Content-Type', contentType);
+
+      const contentLength = upstreamRes.headers.get('content-length');
+      if (contentLength) {
+        res.setHeader('Content-Length', contentLength);
+      }
+
+      const contentRange = upstreamRes.headers.get('content-range');
+      if (contentRange) {
+        res.setHeader('Content-Range', contentRange);
+      }
+
+      res.status(upstreamRes.status);
+
+      if (req.method === 'HEAD' || !upstreamRes.body) {
+        return res.end();
+      }
+
+      const nodeStream = Readable.fromWeb(upstreamRes.body as any);
+      nodeStream.pipe(res);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        return res.status(502).json({ error: 'Upstream DASH segment fetch failed', details: err?.message });
+      }
+    }
+  });
+
+  // GET/HEAD /api/movies/proxy — High-performance streaming proxy for HTML5 video and Ambient Mode
+  app.all('/api/movies/proxy', async (req: Request, res: Response) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const rawUrl = typeof req.query.url === 'string' ? req.query.url : '';
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'Target URL parameter is required' });
+    }
+
+    // SSRF Check to prevent internal network scanning
+    const validated = await validateSafeUrl(rawUrl);
+    if (!validated.safe || !validated.normalizedUrl) {
+      return res.status(403).json({ error: validated.error || 'Access to target URL is prohibited' });
+    }
+
+    try {
+      const upstreamHeaders: Record<string, string> = {
+        Referer: STREAM_REFERER,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      };
+
+      if (req.headers.range) {
+        upstreamHeaders['Range'] = req.headers.range;
+      }
+
+      const upstreamRes = await fetch(validated.normalizedUrl, {
+        method: req.method,
+        headers: upstreamHeaders,
+        signal: AbortSignal.timeout(15000),
+      });
+
+      // Enable CORS and Cross-Origin Resource Policy so Video Ambient Mode can read frames
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      const contentType = upstreamRes.headers.get('content-type') || 'video/mp4';
+      res.setHeader('Content-Type', contentType);
+
+      const contentLength = upstreamRes.headers.get('content-length');
+      if (contentLength) {
+        res.setHeader('Content-Length', contentLength);
+      }
+
+      const contentRange = upstreamRes.headers.get('content-range');
+      if (contentRange) {
+        res.setHeader('Content-Range', contentRange);
+      }
+
+      res.status(upstreamRes.status);
+
+      if (req.method === 'HEAD' || !upstreamRes.body) {
+        return res.end();
+      }
+
+      const nodeStream = Readable.fromWeb(upstreamRes.body as any);
+      nodeStream.pipe(res);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        return res.status(502).json({ error: 'Upstream media fetch failed', details: err?.message });
+      }
     }
   });
 

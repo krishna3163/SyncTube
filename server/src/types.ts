@@ -24,6 +24,16 @@ export interface SyncStatePayload {
   playState: PlayState;
   currentTime: number;
   updatedAt: number;
+  createdAt?: number;
+  likes?: number;
+  category?: string;
+  isLive?: boolean;
+  browserSession?: {
+    sessionId: string;
+    guestControl: boolean;
+    currentUrl?: string;
+    currentTitle?: string;
+  };
   mediaIdentity?: {
     platform: string;
     mediaId: string;

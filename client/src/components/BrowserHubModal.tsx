@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { detectClientMedia, CINEMA_SAMPLE_PRESETS, DetectedClientMedia } from '../utils/media.js';
 import { Role } from '../types.js';
+import { MovieSearchTab } from './MovieSearchTab.js';
 
 interface BrowserHubModalProps {
   isOpen: boolean;
@@ -110,7 +111,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
   onNotify,
 }) => {
   const [urlInput, setUrlInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'platforms' | 'direct' | 'extension'>('platforms');
+  const [activeTab, setActiveTab] = useState<'movies' | 'platforms' | 'direct' | 'extension'>('movies');
   const [copiedExtensionPath, setCopiedExtensionPath] = useState(false);
 
   if (!isOpen) return null;
@@ -202,6 +203,15 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
         <div className="browser-hub-tabs">
           <button
             type="button"
+            className={`browser-hub-tab-btn ${activeTab === 'movies' ? 'active' : ''}`}
+            onClick={() => setActiveTab('movies')}
+          >
+            <Film size={14} />
+            <span>Movies & Series (HD Cinema)</span>
+          </button>
+
+          <button
+            type="button"
             className={`browser-hub-tab-btn ${activeTab === 'platforms' ? 'active' : ''}`}
             onClick={() => setActiveTab('platforms')}
           >
@@ -214,7 +224,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
             className={`browser-hub-tab-btn ${activeTab === 'direct' ? 'active' : ''}`}
             onClick={() => setActiveTab('direct')}
           >
-            <Film size={14} />
+            <Compass size={14} />
             <span>Direct Movie Streams (4K)</span>
           </button>
 
@@ -280,6 +290,25 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
               >
                 Set as Party Media
               </button>
+            </div>
+          )}
+
+          {/* Tab 0: Movies & TV Shows (MovieBox) */}
+          {activeTab === 'movies' && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <MovieSearchTab
+                userRole={userRole}
+                onPlayStream={(streamUrl, title) => {
+                  onSelectMedia(streamUrl, title, 'direct');
+                  onClose();
+                }}
+                onAddToPlaylist={(streamUrl, title) => {
+                  onSelectMedia(streamUrl, title, 'direct');
+                  onClose();
+                }}
+                onNotify={onNotify}
+                onCloseModal={onClose}
+              />
             </div>
           )}
 

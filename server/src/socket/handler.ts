@@ -38,8 +38,20 @@ import {
   MediaChangedSchema,
   ChatTypingSchema,
   ExtensionStatusSchema,
+  RoomStartBrowserStreamSchema,
+  RoomStopBrowserStreamSchema,
+  RoomBrowserGuestControlSchema,
+  RoomBrowserInputSchema,
+  RoomStartTabStreamSchema,
+  ToggleLikeSchema,
+  SetCategorySchema,
+  WebRtcOfferSchema,
+  WebRtcAnswerSchema,
+  WebRtcIceCandidateSchema,
+  WebRtcRequestStreamSchema,
 } from './schemas.js';
 import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
+import { roomBrowserStreamService } from '../services/roomBrowserStreamService.js';
 
 interface SocketData {
   roomId?: string;
@@ -1181,6 +1193,288 @@ export function setupSocketHandlers(
       } catch {
         // non-critical extension status error ignored
       }
+    });
+
+    // 25. ROOM TEMPORARY BROWSER STREAMING (Watch Party Cinema Stream)
+    socket.on('room:start_browser_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) {
+          const err = 'You must join a room first.';
+          callback?.({ success: false, error: err });
+          return sendError('NOT_FOUND', err);
+        }
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          const err = 'Only Host or Moderator can stream a temporary browser to the room.';
+          callback?.({ success: false, error: err });
+          return sendError('FORBIDDEN', err);
+        }
+
+        const parsed = RoomStartBrowserStreamSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err = 'Invalid start browser stream payload.';
+          callback?.({ success: false, error: err });
+          return sendError('BAD_REQUEST', err);
+        }
+
+        const { sessionId, sessionToken, guestControl } = parsed.data;
+        const res = roomBrowserStreamService.startStreaming(io, room, sessionId, sessionToken, guestControl);
+        if (!res.success) {
+          callback?.({ success: false, error: res.error });
+          return sendError('FORBIDDEN', res.error || 'Failed to start browser stream.');
+        }
+
+        callback?.({ success: true, sessionId, roomId: room.id });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message });
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to start temporary browser stream.');
+      }
+    });
+
+    socket.on('room:stop_browser_stream', () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host or Moderator can stop the browser stream.');
+        }
+
+        roomBrowserStreamService.stopStreaming(io, room, 'stopped_by_host');
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to stop temporary browser stream.');
+      }
+    });
+
+    socket.on('room:browser_set_guest_control', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host or Moderator can toggle guest control.');
+        }
+
+        const parsed = RoomBrowserGuestControlSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        roomBrowserStreamService.setGuestControl(io, room, parsed.data.guestControl);
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to update guest control.');
+      }
+    });
+
+    socket.on('room:browser_input', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant || !room.browserSessionId) return;
+
+        const isPrivileged = canPerformAction(participant.role, 'change_video');
+        if (!isPrivileged && !room.browserGuestControl) {
+          return sendError('FORBIDDEN', 'Guest control is currently disabled by the Host.');
+        }
+
+        const parsed = RoomBrowserInputSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        roomBrowserStreamService.dispatchInput(room, parsed.data);
+      } catch {
+        // non-fatal input error
+      }
+    });
+
+    // 26. ROOM TAB / EXTENSION STREAMING
+    socket.on('room:start_tab_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) {
+          const err = 'You must join a room first.';
+          callback?.({ success: false, error: err });
+          return sendError('NOT_FOUND', err);
+        }
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          const err = 'Only Host can start Tab Stream.';
+          callback?.({ success: false, error: err });
+          return sendError('FORBIDDEN', err);
+        }
+
+        const parsed = RoomStartTabStreamSchema.safeParse(rawPayload);
+        const title = parsed.success && parsed.data?.title ? parsed.data.title : 'Host Shared Browser Tab';
+
+        roomBrowserStreamService.stopStreaming(io, room, 'switched_to_tab_stream');
+        room.changeVideo('tab:share', title, 'tab_share');
+        room.setIsLive(true);
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('room:tab_stream_started', {
+          streamerSocketId: socket.id,
+          streamerId: participant.userId,
+          streamerName: participant.username,
+          title,
+        });
+
+        callback?.({ success: true, title });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message });
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to start tab stream.');
+      }
+    });
+
+    socket.on('room:stop_tab_stream', () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host can stop Tab Stream.');
+        }
+
+        room.changeVideo('', '', 'generic');
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('room:tab_stream_stopped', {
+          stoppedBy: participant.username,
+        });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to stop tab stream.');
+      }
+    });
+
+    // 27. ROOM LIKES & CATEGORY
+    socket.on('room:like_toggle', async () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        const res = room.toggleLike(participant.userId);
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+            created_at: room.createdAt,
+            likes: room.likes,
+            category: room.category,
+          });
+        }
+        io.to(room.id).emit('room:likes_updated', {
+          likes: res.likes,
+          userId: participant.userId,
+          hasLiked: res.hasLiked,
+        });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to toggle room like.');
+      }
+    });
+
+    socket.on('room:set_category', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host can change stream category.');
+        }
+        const parsed = SetCategorySchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid stream category.');
+        room.setCategory(parsed.data.category);
+        if (dbService) {
+          await dbService.saveRoom({
+            id: room.id,
+            video_id: room.videoId,
+            play_state: room.playState,
+            current_time: room.currentTime,
+            updated_at: room.updatedAt,
+            created_at: room.createdAt,
+            likes: room.likes,
+            category: room.category,
+          });
+        }
+        io.to(room.id).emit('room:category_updated', { category: room.category });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to set stream category.');
+      }
+    });
+
+    // 28. ROOM GO LIVE
+    socket.on('room:go_live', () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) {
+          return sendError('NOT_FOUND', 'You must join a room first.');
+        }
+
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only the host or moderator can take the room live.');
+        }
+
+        room.setIsLive(true);
+        if (room.videoId && room.playState === 'paused') {
+          room.play(room.currentTime || 0);
+        }
+
+        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+        io.to(room.id).emit('room:went_live', {
+          roomId: room.id,
+          hostUsername: participant.username,
+          timestamp: Date.now(),
+        });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to start live stream.');
+      }
+    });
+
+    // 28. WEBRTC SIGNALING FOR REAL-TIME TAB / SCREEN SHARING
+    socket.on('webrtc:offer', (rawPayload: unknown) => {
+      try {
+        const parsed = WebRtcOfferSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        io.to(parsed.data.targetSocketId).emit('webrtc:offer', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          offer: parsed.data.offer,
+        });
+      } catch {}
+    });
+
+    socket.on('webrtc:answer', (rawPayload: unknown) => {
+      try {
+        const parsed = WebRtcAnswerSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        io.to(parsed.data.targetSocketId).emit('webrtc:answer', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          answer: parsed.data.answer,
+        });
+      } catch {}
+    });
+
+    socket.on('webrtc:ice_candidate', (rawPayload: unknown) => {
+      try {
+        const parsed = WebRtcIceCandidateSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        io.to(parsed.data.targetSocketId).emit('webrtc:ice_candidate', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          candidate: parsed.data.candidate,
+        });
+      } catch {}
+    });
+
+    socket.on('webrtc:request_stream', (rawPayload?: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        const hostParticipant = room.hostUserId ? room.getParticipant(room.hostUserId) : undefined;
+        if (hostParticipant && hostParticipant.socketId !== socket.id) {
+          io.to(hostParticipant.socketId).emit('webrtc:viewer_joined', {
+            viewerSocketId: socket.id,
+            viewerUserId: participant.userId,
+            viewerName: participant.username,
+          });
+        }
+      } catch {}
     });
 
     // DISCONNECT

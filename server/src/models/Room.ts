@@ -53,6 +53,19 @@ export class Room {
   public universalSync: UniversalSyncSession;
   public name: string = 'Watch Party';
   public visibility: 'public' | 'private' | 'unlisted' = 'public';
+  public browserSessionId: string | null = null;
+  public browserSessionToken: string | null = null;
+  public browserGuestControl: boolean = false;
+
+  public readonly createdAt: number;
+  public likes: number = 0;
+  public category: string = 'cinema';
+  public likedUserIds: Set<string> = new Set();
+  public isLive: boolean = false;
+
+  public setIsLive(live: boolean): void {
+    this.isLive = live;
+  }
 
   private participants: Map<string, Participant> = new Map();
   private identityCredentialHashes: Map<string, string> = new Map();
@@ -64,13 +77,19 @@ export class Room {
   constructor(
     id: string,
     initialVideoId: string = '',
-    creatorIdentity?: { userId: string; credentialHash: string }
+    creatorIdentity?: { userId: string; credentialHash: string },
+    createdAt?: number,
+    likes?: number,
+    category?: string
   ) {
     this.id = id;
     this.videoId = initialVideoId;
     this.playState = 'paused';
     this.currentTime = 0;
     this.updatedAt = Date.now();
+    this.createdAt = createdAt || Date.now();
+    this.likes = typeof likes === 'number' ? likes : 0;
+    this.category = category || 'cinema';
     this.creatorUserId = creatorIdentity?.userId || null;
     if (creatorIdentity) {
       this.identityCredentialHashes.set(creatorIdentity.userId, creatorIdentity.credentialHash);
@@ -86,6 +105,26 @@ export class Room {
           }
         : undefined
     );
+  }
+
+  public toggleLike(userId: string): { likes: number; hasLiked: boolean } {
+    let hasLiked = false;
+    if (this.likedUserIds.has(userId)) {
+      this.likedUserIds.delete(userId);
+      this.likes = Math.max(0, this.likes - 1);
+      hasLiked = false;
+    } else {
+      this.likedUserIds.add(userId);
+      this.likes += 1;
+      hasLiked = true;
+    }
+    return { likes: this.likes, hasLiked };
+  }
+
+  public setCategory(cat: string): void {
+    if (cat && typeof cat === 'string') {
+      this.category = cat.trim();
+    }
   }
 
   public isRemoved(userId: string): boolean {
@@ -271,6 +310,7 @@ export class Room {
       this.currentTime = this.getEffectiveCurrentTime();
     }
     this.playState = 'playing';
+    this.isLive = true;
     this.updatedAt = Date.now();
     this.universalSync.applyPlay(this.currentTime, eventId, senderId);
   }
@@ -383,6 +423,20 @@ export class Room {
     return this.participants.size;
   }
 
+  public attachBrowserSession(sessionId: string, token: string, guestControl: boolean = false): void {
+    this.browserSessionId = sessionId;
+    this.browserSessionToken = token;
+    this.browserGuestControl = guestControl;
+    this.videoId = `tb:${sessionId}`;
+    this.changeVideo(`tb:${sessionId}`, 'Temporary Browser Cinema Stream', 'temp_browser');
+  }
+
+  public detachBrowserSession(): void {
+    this.browserSessionId = null;
+    this.browserSessionToken = null;
+    this.browserGuestControl = false;
+  }
+
   public toSyncStatePayload(): SyncStatePayload {
     const isPaused = this.playState === 'paused';
     const effectiveTime = isPaused ? this.currentTime : this.getEffectiveCurrentTime();
@@ -392,6 +446,16 @@ export class Room {
       playState: this.playState,
       currentTime: Math.round(effectiveTime * 100) / 100,
       updatedAt: Date.now(),
+      createdAt: this.createdAt,
+      likes: this.likes,
+      category: this.category,
+      isLive: this.isLive,
+      browserSession: this.browserSessionId
+        ? {
+            sessionId: this.browserSessionId,
+            guestControl: this.browserGuestControl,
+          }
+        : undefined,
       mediaIdentity: media
         ? {
             platform: media.platform,

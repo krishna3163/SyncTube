@@ -19,13 +19,16 @@ export class RoomManager {
   public createRoom(
     customId?: string,
     initialVideoId: string = '',
-    creatorIdentity?: { userId: string; credentialHash: string }
+    creatorIdentity?: { userId: string; credentialHash: string },
+    createdAt?: number,
+    likes?: number,
+    category?: string
   ): Room {
     const id = customId ? customId.toUpperCase() : this.generateRoomId();
     if (this.rooms.has(id)) {
       throw new Error(`Room with ID ${id} already exists`);
     }
-    const room = new Room(id, initialVideoId, creatorIdentity);
+    const room = new Room(id, initialVideoId, creatorIdentity, createdAt, likes, category);
     this.rooms.set(id, room);
     return room;
   }

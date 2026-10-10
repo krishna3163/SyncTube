@@ -22,6 +22,7 @@ export class GenericHTML5Adapter implements PlatformAdapter {
   private listeners: PlaybackEventCallback[] = [];
   private cleanups: Array<() => void> = [];
   private currentVideoElement: HTMLVideoElement | null = null;
+  private observer: MutationObserver | null = null;
 
   public matches(url: string): boolean {
     if (!url) return false;
@@ -162,6 +163,23 @@ export class GenericHTML5Adapter implements PlatformAdapter {
       this.attachVideoListeners(video);
     }
 
+    if (typeof document !== 'undefined' && !this.observer) {
+      try {
+        this.observer = new MutationObserver(() => {
+          const v = this.getVideoElement();
+          if (v && v !== this.currentVideoElement) {
+            this.attachVideoListeners(v);
+          }
+        });
+        const target = document.documentElement || document.body;
+        if (target) {
+          this.observer.observe(target, { childList: true, subtree: true });
+        }
+      } catch {
+        // ignore in non-browser environments
+      }
+    }
+
     return () => {
       this.listeners = this.listeners.filter((cb) => cb !== callback);
     };
@@ -205,6 +223,10 @@ export class GenericHTML5Adapter implements PlatformAdapter {
   }
 
   public destroy(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
     for (const cleanup of this.cleanups) {
       cleanup();
     }

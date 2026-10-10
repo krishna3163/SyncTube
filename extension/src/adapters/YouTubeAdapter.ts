@@ -23,13 +23,20 @@ export class YouTubeAdapter implements PlatformAdapter {
   private cleanups: Array<() => void> = [];
   private currentVideoElement: HTMLVideoElement | null = null;
   private lastKnownVideoId: string | null = null;
+  private observer: MutationObserver | null = null;
 
   public matches(url: string): boolean {
     if (!url) return false;
     try {
       const parsed = new URL(url);
       const host = parsed.hostname.toLowerCase();
-      if (host.includes('youtube.com') && (parsed.pathname === '/watch' || parsed.pathname.startsWith('/embed/'))) {
+      if (
+        host.includes('youtube.com') &&
+        (parsed.pathname === '/watch' ||
+          parsed.pathname.startsWith('/embed/') ||
+          parsed.pathname.startsWith('/shorts/') ||
+          parsed.pathname.startsWith('/live/'))
+      ) {
         return true;
       }
       if (host === 'youtu.be') return true;
@@ -55,9 +62,15 @@ export class YouTubeAdapter implements PlatformAdapter {
         return parsed.searchParams.get('v');
       }
       if (parsed.hostname === 'youtu.be') {
-        return parsed.pathname.slice(1);
+        return parsed.pathname.slice(1).split('?')[0];
       }
       if (parsed.pathname.startsWith('/embed/')) {
+        return parsed.pathname.split('/')[2] || null;
+      }
+      if (parsed.pathname.startsWith('/shorts/')) {
+        return parsed.pathname.split('/')[2] || null;
+      }
+      if (parsed.pathname.startsWith('/live/')) {
         return parsed.pathname.split('/')[2] || null;
       }
     } catch {
@@ -169,6 +182,23 @@ export class YouTubeAdapter implements PlatformAdapter {
       this.attachVideoListeners(video);
     }
 
+    if (typeof document !== 'undefined' && !this.observer) {
+      try {
+        this.observer = new MutationObserver(() => {
+          const v = this.getVideoElement();
+          if (v && v !== this.currentVideoElement) {
+            this.attachVideoListeners(v);
+          }
+        });
+        const target = document.documentElement || document.body;
+        if (target) {
+          this.observer.observe(target, { childList: true, subtree: true });
+        }
+      } catch {
+        // ignore in non-browser environments
+      }
+    }
+
     return () => {
       this.listeners = this.listeners.filter((cb) => cb !== callback);
     };
@@ -212,6 +242,10 @@ export class YouTubeAdapter implements PlatformAdapter {
   }
 
   public destroy(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
     for (const cleanup of this.cleanups) {
       cleanup();
     }

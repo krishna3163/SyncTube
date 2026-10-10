@@ -228,3 +228,79 @@ export const emitExtensionStatus = (
     currentTabUrl,
   });
 };
+
+// ── Room Browser Streaming Emitters ─────────────────────────
+export const emitStartBrowserStream = (
+  sessionId: string,
+  sessionToken: string,
+  guestControl = false,
+  callback?: (res: { success: boolean; error?: string; sessionId?: string; roomId?: string }) => void
+) => {
+  socket.emit('room:start_browser_stream', { sessionId, sessionToken, guestControl }, callback);
+};
+
+export const emitStopBrowserStream = () => {
+  socket.emit('room:stop_browser_stream', {});
+};
+
+export const emitBrowserSetGuestControl = (guestControl: boolean) => {
+  socket.emit('room:browser_set_guest_control', { guestControl });
+};
+
+export const emitBrowserInput = (payload: {
+  action: 'click' | 'mouse_move' | 'mouse_down' | 'mouse_up' | 'wheel' | 'key_down' | 'key_up' | 'key_press' | 'navigate' | 'back' | 'forward' | 'reload';
+  x?: number;
+  y?: number;
+  button?: 'left' | 'right' | 'middle';
+  clickCount?: number;
+  deltaX?: number;
+  deltaY?: number;
+  key?: string;
+  url?: string;
+}) => {
+  socket.emit('room:browser_input', payload);
+};
+
+export const emitCastBrowserToRoom = (
+  sessionId: string,
+  sessionToken: string,
+  roomId: string,
+  guestControl = false,
+  callback?: (res: { success: boolean; error?: string; roomId?: string }) => void
+) => {
+  socket.emit('browser:cast_to_room', { sessionId, sessionToken, roomId, guestControl }, callback);
+};
+
+export const emitStopCastBrowser = (
+  sessionId: string,
+  sessionToken: string,
+  roomId: string,
+  callback?: (res: { success: boolean }) => void
+) => {
+  socket.emit('browser:stop_cast', { sessionId, sessionToken, roomId }, callback);
+};
+
+export const emitStartTabStream = (
+  title?: string,
+  callback?: (res: { success: boolean; title?: string; error?: string }) => void
+) => {
+  socket.emit('room:start_tab_stream', { title }, callback);
+};
+
+export const emitStopTabStream = () => {
+  socket.emit('room:stop_tab_stream', {});
+};
+
+export const emitToggleRoomLike = () => {
+  socket.emit('room:like_toggle');
+};
+
+export const emitSetRoomCategory = (category: string) => {
+  socket.emit('room:set_category', { category });
+};
+
+export const emitGoLive = () => {
+  socket.emit('room:go_live');
+};
+
+
