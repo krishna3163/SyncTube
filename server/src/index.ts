@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import { createApp } from './app.js';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
+import { AuthService } from './services/auth.js';
 import { setupSocketHandlers } from './socket/handler.js';
 import { serverSentry } from './services/sentry.js';
 
@@ -15,10 +16,11 @@ const HOST = '0.0.0.0';
 async function bootstrap() {
   const roomManager = new RoomManager();
   const dbService = new DatabaseService();
+  const authService = new AuthService(dbService);
 
   await dbService.init();
 
-  const app = createApp(roomManager, dbService);
+  const app = createApp(roomManager, dbService, authService);
   const server = http.createServer(app);
 
   const isAllowedOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {

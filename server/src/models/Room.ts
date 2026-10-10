@@ -1,4 +1,6 @@
 import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest, ChatMessage } from '../types.js';
+import { UniversalSyncSession, UniversalPlaybackState } from '../sync/universalSync.js';
+import { detectMediaSource } from '../utils/media.js';
 
 export interface ServerPlaylistItem {
   id: string;
@@ -10,6 +12,7 @@ export interface ServerPlaylistItem {
   addedBy?: string;
   addedByAvatarId?: string;
   votes?: string[];
+  platform?: string;
 }
 
 export interface RoomPoll {
@@ -47,6 +50,19 @@ export class Room {
   public hostUserId: string | null = null;
   public playlist: ServerPlaylistItem[] = [];
   public activePoll: RoomPoll | null = null;
+  public universalSync: UniversalSyncSession;
+  public name: string = 'Watch Party';
+  public visibility: 'public' | 'private' | 'unlisted' = 'public';
+
+  public readonly createdAt: number;
+  public likes: number = 0;
+  public category: string = 'cinema';
+  public likedUserIds: Set<string> = new Set();
+  public isLive: boolean = false;
+
+  public setIsLive(live: boolean): void {
+    this.isLive = live;
+  }
 
   private participants: Map<string, Participant> = new Map();
   private identityCredentialHashes: Map<string, string> = new Map();
@@ -58,16 +74,53 @@ export class Room {
   constructor(
     id: string,
     initialVideoId: string = '',
-    creatorIdentity?: { userId: string; credentialHash: string }
+    creatorIdentity?: { userId: string; credentialHash: string },
+    createdAt?: number,
+    likes?: number,
+    category?: string
   ) {
     this.id = id;
     this.videoId = initialVideoId;
     this.playState = 'paused';
     this.currentTime = 0;
     this.updatedAt = Date.now();
+    this.createdAt = createdAt || Date.now();
+    this.likes = typeof likes === 'number' ? likes : 0;
+    this.category = category || 'cinema';
     this.creatorUserId = creatorIdentity?.userId || null;
     if (creatorIdentity) {
       this.identityCredentialHashes.set(creatorIdentity.userId, creatorIdentity.credentialHash);
+    }
+    const detected = initialVideoId ? detectMediaSource(initialVideoId) : null;
+    this.universalSync = new UniversalSyncSession(
+      detected
+        ? {
+            platform: detected.platform,
+            mediaId: detected.mediaId,
+            title: detected.title,
+            url: detected.url,
+          }
+        : undefined
+    );
+  }
+
+  public toggleLike(userId: string): { likes: number; hasLiked: boolean } {
+    let hasLiked = false;
+    if (this.likedUserIds.has(userId)) {
+      this.likedUserIds.delete(userId);
+      this.likes = Math.max(0, this.likes - 1);
+      hasLiked = false;
+    } else {
+      this.likedUserIds.add(userId);
+      this.likes += 1;
+      hasLiked = true;
+    }
+    return { likes: this.likes, hasLiked };
+  }
+
+  public setCategory(cat: string): void {
+    if (cat && typeof cat === 'string') {
+      this.category = cat.trim();
     }
   }
 
@@ -247,17 +300,19 @@ export class Room {
     return this.currentTime;
   }
 
-  public play(time?: number): void {
+  public play(time?: number, eventId?: string, senderId?: string): void {
     if (typeof time === 'number' && !isNaN(time) && time >= 0) {
       this.currentTime = time;
     } else {
       this.currentTime = this.getEffectiveCurrentTime();
     }
     this.playState = 'playing';
+    this.isLive = true;
     this.updatedAt = Date.now();
+    this.universalSync.applyPlay(this.currentTime, eventId, senderId);
   }
 
-  public pause(time?: number): void {
+  public pause(time?: number, eventId?: string, senderId?: string): void {
     if (typeof time === 'number' && !isNaN(time) && time >= 0) {
       this.currentTime = time;
     } else {
@@ -265,18 +320,29 @@ export class Room {
     }
     this.playState = 'paused';
     this.updatedAt = Date.now();
+    this.universalSync.applyPause(this.currentTime, eventId, senderId);
   }
 
-  public seek(time: number): void {
+  public seek(time: number, eventId?: string, senderId?: string): void {
     this.currentTime = Math.max(0, time);
     this.updatedAt = Date.now();
+    this.universalSync.applySeek(this.currentTime, eventId, senderId);
   }
 
-  public changeVideo(videoId: string): void {
+  public changeVideo(videoId: string, title?: string, platform: string = 'youtube'): void {
     this.videoId = videoId;
     this.currentTime = 0;
     this.playState = 'paused';
     this.updatedAt = Date.now();
+    this.universalSync.setMediaIdentity({
+      platform,
+      mediaId: videoId,
+      title: title || (platform === 'youtube' ? 'YouTube Video' : 'Media Stream'),
+    });
+  }
+
+  public getUniversalSnapshot(): UniversalPlaybackState {
+    return this.universalSync.getStateSnapshot();
   }
 
   // ── Playlist mutations ────────────────────────────────────
@@ -354,14 +420,31 @@ export class Room {
     return this.participants.size;
   }
 
+
+
   public toSyncStatePayload(): SyncStatePayload {
     const isPaused = this.playState === 'paused';
     const effectiveTime = isPaused ? this.currentTime : this.getEffectiveCurrentTime();
+    const media = this.universalSync.getMediaIdentity();
     return {
       videoId: this.videoId,
       playState: this.playState,
       currentTime: Math.round(effectiveTime * 100) / 100,
       updatedAt: Date.now(),
+      createdAt: this.createdAt,
+      likes: this.likes,
+      category: this.category,
+      isLive: this.isLive,
+      mediaIdentity: media
+        ? {
+            platform: media.platform,
+            mediaId: media.mediaId,
+            title: media.title,
+            url: media.url,
+            duration: media.duration,
+            thumbnail: media.thumbnail,
+          }
+        : undefined,
     };
   }
 
@@ -420,5 +503,35 @@ export class Room {
     if (!alreadySelected) {
       msg.reactions[emoji] = [...(msg.reactions[emoji] || []), userId];
     }
+  }
+
+  // ── Public Directory & Discovery Metadata ────────────────
+  public toPublicDirectoryItem(): {
+    id: string;
+    name: string;
+    category: string;
+    videoId: string;
+    mediaTitle: string;
+    platform: string;
+    participantCount: number;
+    likes: number;
+    isLive: boolean;
+    playState: PlayState;
+    createdAt: number;
+  } {
+    const media = this.universalSync.getMediaIdentity();
+    return {
+      id: this.id,
+      name: this.name || `Room #${this.id}`,
+      category: this.category || 'cinema',
+      videoId: this.videoId,
+      mediaTitle: media?.title || (this.videoId ? 'Video Stream' : 'Lobby'),
+      platform: media?.platform || 'youtube',
+      participantCount: this.getParticipantCount(),
+      likes: this.likes,
+      isLive: this.isLive,
+      playState: this.playState,
+      createdAt: this.createdAt,
+    };
   }
 }

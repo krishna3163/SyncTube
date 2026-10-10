@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncTube V2</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="header">
+      <div class="logo-group">
+        <span class="logo-badge">V2</span>
+        <h1 class="title">SyncTube</h1>
+      </div>
+      <div id="statusIndicator" class="status-indicator disconnected">
+        <span class="dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Media Detection & Control Card -->
+      <section class="card media-card">
+        <div class="card-header">
+          <span class="card-label">Active Media</span>
+          <span id="platformTag" class="badge platform-badge">Detecting...</span>
+        </div>
+        <div class="media-details">
+          <p id="mediaTitle" class="media-title">No supported video detected</p>
+          <div class="media-meta">
+            <span id="mediaTime">00:00</span> / <span id="mediaDuration">--:--</span>
+            <span id="mediaStatus" class="playback-status status-paused">IDLE</span>
+          </div>
+        </div>
+
+        <!-- Quick Video Controls -->
+        <div id="mediaControlsRow" class="media-controls-row hidden">
+          <button id="seekBackBtn" class="btn btn-secondary btn-sm" title="Rewind 10 seconds">⏪ -10s</button>
+          <button id="playPauseBtn" class="btn btn-primary btn-sm">▶ Play</button>
+          <button id="seekFwdBtn" class="btn btn-secondary btn-sm" title="Fast forward 10 seconds">+10s ⏩</button>
+        </div>
+
+        <button id="detectBtn" class="btn btn-secondary btn-sm">🔄 Refresh Tab Media</button>
+      </section>
+
+      <!-- Party Connection Card -->
+      <section class="card party-card">
+        <div class="card-header">
+          <span class="card-label">Watch Party Room</span>
+          <span id="roomCodeBadge" class="badge room-badge">None</span>
+        </div>
+
+        <div id="joinSection" class="join-section">
+          <div class="input-group">
+            <input type="text" id="roomCodeInput" placeholder="Enter 6-char Room Code" maxlength="8">
+            <button id="joinBtn" class="btn btn-primary">Connect</button>
+          </div>
+        </div>
+
+        <div id="connectedSection" class="connected-section hidden">
+          <div class="readiness-box">
+            <span>Your Readiness:</span>
+            <button id="readyToggleBtn" class="btn btn-ready">🟢 Ready</button>
+          </div>
+          <div class="party-action-row">
+            <button id="openRoomBtn" class="btn btn-secondary btn-sm">🌐 Open Room Tab</button>
+            <button id="leaveBtn" class="btn btn-danger btn-sm">Disconnect</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Screen Share / Netflix Watch Party Card -->
+      <section class="card stream-card">
+        <div class="card-header">
+          <span class="card-label">📺 Stream Tab to Room</span>
+          <span id="tabStreamBadge" class="badge platform-badge">WebRTC P2P</span>
+        </div>
+        <p class="card-desc">
+          Share your chosen tab (Netflix, Prime, Anime, Movies) with audio so all friends can watch together!
+        </p>
+        <div class="tab-select-group">
+          <label for="tabSelect" class="tab-select-label">Select Tab to Share:</label>
+          <select id="tabSelect" class="styled-select"></select>
+        </div>
+        <div class="stream-action-row">
+          <button id="streamTabBtn" class="btn btn-primary btn-block">🚀 Share Tab to Watch Party</button>
+          <button id="stopTabStreamBtn" class="btn btn-danger btn-block hidden">⏹ Stop Tab Stream</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <a href="http://localhost:5173" target="_blank" id="webAppLink" class="web-link">Open SyncTube Web App ↗</a>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Reply, X, BarChart3 } from 'lucide-react';
+import { Send, Smile, Reply, X, BarChart3, Plus } from 'lucide-react';
 import { ChatMessage, ChatReplyPreview, Role, RoomPoll } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { EmojiPicker } from './EmojiPicker.js';
@@ -10,14 +10,26 @@ interface ChatProps {
   currentUserId: string;
   currentUserAvatarId?: string;
   viewerCount?: number;
+  userRole?: Role;
   activePoll: RoomPoll | null;
+  typingUsers?: string[];
+  onTypingChange?: (isTyping: boolean) => void;
   onVotePoll: (optionIndex: number) => void;
+  onCreatePoll?: (question: string, options: string[]) => void;
   onSendMessage: (text: string, replyTo?: ChatReplyPreview) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onSendReaction: (emoji: string) => void;
 }
 
 const MSG_EMOJIS = ['❤️', '🔥', '😂', '👍', '😮', '🎉'];
+
+const QUICK_REACTION_EMOJIS = [
+  '❤️', '🔥', '😂', '👏', '😮', '🎉',
+  '🍿', '🎬', '🥳', '😍', '💯', '🚀',
+  '🙌', '👀', '✨', '⚡', '😎', '🤩',
+  '😭', '🤯', '💡', '💖', '⭐', '💀',
+  '😱', '👍', '👎', '😴', '🫡', '🤝'
+];
 
 const ROLE_COLORS: Record<Role, string> = {
   HOST: '#FFD21F',
@@ -35,8 +47,12 @@ export const Chat: React.FC<ChatProps> = ({
   messages,
   currentUserId,
   currentUserAvatarId,
+  userRole,
   activePoll,
+  typingUsers,
+  onTypingChange,
   onVotePoll,
+  onCreatePoll,
   onSendMessage,
   onToggleReaction,
   onSendReaction,
@@ -45,9 +61,67 @@ export const Chat: React.FC<ChatProps> = ({
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatReplyPreview | null>(null);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const quickRxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = quickRxRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rowHeight = 29;
+      const step = e.deltaY > 0 ? rowHeight : -rowHeight;
+      el.scrollBy({
+        top: step,
+        behavior: 'smooth',
+      });
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
+  const handleAddOption = () => {
+    if (pollOptions.length < 5) {
+      setPollOptions((prev) => [...prev, '']);
+    }
+  };
+
+  const handleOptionChange = (index: number, val: string) => {
+    setPollOptions((prev) => {
+      const next = [...prev];
+      next[index] = val;
+      return next;
+    });
+  };
+
+  const handleRemoveOption = (index: number) => {
+    if (pollOptions.length > 2) {
+      setPollOptions((prev) => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleLaunchPoll = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+    if (!pollQuestion.trim() || validOptions.length < 2) return;
+    if (onCreatePoll) {
+      onCreatePoll(pollQuestion.trim(), validOptions);
+    }
+    setPollQuestion('');
+    setPollOptions(['', '']);
+    setShowPollCreator(false);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,9 +131,27 @@ export const Chat: React.FC<ChatProps> = ({
     scrollToBottom();
   }, [messages, activePoll?.id]);
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    if (onTypingChange) {
+      if (val.trim().length > 0) {
+        onTypingChange(true);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          onTypingChange(false);
+        }, 2000);
+      } else {
+        onTypingChange(false);
+      }
+    }
+  };
+
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    if (onTypingChange) onTypingChange(false);
     onSendMessage(inputText.trim(), replyingTo || undefined);
     setInputText('');
     setReplyingTo(null);
@@ -91,6 +183,108 @@ export const Chat: React.FC<ChatProps> = ({
 
   return (
     <div className="chat-panel-v2">
+      {/* Top Action Toolbar: Quick Reactions & Create Poll CTA */}
+      <div className="chat-action-toolbar">
+        <div
+          ref={quickRxRef}
+          className="chat-quick-rx-row"
+          title="Scroll mouse wheel to see more reactions"
+        >
+          {QUICK_REACTION_EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="chat-rx-mini-btn"
+              onClick={() => onSendReaction(emoji)}
+              title={`Send ${emoji} to room`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Inline Poll Composer */}
+      {showPollCreator && (
+        <form onSubmit={handleLaunchPoll} className="chat-poll-composer-card">
+          <div className="chat-poll-composer-header">
+            <div className="composer-title">
+              <BarChart3 size={15} color="var(--accent)" />
+              <span>Create Room Poll</span>
+            </div>
+            <button
+              type="button"
+              className="composer-close-btn"
+              onClick={() => setShowPollCreator(false)}
+              aria-label="Close poll creator"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="composer-field">
+            <label>Question</label>
+            <input
+              type="text"
+              placeholder="e.g. Which movie should we watch next?"
+              value={pollQuestion}
+              onChange={(e) => setPollQuestion(e.target.value)}
+              maxLength={200}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="composer-field">
+            <div className="composer-label-row">
+              <label>Options ({pollOptions.length}/5)</label>
+              {pollOptions.length < 5 && (
+                <button
+                  type="button"
+                  className="composer-add-opt-link"
+                  onClick={handleAddOption}
+                >
+                  <Plus size={12} /> Add option
+                </button>
+              )}
+            </div>
+            <div className="composer-options-list">
+              {pollOptions.map((opt, idx) => (
+                <div key={idx} className="composer-option-row">
+                  <input
+                    type="text"
+                    placeholder={`Option ${idx + 1}`}
+                    value={opt}
+                    onChange={(e) => handleOptionChange(idx, e.target.value)}
+                    maxLength={100}
+                    required
+                  />
+                  {pollOptions.length > 2 && (
+                    <button
+                      type="button"
+                      className="composer-remove-opt-btn"
+                      onClick={() => handleRemoveOption(idx)}
+                      title="Remove option"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary composer-submit-btn"
+            disabled={!pollQuestion.trim() || pollOptions.filter((o) => o.trim()).length < 2}
+          >
+            <BarChart3 size={14} />
+            <span>Launch Live Poll</span>
+          </button>
+        </form>
+      )}
+
       {/* Messages Area */}
       <div className="chat-messages-v2">
         {messages.length === 0 ? (
@@ -340,36 +534,71 @@ export const Chat: React.FC<ChatProps> = ({
         </div>
       )}
 
+      {/* Typing Indicator */}
+      {typingUsers && typingUsers.length > 0 && (
+        <div style={{ padding: '0.2rem 0.8rem', fontSize: '0.72rem', color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+          <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
+          {typingUsers.join(', ')} {typingUsers.length === 1 ? 'is typing...' : 'are typing...'}
+        </div>
+      )}
+
       {/* Input Bar */}
       <form onSubmit={handleSend} className="chat-input-bar">
-        <button
-          type="button"
-          className="chat-emoji-toggle"
-          onClick={() => setShowReactionBar((v) => !v)}
-          title="Quick reactions"
-        >
-          <Smile size={18} />
-        </button>
+        <div className="chat-input-capsule">
+          <input
+            ref={inputRef}
+            type="text"
+            className="chat-input-v2"
+            placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Type a message..."}
+            value={inputText}
+            onChange={handleInputChange}
+            maxLength={500}
+            autoComplete="off"
+          />
 
-        <input
-          ref={inputRef}
-          type="text"
-          className="chat-input-v2"
-          placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : "Type a message..."}
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          maxLength={500}
-          autoComplete="off"
-        />
-
-        <button
-          type="submit"
-          className={`chat-send-v2 ${inputText.trim() ? 'active' : ''}`}
-          disabled={!inputText.trim()}
-          title="Send Message"
-        >
-          <Send size={16} />
-        </button>
+          {inputText.trim() ? (
+            <button
+              type="submit"
+              className="chat-send-v2 active"
+              title="Send Message"
+            >
+              <Send size={16} />
+            </button>
+          ) : (
+            <div className="chat-inline-reactions">
+              <button
+                type="button"
+                className="chat-inline-emoji-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSendReaction('❤️')}
+                title="Send ❤️"
+                aria-label="Send love reaction"
+              >
+                ❤️
+              </button>
+              <button
+                type="button"
+                className="chat-inline-emoji-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSendReaction('😂')}
+                title="Send 😂"
+                aria-label="Send laughing reaction"
+              >
+                😂
+              </button>
+              <button
+                type="button"
+                className="chat-inline-emoji-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onSendReaction('😢')}
+                title="Send 😢"
+                aria-label="Send crying reaction"
+              >
+                😢
+              </button>
+            </div>
+          )}
+        </div>
       </form>
     </div>
   );

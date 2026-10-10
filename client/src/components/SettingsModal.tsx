@@ -462,14 +462,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </label>
               </div>
 
-              {/* Persistence */}
+              {/* Room Persistence */}
               <div className="settings-section">
-                <label className="settings-label">Persistence</label>
+                <label className="settings-label">Room Persistence</label>
                 <p className="settings-description">
-                  This room is temporary and will be deleted automatically if it's not used. Click "Save Room" to add this room to your permanent rooms.
+                  Rooms stay active for your watch party. Save room settings and appearance for returning viewers.
                 </p>
                 <span className="settings-hint">
-                  You need to be logged in to use this feature.
+                  Saved settings persist across refreshes.
                 </span>
               </div>
 

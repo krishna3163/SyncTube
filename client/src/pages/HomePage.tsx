@@ -21,19 +21,26 @@ import {
   HelpCircle,
   Settings,
   Sun,
+  Zap,
+  Film,
+  Globe,
+  Shield,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
+import { detectClientMedia } from '../utils/media.js';
 import {
   getStoredParties,
   saveStoredParty,
   removeStoredParty,
   clearStoredParties,
 } from '../utils/partyStorage.js';
-import { StoredWatchParty, UserSettings } from '../types.js';
+import { StoredWatchParty, UserSettings, UserProfile } from '../types.js';
 import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
 import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
+import { AuthModal } from '../components/AuthModal.js';
+import { authStorage } from '../utils/authStorage.js';
 
 interface HomePageProps {
   userId: string;
@@ -52,9 +59,9 @@ export const getApiUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://synctube-2ar4.onrender.com';
+    return 'https://youtube-watch-party-api-buaf.onrender.com';
   }
-  return envUrl || 'https://synctube-2ar4.onrender.com';
+  return envUrl || 'https://youtube-watch-party-api-buaf.onrender.com';
 };
 
 export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
@@ -88,6 +95,55 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  // Form inline validation states (form-design & error-handling-ux)
+  const [createNameError, setCreateNameError] = useState<string | null>(null);
+  const [joinNameError, setJoinNameError] = useState<string | null>(null);
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null);
+
+  // Real-time media source detection & validation (feedback-patterns & ux-writing)
+  const mediaValidation = React.useMemo(() => {
+    const trimmed = createVideoUrl.trim();
+    if (!trimmed) return null;
+    return detectClientMedia(trimmed);
+  }, [createVideoUrl]);
+
+  // Synchronized user name handling across cards
+  const handleNameChange = (name: string, target: 'create' | 'join') => {
+    if (target === 'create') {
+      setCreateUsername(name);
+      if (createNameError) setCreateNameError(null);
+      if (!joinUsername || joinUsername === createUsername) {
+        setJoinUsername(name);
+      }
+    } else {
+      setJoinUsername(name);
+      if (joinNameError) setJoinNameError(null);
+      if (!createUsername || createUsername === joinUsername) {
+        setCreateUsername(name);
+      }
+    }
+  };
+
+  // Keyboard accessibility: Close modals on Escape key (accessibility-audit & WCAG 2.1.2)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isAvatarModalOpen) {
+          setIsAvatarModalOpen(false);
+        } else if (isHowItWorksOpen) {
+          setIsHowItWorksOpen(false);
+        } else if (isFeaturesOpen) {
+          setIsFeaturesOpen(false);
+        } else if (isAuthModalOpen) {
+          setIsAuthModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAvatarModalOpen, isHowItWorksOpen, isFeaturesOpen, isAuthModalOpen]);
 
   // Stored watch parties in browser (filtered by user)
   const [storedParties, setStoredParties] = useState<StoredWatchParty[]>([]);
@@ -131,18 +187,20 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createUsername.trim()) {
+      setCreateNameError('Please enter your name to start a watch party.');
       onNotify('Please enter your name.', 'error');
       return;
     }
+    setCreateNameError(null);
 
     let initialVideoId = '';
     if (createVideoUrl.trim()) {
-      const extracted = extractYouTubeId(createVideoUrl.trim());
-      if (!extracted) {
-        onNotify('Invalid YouTube URL or ID.', 'error');
+      const media = detectClientMedia(createVideoUrl.trim());
+      if (!media) {
+        onNotify('Invalid YouTube URL, video stream, or movie link.', 'error');
         return;
       }
-      initialVideoId = extracted;
+      initialVideoId = media.mediaId;
     }
 
     setIsCreating(true);
@@ -156,8 +214,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       });
 
       // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
-      if (res.status === 405 && apiUrl !== 'https://synctube-2ar4.onrender.com') {
-        apiUrl = 'https://synctube-2ar4.onrender.com';
+      if (res.status === 405 && apiUrl !== 'https://youtube-watch-party-api-buaf.onrender.com') {
+        apiUrl = 'https://youtube-watch-party-api-buaf.onrender.com';
         res = await fetch(`${apiUrl}/api/rooms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -194,12 +252,21 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
 
   const handleJoinRoom = async (e: React.FormEvent) => {
     e.preventDefault();
+    let hasError = false;
     if (!joinUsername.trim()) {
-      onNotify('Please enter your name.', 'error');
-      return;
+      setJoinNameError('Please enter your name to join.');
+      hasError = true;
+    } else {
+      setJoinNameError(null);
     }
     if (!joinRoomCode.trim()) {
-      onNotify('Please enter a room code.', 'error');
+      setJoinCodeError('Please enter a room code.');
+      hasError = true;
+    } else {
+      setJoinCodeError(null);
+    }
+    if (hasError) {
+      onNotify('Please fill in required fields.', 'error');
       return;
     }
 
@@ -207,6 +274,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
 
     try {
       if (!/^[A-Za-z0-9_-]{4,16}$/.test(normalizedRoom)) {
+        setJoinCodeError('Room code must be 4–16 alphanumeric characters.');
         throw new Error('Invalid room code.');
       }
       const apiUrl = getApiUrl();
@@ -387,6 +455,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               <Sparkles size={14} />
               <span>Features</span>
             </button>
+            
           </div>
         </nav>
 
@@ -402,6 +471,30 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               <Sun size={17} />
             </button>
           )}
+
+          <button
+            type="button"
+            className="auth-header-btn"
+            onClick={() => setIsAuthModalOpen(true)}
+            title={currentUser ? `Signed in as @${currentUser.username}` : 'Sign In / Register'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: currentUser ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+              border: currentUser ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid rgba(255, 255, 255, 0.12)',
+              color: currentUser ? '#38bdf8' : 'var(--text-secondary, #cbd5e1)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <User size={14} />
+            <span>{currentUser ? currentUser.username : 'Sign In'}</span>
+          </button>
 
           <div
             className="home-header-profile"
@@ -423,17 +516,21 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       <div className="home-container">
         <div className="hero">
           <div className="hero-decor-left" aria-hidden="true" />
-          <div className="hero-decor-right" aria-hidden="true">
-            <span className="decor-script-text">Better Movies Together</span>
-          </div>
 
-          <div className="hero-pill">
-            <Sparkles size={13} color="var(--accent)" />
-            <span>Real-Time Watch Party System</span>
+          <div className="hero-badge-group">
+            <div className="hero-pill">
+              <Sparkles size={13} color="var(--accent)" />
+              <span>Real-Time Watch Party</span>
+            </div>
+            <div className="hero-pill hero-pill-latency">
+              <Zap size={13} color="#38bdf8" />
+              <span>Ultra-Low Latency Sync</span>
+            </div>
+            
           </div>
 
           <h1 className="hero-title">
-            Watch YouTube Together in <span className="hero-highlight">Real-Time</span>
+            Watch Together in <span className="hero-highlight">Perfect Sync</span>
           </h1>
 
           <p className="hero-desc">
@@ -490,10 +587,10 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               </div>
             </div>
 
-            <form onSubmit={handleCreateRoom} className="home-card-form">
+            <form onSubmit={handleCreateRoom} className="home-card-form" noValidate>
               <div className="input-group">
                 <div className="input-label-row">
-                  <label className="input-label">Your Name</label>
+                  <label className="input-label" htmlFor="create-username-input">Your Name</label>
                   <button
                     type="button"
                     className="btn-text-change-avatar"
@@ -506,29 +603,54 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
                 <div className="input-with-left-icon">
                   <User size={16} className="input-left-icon" />
                   <input
+                    id="create-username-input"
                     type="text"
-                    className="input-field input-field-icon"
+                    className={`input-field input-field-icon ${createNameError ? 'input-field-error' : ''}`}
                     placeholder="e.g. Alice"
                     value={createUsername}
-                    onChange={(e) => setCreateUsername(e.target.value)}
+                    onChange={(e) => handleNameChange(e.target.value, 'create')}
                     maxLength={50}
-                    required
+                    aria-invalid={!!createNameError}
+                    aria-describedby={createNameError ? 'create-name-error' : undefined}
                   />
                 </div>
+                {createNameError && (
+                  <div id="create-name-error" className="input-inline-feedback error" role="alert">
+                    <span>⚠</span> {createNameError}
+                  </div>
+                )}
               </div>
 
               <div className="input-group">
-                <label className="input-label">YouTube URL or Video ID (Optional)</label>
+                <div className="input-label-row">
+                  <label className="input-label" htmlFor="create-video-url-input">
+                    YouTube URL, Movie Stream, or Video Link (Optional)
+                  </label>
+                </div>
                 <div className="input-with-left-icon">
                   <Link2 size={16} className="input-left-icon" />
                   <input
+                    id="create-video-url-input"
                     type="text"
                     className="input-field input-field-icon"
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="YouTube link, direct .mp4/.m3u8, or movie streaming URL"
                     value={createVideoUrl}
                     onChange={(e) => setCreateVideoUrl(e.target.value)}
                   />
                 </div>
+                {mediaValidation ? (
+                  <div className="input-inline-feedback success">
+                    <span>{mediaValidation.badge.icon}</span>
+                    <span>
+                      <strong>{mediaValidation.badge.label}:</strong> {mediaValidation.title}
+                    </span>
+                  </div>
+                ) : createVideoUrl.trim() ? (
+                  <div className="input-inline-feedback info">
+                    <span>ℹ</span>
+                    <span>Tip: Enter a YouTube link, video ID, or direct stream URL (.mp4/.m3u8)</span>
+                  </div>
+                ) : null}
               </div>
 
               <button
@@ -557,10 +679,10 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               </div>
             </div>
 
-            <form onSubmit={handleJoinRoom} className="home-card-form">
+            <form onSubmit={handleJoinRoom} className="home-card-form" noValidate>
               <div className="input-group">
                 <div className="input-label-row">
-                  <label className="input-label">Your Name</label>
+                  <label className="input-label" htmlFor="join-username-input">Your Name</label>
                   <button
                     type="button"
                     className="btn-text-change-avatar"
@@ -573,31 +695,48 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
                 <div className="input-with-left-icon">
                   <User size={16} className="input-left-icon" />
                   <input
+                    id="join-username-input"
                     type="text"
-                    className="input-field input-field-icon"
+                    className={`input-field input-field-icon ${joinNameError ? 'input-field-error' : ''}`}
                     placeholder="e.g. Bob"
                     value={joinUsername}
-                    onChange={(e) => setJoinUsername(e.target.value)}
+                    onChange={(e) => handleNameChange(e.target.value, 'join')}
                     maxLength={50}
-                    required
+                    aria-invalid={!!joinNameError}
+                    aria-describedby={joinNameError ? 'join-name-error' : undefined}
                   />
                 </div>
+                {joinNameError && (
+                  <div id="join-name-error" className="input-inline-feedback error" role="alert">
+                    <span>⚠</span> {joinNameError}
+                  </div>
+                )}
               </div>
 
               <div className="input-group">
-                <label className="input-label">Room Code</label>
+                <label className="input-label" htmlFor="join-room-code-input">Room Code</label>
                 <div className="input-with-left-icon">
                   <Hash size={16} className="input-left-icon" />
                   <input
+                    id="join-room-code-input"
                     type="text"
-                    className="input-field input-field-icon code-input"
+                    className={`input-field input-field-icon code-input ${joinCodeError ? 'input-field-error' : ''}`}
                     placeholder="e.g. ABC123"
                     value={joinRoomCode}
-                    onChange={(e) => setJoinRoomCode(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      setJoinRoomCode(e.target.value.toUpperCase());
+                      if (joinCodeError) setJoinCodeError(null);
+                    }}
                     maxLength={16}
-                    required
+                    aria-invalid={!!joinCodeError}
+                    aria-describedby={joinCodeError ? 'join-code-error' : undefined}
                   />
                 </div>
+                {joinCodeError && (
+                  <div id="join-code-error" className="input-inline-feedback error" role="alert">
+                    <span>⚠</span> {joinCodeError}
+                  </div>
+                )}
               </div>
 
               <button
@@ -674,7 +813,14 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
                           }}
                         />
                       ) : (
-                        <div className="stored-party-thumb video-thumb-empty">No video selected</div>
+                        <div className="stored-party-thumb video-thumb-empty">
+                          <div className="thumb-empty-glow" />
+                          <div className="thumb-empty-icon-wrap">
+                            <Film size={20} color="var(--accent)" />
+                          </div>
+                          <span className="thumb-empty-title">Cinema Stage</span>
+                          <span className="thumb-empty-sub">Ready to stream</span>
+                        </div>
                       )}
                       <span className="stored-party-time-badge">
                         <Clock size={11} />
@@ -744,18 +890,22 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
         <div className="modal-backdrop" onClick={() => setIsAvatarModalOpen(false)}>
           <div
             className="glass-panel modal-card avatar-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="avatar-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <Sparkles size={20} color="var(--accent)" />
-                <h2 className="modal-title">Choose Your Anime Character</h2>
+                <h2 id="avatar-modal-title" className="modal-title">Choose Your Anime Character</h2>
               </div>
               <button
                 type="button"
                 className="btn-icon"
                 onClick={() => setIsAvatarModalOpen(false)}
                 title="Close"
+                aria-label="Close character selection modal"
               >
                 <X size={18} />
               </button>
@@ -784,13 +934,26 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       {/* How It Works Modal */}
       {isHowItWorksOpen && (
         <div className="modal-backdrop" onClick={() => setIsHowItWorksOpen(false)}>
-          <div className="glass-panel modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+          <div
+            className="glass-panel modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="how-it-works-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '520px' }}
+          >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <HelpCircle size={20} color="var(--accent)" />
-                <h2 className="modal-title">How SyncTube Works</h2>
+                <h2 id="how-it-works-modal-title" className="modal-title">How SyncTube Works</h2>
               </div>
-              <button type="button" className="btn-icon" onClick={() => setIsHowItWorksOpen(false)} title="Close">
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsHowItWorksOpen(false)}
+                title="Close"
+                aria-label="Close how it works modal"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -824,13 +987,26 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       {/* Features Modal */}
       {isFeaturesOpen && (
         <div className="modal-backdrop" onClick={() => setIsFeaturesOpen(false)}>
-          <div className="glass-panel modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+          <div
+            className="glass-panel modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="features-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '540px' }}
+          >
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <Sparkles size={20} color="var(--accent)" />
-                <h2 className="modal-title">SyncTube Features</h2>
+                <h2 id="features-modal-title" className="modal-title">SyncTube Features</h2>
               </div>
-              <button type="button" className="btn-icon" onClick={() => setIsFeaturesOpen(false)} title="Close">
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsFeaturesOpen(false)}
+                title="Close"
+                aria-label="Close features modal"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -869,6 +1045,33 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
           </div>
         </div>
       )}
+
+      {/* V2 Auth / Profile Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        apiUrl={getApiUrl()}
+        onAuthSuccess={(user, token) => {
+          setCurrentUser(user);
+          authStorage.setUser(user);
+          authStorage.setToken(token);
+          if (user.avatarId) {
+            setSelectedAvatarId(user.avatarId);
+            rememberParticipantCharacter(user.username, undefined, user.avatarId);
+          }
+          if (user.username) {
+            setCreateUsername(user.username);
+            setJoinUsername(user.username);
+          }
+        }}
+        onLogout={() => {
+          setCurrentUser(null);
+          authStorage.clearToken();
+          authStorage.clearUser();
+        }}
+        onNotify={onNotify}
+      />
     </div>
   );
 };

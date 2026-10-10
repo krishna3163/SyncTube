@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
-import { BarChart3, Plus, X } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import { getAvatarById } from '../utils/animeAvatars.js';
 
 interface FloatingReactionsProps {
@@ -46,9 +46,6 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
   const [reactionGroup, setReactionGroup] = useState<keyof typeof REACTION_GROUPS>('Basic');
   const [recentCounts, setRecentCounts] = useState<Record<string, number>>({});
   const [recentReactions, setRecentReactions] = useState<string[]>([]);
-  const [showPollComposer, setShowPollComposer] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState('Yes, No');
   const lastSentAtRef = useRef(0);
   const recentCountsRef = useRef<Record<string, number>>({});
   const particleTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -220,15 +217,6 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     particleTimersRef.current = [];
   }, []);
 
-  const createPoll = () => {
-    const options = pollOptions.split(',').map((item) => item.trim()).filter(Boolean);
-    if (!socket || !pollQuestion.trim() || options.length < 2) return;
-    socket.emit('create_poll', { question: pollQuestion.trim(), options });
-    setPollQuestion('');
-    setPollOptions('Yes, No');
-    setShowPollComposer(false);
-  };
-
   // Send reaction
   const sendReaction = useCallback((emoji: string) => {
     if (!socket) return;
@@ -397,67 +385,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
             </button>
           ))}
         </div>
-        {userRole === 'HOST' || userRole === 'MODERATOR' ? (
-          <button
-            type="button"
-            className={`reaction-create-poll ${showPollComposer ? 'active' : ''}`}
-            onClick={() => setShowPollComposer((value) => !value)}
-            aria-expanded={showPollComposer}
-          >
-            <Plus size={14} />
-            <span>{showPollComposer ? 'Cancel poll' : 'Create poll'}</span>
-          </button>
-        ) : null}
       </div>
-      {showPollComposer && (
-        <div className="reaction-poll-composer">
-          <div className="poll-composer-heading">
-            <BarChart3 size={15} />
-            <span>Start a room poll</span>
-            <button
-              type="button"
-              className="poll-composer-close"
-              onClick={() => setShowPollComposer(false)}
-              aria-label="Close poll composer"
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <label className="poll-composer-field">
-            <span>Question</span>
-            <input
-              value={pollQuestion}
-              onChange={(event) => setPollQuestion(event.target.value)}
-              placeholder="What should we watch next?"
-              maxLength={200}
-              aria-label="Poll question"
-            />
-          </label>
-          <label className="poll-composer-field">
-            <span>Options <small>Separate with commas</small></span>
-            <input
-              value={pollOptions}
-              onChange={(event) => setPollOptions(event.target.value)}
-              placeholder="Yes, No"
-              aria-label="Poll options"
-            />
-          </label>
-          <div className="poll-composer-actions">
-            <span className="poll-option-hint">
-              {pollOptions.split(',').filter((item) => item.trim()).length} options
-            </span>
-            <button
-              type="button"
-              className="poll-create-submit"
-              onClick={createPoll}
-              disabled={!pollQuestion.trim() || pollOptions.split(',').filter((item) => item.trim()).length < 2}
-            >
-              <Plus size={14} />
-              <span>Create poll</span>
-            </button>
-          </div>
-        </div>
-      )}
       <div className="reaction-options" onWheel={handleReactionOptionsWheel}>
         {!alwaysExpanded && (
           <button type="button" className="reaction-close-btn" onClick={() => setIsOpen(false)} aria-label="Close reactions">×</button>
@@ -481,78 +409,72 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
   return (
     <>
       {/* Floating Animated Reaction Particles */}
-      <div className="floating-reactions-canvas" aria-hidden="true">
-        {particles.map((p) => (
-          <div
-            key={p.id}
-            className="floating-reaction-item"
-            style={{
-              left: `${p.x}%`,
-              transform: `scale(${p.scale}) rotate(${p.rotation}deg)`,
-            }}
-          >
-            <span className="reaction-emoji">{p.emoji}</span>
-            <span className="reaction-sender">{p.username}</span>
-          </div>
-        ))}
-      </div>
+      {!inline && (
+        <div className="floating-reactions-canvas" aria-hidden="true">
+          {particles.map((p) => (
+            <div
+              key={p.id}
+              className="floating-reaction-item"
+              style={{
+                left: `${p.x}%`,
+                transform: `scale(${p.scale}) rotate(${p.rotation}deg)`,
+              }}
+            >
+              <span className="reaction-emoji">{p.emoji}</span>
+              <span className="reaction-sender">{p.username}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Draggable React Button Dock */}
-      <div
-        ref={launcherRef}
-        className={`${inline ? 'inline-reactions-launcher' : 'floating-reactions-launcher'} ${isOpen || alwaysExpanded ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
-        style={{
-          ...(inline
-            ? {}
-            : {
-                left: pos ? `${pos.x}px` : undefined,
-                top: pos ? `${pos.y}px` : undefined,
-                right: pos ? 'auto' : undefined,
-                bottom: pos ? 'auto' : undefined,
-              }),
-          alignItems: inline ? 'stretch' : isRightSide ? 'flex-end' : 'flex-start',
-        }}
-      >
-        {Object.keys(recentCounts).length > 0 && (
-          <div className="reaction-live-counters" aria-live="polite">
-            {Object.entries(recentCounts).map(([emoji, count]) => (
-              <span key={emoji}>{emoji} {count}</span>
-            ))}
-          </div>
-        )}
-        {/* If placed near bottom of screen, show emoji palette ABOVE the button */}
-        {(isOpen || alwaysExpanded) && !inline && isNearBottom && (
-          renderPalette({ marginBottom: '0.4rem' })
-        )}
-
-        {/* Draggable React Pill Button */}
-        {!alwaysExpanded && <button
-          type="button"
-          className="reaction-toggle-btn"
-          ref={buttonRef}
-          onPointerDown={inline ? undefined : handlePointerDown}
-          onClick={() => {
-            if (ignoreNextClickRef.current) {
-              ignoreNextClickRef.current = false;
-              return;
-            }
-            if (!isDraggingRef.current) {
-              setIsOpen((open) => !open);
-            }
-          }}
-          title={isOpen ? 'Close live reactions' : 'Send live reactions'}
-          aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
-          aria-expanded={isOpen}
+      {/* Draggable React Button Dock (only rendered when inline, floating button hidden) */}
+      {inline && (
+        <div
+          ref={launcherRef}
+          className={`inline-reactions-launcher ${isOpen || alwaysExpanded ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
+          style={{ alignItems: 'stretch' }}
         >
-          <span className="reaction-toggle-emoji">{characterEmoji}</span>
-          <span className="reaction-toggle-label">React</span>
-        </button>}
+          {Object.keys(recentCounts).length > 0 && (
+            <div className="reaction-live-counters" aria-live="polite">
+              {Object.entries(recentCounts).map(([emoji, count]) => (
+                <span key={emoji}>{emoji} {count}</span>
+              ))}
+            </div>
+          )}
 
-        {/* If placed in upper/middle of screen, show emoji palette BELOW the button */}
-        {(isOpen || alwaysExpanded) && (inline || !isNearBottom) && (
-          renderPalette({ marginTop: '0.4rem' })
-        )}
-      </div>
+          {/* Draggable React Pill Button */}
+          {!alwaysExpanded && (
+            <button
+              type="button"
+              className="reaction-toggle-btn"
+              ref={buttonRef}
+              onClick={() => {
+                if (ignoreNextClickRef.current) {
+                  ignoreNextClickRef.current = false;
+                  return;
+                }
+                if (!isDraggingRef.current) {
+                  setIsOpen((open) => !open);
+                }
+              }}
+              title={isOpen ? 'Close live reactions' : 'Send live reactions'}
+              aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
+              aria-expanded={isOpen}
+            >
+              <span className="reaction-drag-handle" title="Drag to move">
+                <GripVertical size={14} />
+              </span>
+              <span className="reaction-toggle-emoji">{characterEmoji}</span>
+              <span className="reaction-toggle-label">React</span>
+            </button>
+          )}
+
+          {/* If placed in upper/middle of screen, show emoji palette BELOW the button */}
+          {(isOpen || alwaysExpanded) && (
+            renderPalette({ marginTop: '0.4rem' })
+          )}
+        </div>
+      )}
     </>
   );
 };

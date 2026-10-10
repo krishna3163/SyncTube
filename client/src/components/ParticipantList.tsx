@@ -1,6 +1,6 @@
 import React from 'react';
-import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
-import { ParticipantPublic, Role } from '../types.js';
+import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users, CheckCircle, Clock } from 'lucide-react';
+import { ParticipantPublic, Role, ParticipantReadiness } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { getParticipantCharacterId } from '../utils/characterMemory.js';
 
@@ -9,6 +9,9 @@ interface ParticipantListProps {
   currentUserId: string;
   currentUserRole: Role;
   currentUserAvatarId?: string;
+  readinessList?: ParticipantReadiness[];
+  isCurrentUserReady?: boolean;
+  onToggleReady?: () => void;
   onAssignRole: (userId: string, role: Role) => void;
   onRemoveParticipant: (userId: string) => void;
 }
@@ -24,6 +27,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   currentUserId,
   currentUserRole,
   currentUserAvatarId,
+  readinessList,
+  isCurrentUserReady,
+  onToggleReady,
   onAssignRole,
   onRemoveParticipant,
 }) => {
@@ -55,19 +61,57 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
     }
   };
 
+  const readyCount = readinessList
+    ? readinessList.filter((r) => r.status === 'ready').length
+    : participants.length;
+
   return (
     <div className="glass-panel sidebar-card">
-      <div className="sidebar-title">
+      <div className="sidebar-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Users size={18} />
           Participants ({participants.length})
         </span>
+        {readinessList && (
+          <span style={{ fontSize: '0.72rem', color: readyCount === participants.length ? '#34d399' : '#fbbf24', fontWeight: 600 }}>
+            {readyCount}/{participants.length} Ready
+          </span>
+        )}
       </div>
+
+      {onToggleReady && (
+        <div style={{ padding: '0 0.5rem 0.6rem 0.5rem' }}>
+          <button
+            type="button"
+            onClick={onToggleReady}
+            style={{
+              width: '100%',
+              padding: '0.35rem 0.6rem',
+              borderRadius: '8px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.35rem',
+              cursor: 'pointer',
+              border: isCurrentUserReady ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+              background: isCurrentUserReady ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+              color: isCurrentUserReady ? '#34d399' : '#fbbf24',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {isCurrentUserReady ? <CheckCircle size={13} /> : <Clock size={13} />}
+            {isCurrentUserReady ? 'You are Ready' : 'Mark Yourself Ready'}
+          </button>
+        </div>
+      )}
 
       <div className="participant-list">
         {participants.map((p) => {
           const isCurrentUser = p.userId === currentUserId;
           const glowColor = ROLE_GLOW[p.role];
+          const readiness = readinessList?.find((r) => r.userId === p.userId);
 
           return (
             <div key={p.userId} className="participant-item">
@@ -96,7 +140,34 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       </span>
                     )}
                   </span>
-                  {renderRoleBadge(p.role)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    {renderRoleBadge(p.role)}
+                    {readiness && (
+                      <span
+                        style={{
+                          fontSize: '0.65rem',
+                          padding: '0.5px 5px',
+                          borderRadius: '10px',
+                          fontWeight: 600,
+                          backgroundColor:
+                            readiness.status === 'ready'
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : readiness.status === 'loading' || readiness.status === 'buffering'
+                              ? 'rgba(245, 158, 11, 0.15)'
+                              : 'rgba(239, 68, 68, 0.15)',
+                          color:
+                            readiness.status === 'ready'
+                              ? '#34d399'
+                              : readiness.status === 'loading' || readiness.status === 'buffering'
+                              ? '#fbbf24'
+                              : '#f87171',
+                        }}
+                      >
+                        {readiness.status === 'ready' ? '🟢' : readiness.status === 'desynced' ? '🔴' : '🟡'}{' '}
+                        {readiness.status}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export const ExtensionStatusSchema = z.object({
+  installed: z.boolean(),
+  version: z.string().optional(),
+  activeTabUrl: z.string().optional(),
+  platform: z.string().optional(),
+});
+
 export const JoinRoomSchema = z.object({
   roomId: z.string().trim().min(1).max(32),
   username: z.string().trim().min(1).max(50),
@@ -21,8 +28,10 @@ export const SeekSchema = z.object({
 });
 
 export const ChangeVideoSchema = z.object({
-  videoId: z.string().trim().min(1).max(256),
+  videoId: z.string().trim().min(1).max(2048),
   play: z.boolean().optional().default(false),
+  title: z.string().trim().max(200).optional(),
+  platform: z.string().trim().max(50).optional(),
 });
 
 export const AssignRoleSchema = z.object({
@@ -35,11 +44,12 @@ export const RemoveParticipantSchema = z.object({
 });
 
 export const PlaylistAddSchema = z.object({
-  videoId: z.string().trim().min(1).max(256),
+  videoId: z.string().trim().min(1).max(2048),
   title: z.string().trim().max(200).optional(),
   duration: z.string().trim().max(50).optional(),
   channel: z.string().trim().max(100).optional(),
-  thumbnail: z.string().trim().max(500).optional(),
+  thumbnail: z.string().trim().max(1000).optional(),
+  platform: z.string().trim().max(50).optional(),
 });
 
 export const PlaylistRemoveSchema = z.object({
@@ -68,10 +78,11 @@ export const ActionRequestSchema = z.object({
   data: z
     .object({
       time: z.number().nonnegative().optional(),
-      videoId: z.string().trim().max(256).optional(),
+      videoId: z.string().trim().max(2048).optional(),
       title: z.string().trim().max(200).optional(),
       duration: z.string().trim().max(50).optional(),
       channel: z.string().trim().max(100).optional(),
+      platform: z.string().trim().max(50).optional(),
     })
     .optional(),
 });
@@ -122,3 +133,78 @@ export const SendSoundEffectSchema = z.object({
 export const UpdateAvatarSchema = z.object({
   avatarId: z.string().trim().min(1).max(50),
 });
+
+// ── V2 Socket Event Schemas ──────────────────────────────
+export const PartyReadySchema = z.object({
+  status: z.enum(['ready', 'loading', 'buffering', 'desynced', 'not_connected']),
+  reportedPosition: z.number().nonnegative().optional(),
+  activePlatform: z.string().trim().max(50).optional(),
+  activeMediaId: z.string().trim().max(2048).optional(),
+});
+
+export const SyncPlaySchema = z.object({
+  position: z.number().nonnegative().optional(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+}).optional();
+
+export const SyncPauseSchema = z.object({
+  position: z.number().nonnegative().optional(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+}).optional();
+
+export const SyncSeekSchema = z.object({
+  position: z.number().nonnegative(),
+  eventId: z.string().trim().max(100).optional(),
+  revision: z.number().int().nonnegative().optional(),
+});
+
+export const SyncDriftCheckSchema = z.object({
+  clientPosition: z.number().nonnegative(),
+  clientTimestamp: z.number().nonnegative(),
+});
+
+export const MediaChangedSchema = z.object({
+  platform: z.string().trim().min(1).max(50),
+  mediaId: z.string().trim().min(1).max(2048),
+  title: z.string().trim().max(200).optional(),
+  url: z.string().trim().max(2048).optional(),
+  duration: z.number().nonnegative().optional(),
+});
+
+export const ChatTypingSchema = z.object({
+  isTyping: z.boolean(),
+});
+
+export const RoomStartTabStreamSchema = z.object({
+  title: z.string().trim().max(200).optional(),
+});
+
+export const ToggleLikeSchema = z.object({
+  roomId: z.string().trim().max(32).optional(),
+}).optional();
+
+export const SetCategorySchema = z.object({
+  category: z.string().trim().min(1).max(50),
+});
+
+export const WebRtcOfferSchema = z.object({
+  targetSocketId: z.string().trim().min(1),
+  offer: z.any(),
+});
+
+export const WebRtcAnswerSchema = z.object({
+  targetSocketId: z.string().trim().min(1),
+  answer: z.any(),
+});
+
+export const WebRtcIceCandidateSchema = z.object({
+  targetSocketId: z.string().trim().min(1),
+  candidate: z.any(),
+});
+
+export const WebRtcRequestStreamSchema = z.object({
+  streamerSocketId: z.string().trim().optional(),
+}).optional();
+

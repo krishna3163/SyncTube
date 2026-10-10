@@ -105,91 +105,92 @@ export const Playlist: React.FC<PlaylistProps> = ({
 
   return (
     <div className="glass-panel sidebar-card upnext-panel playlist-container playlist-panel-v2">
-      {/* Top Header Bar matching sample photo */}
+      {/* Top Header Bar with clean two-row hierarchy */}
       <div className="upnext-header">
-        <div className="upnext-title-wrap">
-          <ListMusic size={20} className="upnext-icon" />
-          <span className="upnext-title">Up Next ({playlist.length})</span>
-        </div>
+        <div className="upnext-header-row-top">
+          <div className="upnext-title-wrap">
+            <ListMusic size={18} className="upnext-icon" />
+            <span className="upnext-title">Up Next ({playlist.length})</span>
+          </div>
 
-        {/* Search in playlist */}
-        <div className="upnext-search-wrap">
-          <Search size={14} className="upnext-search-icon" />
-          <input
-            type="text"
-            className="upnext-search-input"
-            placeholder="Search in playlist..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Action Controls */}
-        <div className="upnext-actions">
           {onOpenSearch && (
             <button
               type="button"
-              className="btn btn-outline-gold upnext-add-btn"
+              className="btn btn-primary btn-sm upnext-add-btn"
               onClick={onOpenSearch}
               title="Search and add video to playlist"
             >
-              <Plus size={14} />
+              <Plus size={13} />
               <span>Add Video</span>
             </button>
           )}
+        </div>
 
-          {canControl && onShuffle && (
+        <div className="upnext-header-row-bottom">
+          <div className="upnext-search-wrap">
+            <Search size={13} className="upnext-search-icon" />
+            <input
+              type="text"
+              className="upnext-search-input"
+              placeholder="Filter queue..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <div className="upnext-tools-row">
+            {canControl && onShuffle && (
+              <button
+                type="button"
+                className="upnext-chip-btn"
+                onClick={onShuffle}
+                title="Shuffle playlist"
+              >
+                <Shuffle size={12} />
+                <span>Shuffle</span>
+              </button>
+            )}
+
             <button
               type="button"
-              className="btn btn-ghost upnext-btn-icon"
-              onClick={onShuffle}
-              title="Shuffle playlist"
-            >
-              <Shuffle size={14} />
-              <span className="hide-on-mobile">Shuffle</span>
-            </button>
-          )}
-
-          {canControl && onClear && playlist.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-ghost upnext-btn-icon"
+              className={`upnext-chip-btn ${sortByVotes ? 'active' : ''}`}
               onClick={() => {
-                if (window.confirm('Clear all videos from playlist?')) {
-                  onClear();
-                }
+                setSortByVotes((value) => !value);
+                setSortAlphabetically(false);
               }}
-              title="Clear playlist"
+              title={sortByVotes ? 'Sorted by Most Votes (click for normal order)' : 'Sort by Most Voted'}
             >
-              <Trash2 size={14} />
-              <span className="hide-on-mobile">Clear</span>
+              <ThumbsUp size={12} />
+              <span>Votes</span>
             </button>
-          )}
 
-          {/* Toggle sort by votes */}
-          <button
-            type="button"
-            className={`btn btn-ghost upnext-btn-icon ${sortByVotes ? 'active-gold' : ''}`}
-            onClick={() => {
-              setSortByVotes((value) => !value);
-              setSortAlphabetically(false);
-            }}
-            title={sortByVotes ? 'Sorted by Most Votes (click for normal order)' : 'Sort by Most Voted'}
-          >
-            <ThumbsUp size={14} />
-            <span className="hide-on-mobile">{sortByVotes ? 'Votes' : 'Sort'}</span>
-          </button>
-          <button
-            type="button"
-            className={`btn btn-ghost upnext-btn-icon ${sortAlphabetically ? 'active-gold' : ''}`}
-            onClick={() => {
-              setSortAlphabetically((value) => !value);
-              setSortByVotes(false);
-            }}
-            title={sortAlphabetically ? 'Sorted A-Z (click for queue order)' : 'Sort A-Z'}
-          >
-            <span> A-Z</span>
-          </button>
+            <button
+              type="button"
+              className={`upnext-chip-btn ${sortAlphabetically ? 'active' : ''}`}
+              onClick={() => {
+                setSortAlphabetically((value) => !value);
+                setSortByVotes(false);
+              }}
+              title={sortAlphabetically ? 'Sorted A-Z (click for queue order)' : 'Sort A-Z'}
+            >
+              <span>A-Z</span>
+            </button>
+
+            {canControl && onClear && playlist.length > 0 && (
+              <button
+                type="button"
+                className="upnext-chip-btn upnext-chip-danger"
+                onClick={() => {
+                  if (window.confirm('Clear all videos from playlist?')) {
+                    onClear();
+                  }
+                }}
+                title="Clear playlist"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

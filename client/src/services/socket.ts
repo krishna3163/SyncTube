@@ -12,9 +12,9 @@ const getSocketUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://synctube-2ar4.onrender.com';
+    return 'https://youtube-watch-party-api-buaf.onrender.com';
   }
-  return envUrl || 'https://synctube-2ar4.onrender.com';
+  return envUrl || 'https://youtube-watch-party-api-buaf.onrender.com';
 };
 
 
@@ -115,6 +115,21 @@ export const emitToggleMessageReaction = (messageId: string, emoji: string) => {
   socket.emit('toggle_message_reaction', { messageId, emoji });
 };
 
+export const emitExtensionStatus = (
+  installed: boolean,
+  version?: string,
+  activeTabUrl?: string,
+  platform?: string
+) => {
+  if (!socket) return;
+  socket.emit('extension:status', {
+    installed,
+    version,
+    activeTabUrl,
+    platform,
+  });
+};
+
 export const emitSendReaction = (emoji: string) => {
   socket.emit('send_reaction', { emoji });
 };
@@ -162,3 +177,96 @@ export const startTimeSync = () => {
     socket.off('time_sync_pong', onPong);
   };
 };
+
+// ── V2 Socket Emitters ──────────────────────────────────────
+export const emitPartyReady = (
+  status: 'ready' | 'loading' | 'buffering' | 'desynced' | 'not_connected',
+  reportedPosition?: number,
+  activePlatform?: string,
+  activeMediaId?: string
+) => {
+  socket.emit('party:ready', {
+    status,
+    reportedPosition,
+    activePlatform,
+    activeMediaId,
+  });
+};
+
+export const emitSyncPlay = (position?: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:play', { position, eventId, revision });
+};
+
+export const emitSyncPause = (position?: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:pause', { position, eventId, revision });
+};
+
+export const emitSyncSeek = (position: number, eventId?: string, revision?: number) => {
+  socket.emit('sync:seek', { position, eventId, revision });
+};
+
+export const emitSyncDriftCheck = (clientPosition: number) => {
+  socket.emit('sync:drift_check', {
+    clientPosition,
+    clientTimestamp: Date.now(),
+  });
+};
+
+export const emitMediaChanged = (
+  platform: string,
+  mediaId: string,
+  title?: string,
+  url?: string,
+  duration?: number
+) => {
+  socket.emit('media:changed', {
+    platform,
+    mediaId,
+    title,
+    url,
+    duration,
+  });
+};
+
+export const emitChatTyping = (isTyping: boolean) => {
+  socket.emit('chat:typing', { isTyping });
+};
+
+// ── Room Browser Streaming Emitters ─────────────────────────
+export const emitBrowserSetGuestControl = (guestControl: boolean) => {
+  socket.emit('room:browser_set_guest_control', { guestControl });
+};
+
+export const emitStopCastBrowser = (
+  sessionId: string,
+  sessionToken: string,
+  roomId: string,
+  callback?: (res: { success: boolean }) => void
+) => {
+  socket.emit('browser:stop_cast', { sessionId, sessionToken, roomId }, callback);
+};
+
+export const emitStartTabStream = (
+  title?: string,
+  callback?: (res: { success: boolean; title?: string; error?: string }) => void
+) => {
+  socket.emit('room:start_tab_stream', { title }, callback);
+};
+
+export const emitStopTabStream = () => {
+  socket.emit('room:stop_tab_stream', {});
+};
+
+export const emitToggleRoomLike = () => {
+  socket.emit('room:like_toggle');
+};
+
+export const emitSetRoomCategory = (category: string) => {
+  socket.emit('room:set_category', { category });
+};
+
+export const emitGoLive = () => {
+  socket.emit('room:go_live');
+};
+
+

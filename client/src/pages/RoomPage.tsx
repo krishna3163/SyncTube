@@ -24,6 +24,12 @@ import {
   emitSendReaction,
   emitUpdateAvatar,
   startTimeSync,
+  emitPartyReady,
+  emitSyncDriftCheck,
+  emitChatTyping,
+  emitToggleRoomLike,
+  emitSetRoomCategory,
+  emitGoLive,
 } from '../services/socket.js';
 import {
   Role,
@@ -46,6 +52,10 @@ import {
   ChatReplyPreview,
   EmojiReaction,
   RoomPoll,
+  UserProfile,
+  ParticipantReadiness,
+  UniversalPlaybackState,
+  DriftAssessment,
 } from '../types.js';
 import { YouTubePlayer, YouTubePlayerHandle } from '../components/YouTubePlayer.js';
 import { PlaybackControls } from '../components/PlaybackControls.js';
@@ -60,10 +70,25 @@ import { ReactionOverlay } from '../components/ReactionOverlay.js';
 import { FloatingReactions } from '../components/FloatingReactions.js';
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 import { InviteModal } from '../components/InviteModal.js';
+import { AuthModal } from '../components/AuthModal.js';
+import { SyncDiagnosticsModal } from '../components/SyncDiagnosticsModal.js';
+import { ExtensionStatusBanner } from '../components/ExtensionStatusBanner.js';
+import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
+import { CinemaStageCard } from '../components/CinemaStageCard.js';
+import { BrowserHubModal } from '../components/BrowserHubModal.js';
+import { RoomTabPlayer } from '../components/RoomTabPlayer.js';
+import { VideoAmbientBackdrop } from '../components/VideoAmbientBackdrop.js';
+import { detectClientMedia } from '../utils/media.js';
+import { authStorage } from '../utils/authStorage.js';
+import { getApiUrl } from './HomePage.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X } from 'lucide-react';
+import { StreamInfoBar } from '../components/StreamInfoBar.js';
+import { ShareStreamModal } from '../components/ShareStreamModal.js';
+import { ReportStreamModal } from '../components/ReportStreamModal.js';
+import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio } from 'lucide-react';
 
 interface RoomPageProps {
   roomId: string;
@@ -144,48 +169,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const value = saved === null ? 100 : Number(saved);
     return Number.isFinite(value) && value >= 50 && value <= 150 ? value : 100;
   });
-  const [ambientPalette, setAmbientPalette] = useState({
-    primary: '#5b4bb7',
-    secondary: '#1b5c72',
-    tertiary: '#285b53',
-  });
-
-  const handleAmbientImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
-    const image = event.currentTarget;
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 24;
-      canvas.height = 14;
-      const context = canvas.getContext('2d');
-      if (!context) return;
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      const sampleRegion = (startX: number, endX: number, startY: number, endY: number) => {
-        let red = 0;
-        let green = 0;
-        let blue = 0;
-        let count = 0;
-        for (let y = startY; y < endY; y += 1) {
-          for (let x = startX; x < endX; x += 1) {
-            const index = (y * canvas.width + x) * 4;
-            red += pixels[index];
-            green += pixels[index + 1];
-            blue += pixels[index + 2];
-            count += 1;
-          }
-        }
-        if (!count) return null;
-        return `rgb(${Math.round(red / count)}, ${Math.round(green / count)}, ${Math.round(blue / count)})`;
-      };
-      const primary = sampleRegion(0, 8, 2, 12);
-      const secondary = sampleRegion(16, 24, 2, 12);
-      const tertiary = sampleRegion(7, 17, 8, 14);
-      if (!primary || !secondary || !tertiary) return;
-      setAmbientPalette({ primary, secondary, tertiary });
-    } catch {
-      // YouTube may disallow canvas sampling; the image backdrop remains the fallback.
-    }
-  }, []);
 
   const handleAmbientBlurChange = useCallback((value: number) => {
     setAmbientBlur(value);
@@ -221,24 +204,162 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(100);
+  const [latencyMode, setLatencyMode] = useState<'ultra_low' | 'low' | 'normal'>('low');
+  const [streamStartedAt, setStreamStartedAt] = useState<number>(() => Date.now());
+  const [streamCategory, setStreamCategory] = useState<string>('cinema');
+  const [roomLikes, setRoomLikes] = useState<number>(0);
+  const [hasLikedRoom, setHasLikedRoom] = useState<boolean>(false);
+  const [roomUptimeSeconds, setRoomUptimeSeconds] = useState<number>(0);
+  const [isStreamEnded, setIsStreamEnded] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const start = syncState?.createdAt || streamStartedAt;
+    const updateTicker = () => {
+      setRoomUptimeSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    };
+    updateTicker();
+    const interval = setInterval(updateTicker, 1000);
+    return () => clearInterval(interval);
+  }, [syncState?.createdAt, streamStartedAt]);
+
+  useEffect(() => {
+    if (typeof syncState?.likes === 'number') {
+      setRoomLikes(syncState.likes);
+    }
+    if (syncState?.category) {
+      setStreamCategory(syncState.category);
+    }
+    if (syncState?.createdAt) {
+      setStreamStartedAt(syncState.createdAt);
+    }
+  }, [syncState?.likes, syncState?.category, syncState?.createdAt]);
+
+  useEffect(() => {
+    const onLikesUpdated = (data: { likes: number; userId: string; hasLiked: boolean }) => {
+      setRoomLikes(data.likes);
+      if (data.userId === userId) {
+        setHasLikedRoom(data.hasLiked);
+      }
+    };
+    const onCategoryUpdated = (data: { category: string }) => {
+      setStreamCategory(data.category);
+    };
+    socket.on('room:likes_updated', onLikesUpdated);
+    socket.on('room:category_updated', onCategoryUpdated);
+    return () => {
+      socket.off('room:likes_updated', onLikesUpdated);
+      socket.off('room:category_updated', onCategoryUpdated);
+    };
+  }, [userId]);
+
+  const handleToggleRoomLike = useCallback(() => {
+    emitToggleRoomLike();
+  }, []);
+
+  const handleSetCategory = useCallback((cat: string) => {
+    setStreamCategory(cat);
+    emitSetRoomCategory(cat);
+  }, []);
+
+  // V2 Features State
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState<boolean>(false);
+  const [universalSyncState, setUniversalSyncState] = useState<UniversalPlaybackState | null>(null);
+  const [readinessList, setReadinessList] = useState<ParticipantReadiness[]>([]);
+  const [isCurrentUserReady, setIsCurrentUserReady] = useState<boolean>(true);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [driftAssessment, setDriftAssessment] = useState<DriftAssessment | null>(null);
+  const [isBrowserHubOpen, setIsBrowserHubOpen] = useState<boolean>(false);
+  const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
+  const apiUrl = getApiUrl();
+
+  // Extension detection bridge
+  useEffect(() => {
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data && event.data.type === 'SYNCTUBE_EXTENSION_PONG') {
+        setExtensionInstalled(true);
+      }
+    };
+    window.addEventListener('message', handleWindowMessage);
+    const ping = () => {
+      window.postMessage({ type: 'SYNCTUBE_EXTENSION_PING', roomId }, '*');
+    };
+    ping();
+    const interval = setInterval(ping, 4000);
+    return () => {
+      window.removeEventListener('message', handleWindowMessage);
+      clearInterval(interval);
+    };
+  }, [roomId]);
+
+
+  const handleToggleReady = useCallback(() => {
+    setIsCurrentUserReady((prev) => {
+      const next = !prev;
+      emitPartyReady(next ? 'ready' : 'buffering', ytPlayerRef.current?.getCurrentTime() || 0, 'youtube', videoId);
+      onNotifyRef.current(next ? 'Marked as Ready 🟢' : 'Marked as Buffering 🟡', 'info');
+      return next;
+    });
+  }, [videoId]);
+
+  const handleTypingChange = useCallback((isTyping: boolean) => {
+    emitChatTyping(isTyping);
+  }, []);
 
   const handleToggleTheaterMode = useCallback(() => {
     setIsTheaterMode((prev) => {
       const next = !prev;
-      onNotifyRef.current(next ? 'Cinema Mode enabled: Lights Dimmed' : 'Cinema Mode: Lights On', 'info');
+      setTimeout(() => {
+        onNotifyRef.current(next ? 'Cinema Mode enabled: Lights Dimmed' : 'Cinema Mode: Lights On', 'info');
+      }, 0);
       return next;
     });
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isTheaterMode) {
-        setIsTheaterMode(false);
+      if (e.key === 'Escape') {
+        if (isSearchModalOpen) {
+          setIsSearchModalOpen(false);
+          return;
+        }
+        if (isInviteModalOpen) {
+          setIsInviteModalOpen(false);
+          return;
+        }
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+          return;
+        }
+        if (isAuthModalOpen) {
+          setIsAuthModalOpen(false);
+          return;
+        }
+        if (isDiagnosticsModalOpen) {
+          setIsDiagnosticsModalOpen(false);
+          return;
+        }
+        if (isTheaterMode) {
+          setIsTheaterMode(false);
+          return;
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTheaterMode]);
+  }, [
+    isSearchModalOpen,
+    isInviteModalOpen,
+    isSettingsOpen,
+    isAuthModalOpen,
+    isDiagnosticsModalOpen,
+    isTheaterMode,
+  ]);
 
   // User Settings state
   const [userSettings, setUserSettings] = useState<UserSettings>(() => {
@@ -337,21 +458,21 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const handleResync = useCallback(() => {
     if (ytPlayerRef.current) {
       ytPlayerRef.current.resync();
-      onNotify('Re-syncing with host...', 'success');
+      onNotify('⚡ Time-traveling to match the host\'s exact timeline! Hold onto your popcorn 🍿', 'success');
     }
   }, [onNotify]);
 
   const handleSetQuality = useCallback((q: string) => {
     setCurrentQuality(q);
     ytPlayerRef.current?.setQuality(q);
-    onNotify(`Local video quality set to ${q.toUpperCase()}`, 'success');
+    onNotify(`✨ Eye-candy upgraded! Video quality tuned to ${q.toUpperCase()} 🍿`, 'success');
   }, [onNotify]);
 
   const handleToggleCaptions = useCallback(() => {
     const nextState = ytPlayerRef.current?.toggleCaptions();
     const isOn = Boolean(nextState);
     setIsCaptionsOn(isOn);
-    onNotify(isOn ? 'Captions enabled' : 'Captions disabled', 'success');
+    onNotify(isOn ? '💬 Subtitles ON! Reading minds and movie lines 🎬' : '🔇 Subtitles OFF! Pure cinema visuals mode ✨', 'success');
   }, [onNotify]);
 
   // Stable callback refs
@@ -365,6 +486,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   addActivityRef.current = addActivity;
 
   // Auto-hide controls activity handler
+  const isHoveringControlsRef = useRef<boolean>(false);
   const handleUserActivity = useCallback(() => {
     setIsControlsVisible(true);
     if (controlsTimerRef.current) {
@@ -374,12 +496,24 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
     if (!isTouch) {
       controlsTimerRef.current = setTimeout(() => {
-        if (syncState?.playState === 'playing') {
+        if (syncState?.playState === 'playing' && !isHoveringControlsRef.current) {
           setIsControlsVisible(false);
         }
       }, 5000);
     }
   }, [syncState?.playState]);
+
+  useEffect(() => {
+    const handleGlobalActivity = () => {
+      handleUserActivity();
+    };
+    window.addEventListener('mousemove', handleGlobalActivity, { passive: true });
+    window.addEventListener('keydown', handleGlobalActivity, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalActivity);
+      window.removeEventListener('keydown', handleGlobalActivity);
+    };
+  }, [handleUserActivity]);
 
   useEffect(() => {
     const isTouch = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
@@ -430,6 +564,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
       rememberParticipantCharacter(userSettings.name || username, userId, activeAvatar);
       emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar, getRoomIdentityToken(roomId));
+      emitPartyReady('ready', 0, 'youtube', videoId);
       addActivityRef.current('Connected to room session.', 'joined', {
         username: userSettings.name || username,
         userId,
@@ -524,8 +659,27 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       }
     };
 
+    const formatFriendlyError = (code: string, message: string): string => {
+      switch (code) {
+        case 'NOT_FOUND':
+          return '🏚️ Ghost town! This watch party vanished or doesn’t exist. Heading back to the lobby...';
+        case 'FORBIDDEN':
+          if (message.toLowerCase().includes('removed')) {
+            return '🚪 The host escorted you out of the theater. Returning to lobby!';
+          }
+          return '🔒 VIP Zone only! Only the host holds the remote control for this action 👑';
+        case 'INVALID_PAYLOAD':
+        case 'BAD_REQUEST':
+          return '🤔 Whoops! That movie request got scrambled in transit. Give it another shot!';
+        case 'INTERNAL_ERROR':
+          return '🤖 The projector hiccuped! Server caught a minor glitch, hang tight!';
+        default:
+          return `⚠️ ${message || 'Something unexpected happened, but the popcorn is still warm!'}`;
+      }
+    };
+
     const onError = (err: ErrorPayload) => {
-      onNotifyRef.current(`[${err.code}] ${err.message}`, 'error');
+      onNotifyRef.current(formatFriendlyError(err.code, err.message), 'error');
       if (err.code === 'NOT_FOUND') {
         setTimeout(() => onLeaveRoomRef.current(), 1500);
       } else if (err.code === 'FORBIDDEN' && err.message.toLowerCase().includes('removed')) {
@@ -691,11 +845,49 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       });
     };
 
+    // V2 Universal Listeners
+    const onSyncStateV2 = (data: UniversalPlaybackState) => {
+      setUniversalSyncState(data);
+    };
+
+    const onReadinessUpdate = (data: { readiness: ParticipantReadiness[] }) => {
+      if (Array.isArray(data?.readiness)) {
+        setReadinessList(data.readiness);
+      }
+    };
+
+    const onDriftAssessmentReceived = (data: DriftAssessment & { snapshot?: UniversalPlaybackState }) => {
+      setDriftAssessment(data);
+      if (data.snapshot) setUniversalSyncState(data.snapshot);
+      if (data.action === 'soft_rate_adjust' && data.targetRate) {
+        ytPlayerRef.current?.setPlaybackRate(data.targetRate);
+      } else if (data.action === 'hard_seek' && data.targetPosition !== undefined) {
+        ytPlayerRef.current?.seekTo(data.targetPosition, true);
+        ytPlayerRef.current?.setPlaybackRate(1.0);
+      } else {
+        ytPlayerRef.current?.setPlaybackRate(1.0);
+      }
+    };
+
+    const onUserTyping = (data: { userId: string; username: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => {
+        if (data.isTyping) {
+          return prev.includes(data.username) ? prev : [...prev, data.username];
+        } else {
+          return prev.filter((u) => u !== data.username);
+        }
+      });
+    };
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
     socket.on('sync_state', onSyncState);
     socket.on('sync_pulse', onSyncPulse);
+    socket.on('sync:state', onSyncStateV2);
+    socket.on('party:readiness_update', onReadinessUpdate);
+    socket.on('sync:drift_assessment', onDriftAssessmentReceived);
+    socket.on('chat:user_typing', onUserTyping);
     socket.on('playlist_sync', onPlaylistSync);
     socket.on('playlist_update', onPlaylistUpdate);
     socket.on('pending_requests_sync', onPendingRequestsSync);
@@ -713,6 +905,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('participant_removed', onParticipantRemoved);
     socket.on('participant_avatar_updated', onAvatarUpdated);
     socket.on('error', onError);
+    const onWentLive = (data: { roomId: string; hostUsername: string; timestamp: number }) => {
+      onNotifyRef.current(`🎉 @${data.hostUsername} has officially taken the room LIVE! Grab your popcorn & enjoy! 🍿✨`, 'success');
+      addActivityRef.current(`@${data.hostUsername} went live with the broadcast!`, 'playback', {
+        username: data.hostUsername,
+      });
+    };
+    socket.on('room:went_live', onWentLive);
     socket.on('identity_credential', onIdentityCredential);
 
     const stopTimeSync = startTimeSync();
@@ -728,6 +927,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('connect_error', onConnectError);
       socket.off('sync_state', onSyncState);
       socket.off('sync_pulse', onSyncPulse);
+      socket.off('sync:state', onSyncStateV2);
+      socket.off('party:readiness_update', onReadinessUpdate);
+      socket.off('sync:drift_assessment', onDriftAssessmentReceived);
+      socket.off('chat:user_typing', onUserTyping);
       socket.off('playlist_sync', onPlaylistSync);
       socket.off('playlist_update', onPlaylistUpdate);
       socket.off('pending_requests_sync', onPendingRequestsSync);
@@ -745,10 +948,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('participant_removed', onParticipantRemoved);
       socket.off('participant_avatar_updated', onAvatarUpdated);
       socket.off('error', onError);
+      socket.off('room:went_live', onWentLive);
       socket.off('identity_credential', onIdentityCredential);
       emitLeaveRoom(roomId);
     };
   }, [roomId, username, userId, userSettings.name, userSettings.avatarId, addActivity]);
+
+  // Periodic drift check calibration every 5 seconds when playing
+  useEffect(() => {
+    if (syncState?.playState !== 'playing') return;
+    const interval = setInterval(() => {
+      emitSyncDriftCheck(currentTimeRef.current);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [syncState?.playState]);
 
   // Actions
   const handlePlay = useCallback((time?: number) => {
@@ -821,6 +1034,68 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
   };
 
+  const handleSetVolume = useCallback((newVol: number) => {
+    setVolume(newVol);
+    if (newVol > 0 && isMuted) {
+      setIsMuted(false);
+    } else if (newVol === 0 && !isMuted) {
+      setIsMuted(true);
+    }
+    ytPlayerRef.current?.setVolume?.(newVol);
+  }, [isMuted]);
+
+  const isRoomLive = Boolean(
+    syncState?.isLive ||
+    syncState?.playState === 'playing' ||
+    syncState?.browserSession ||
+    (videoId && (videoId.startsWith('tb:') || videoId.startsWith('tab:')))
+  );
+
+  const handleGoLive = useCallback(() => {
+    if (isRoomLive) {
+      onNotify('✨ You are already broadcasting live! Grab some popcorn and enjoy the show 🍿', 'info');
+      return;
+    }
+    emitGoLive();
+    if (videoId && syncState?.playState !== 'playing') {
+      handlePlay(currentTime || 0);
+    }
+    onNotify('🔴 WE ARE LIVE! Lights, camera, action! Viewers are now tuned into the watch party! 🎬🍿', 'success');
+  }, [isRoomLive, videoId, syncState?.playState, currentTime, handlePlay, onNotify]);
+
+  const handleToggleTheater = handleToggleTheaterMode;
+
+  const handleTogglePiP = useCallback(async () => {
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        onNotify('Exited Picture-in-Picture mode', 'info');
+        return;
+      }
+      const videoEl = stageContainerRef.current?.querySelector('video');
+      if (videoEl && typeof videoEl.requestPictureInPicture === 'function') {
+        await videoEl.requestPictureInPicture();
+        onNotify('Entered Picture-in-Picture mode', 'success');
+        return;
+      }
+      if ('documentPictureInPicture' in window && (window as any).documentPictureInPicture?.requestWindow) {
+        const pipWindow = await (window as any).documentPictureInPicture.requestWindow({
+          width: 640,
+          height: 360,
+        });
+        const stage = stageContainerRef.current;
+        if (stage) {
+          pipWindow.document.body.appendChild(stage.cloneNode(true));
+        }
+        onNotify('Opened Picture-in-Picture window', 'success');
+        return;
+      }
+      onNotify('Picture-in-Picture is active for compatible video streams on this browser', 'info');
+    } catch (err: any) {
+      onNotify(`Could not open Picture-in-Picture: ${err?.message || 'Unsupported'}`, 'error');
+    }
+  }, [onNotify]);
+
   // Playlist handlers — all mutations go through server (server is source of truth)
   const handleAddToPlaylist = (
     targetVideoId: string,
@@ -830,7 +1105,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     thumbnail?: string
   ) => {
     if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
-      onNotify('Only hosts and moderators can add videos directly.', 'error');
+      onNotify('👑 VIP Remote alert! Only host & mods can drop videos directly into the queue. Drop a request in chat! 🎟️', 'error');
       return;
     }
     emitPlaylistAdd(targetVideoId, title, duration, channel, thumbnail);
@@ -839,7 +1114,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       userId,
       avatarId: userSettings.avatarId,
     });
-    onNotify('Video added to playlist!', 'success');
+    onNotify('🎬 Boom! Video queued up for the watch party! Popcorn ready! 🍿', 'success');
   };
 
   const handleVoteItem = (itemId: string) => {
@@ -860,7 +1135,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   const handlePlayItem = (targetVideoId: string, itemId: string) => {
     if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
-      onNotify('Only hosts and moderators can change the video.', 'error');
+      onNotify('🛑 Channel surfing locked! Only the captain can switch the movie. Drop a suggestion in chat! 🍿', 'error');
       return;
     }
     emitChangeVideo(targetVideoId, true);
@@ -872,11 +1147,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   const handleNextVideo = useCallback(() => {
     if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
-      onNotify('Only hosts and moderators can change the video.', 'error');
+      onNotify('🛑 Channel surfing locked! Only the captain can switch the movie. Drop a suggestion in chat! 🍿', 'error');
       return;
     }
     if (playlist.length === 0) {
-      onNotify('Playlist is empty.', 'error');
+      onNotify('📭 The popcorn bowl is full but the queue is empty! Search a video to keep the party rolling 🎬', 'error');
       return;
     }
 
@@ -895,7 +1170,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     if (nextItem) {
       emitChangeVideo(nextItem.videoId, true);
       addActivity(`Playing next video: ${nextItem.videoId}`, 'playback');
-      onNotify(`Now playing: ${nextItem.videoId}`, 'success');
+      onNotify(`🍿 Lights down, sound up! Now premiering on screen: ${nextItem.title || nextItem.videoId} 🎬✨`, 'success');
       if (roomSettings.autoRemovePlayed) {
         setPlaylist((prev) => prev.filter((i) => i.id !== nextItem?.id));
       }
@@ -939,16 +1214,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       rememberParticipantCharacter(settings.name || username, userId, settings.avatarId);
       emitUpdateAvatar(settings.avatarId);
     }
-    onNotify('User settings saved!', 'success');
+    onNotify('✨ Looking fresh! Profile vibes & avatar saved 💫', 'success');
   };
 
   const handleUpdateRoomSettings = (settings: RoomSettingsData) => {
     setRoomSettings(settings);
-    onNotify('Room settings updated!', 'success');
+    onNotify('⚙️ Cinema upgraded! New room atmosphere applied 🎪', 'success');
   };
 
   const handleDeleteRoom = () => {
-    onNotify('Room deleted by host.', 'error');
+    onNotify('🚪 The host closed the theater curtains! Watch party ended. See you next time! 🎬👋', 'error');
     onLeaveRoom();
   };
 
@@ -960,7 +1235,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     ) => {
       emitRequestAction(type, data);
       const actionLabel = type === 'request_next_video' ? 'play next video' : type.replace('_', ' ');
-      onNotify('Request submitted to Host/Moderators!', 'success');
+      onNotify('📬 Pitch sent to the captain! Fingers crossed for that movie choice 🤞🍿', 'success');
       const isVideoReq = type === 'request_next_video' || type === 'change_video';
       const actType = isVideoReq ? 'video_requested' : 'playback';
       const actText = type === 'request_next_video'
@@ -975,13 +1250,88 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     [onNotify, addActivity, username, userId, userSettings.avatarId]
   );
 
+  // Desktop & TV Keyboard Shortcuts (Space, M, F, T, L, C, Arrows)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.modal-content'))
+      ) {
+        return;
+      }
+
+      const canCtrl = userRoleRef.current === 'HOST' || userRoleRef.current === 'MODERATOR';
+
+      if (e.code === 'Space' || e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        if (canCtrl) {
+          if (syncStateRef.current?.playState === 'playing') handlePause();
+          else handlePlay();
+        } else {
+          handleRequestAction(syncStateRef.current?.playState === 'playing' ? 'pause' : 'play');
+        }
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        handleToggleMute();
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        handleToggleFullscreen();
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        handleToggleTheater();
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        handleGoLive();
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        handleToggleCaptions();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const nextTime = Math.max(0, currentTimeRef.current - 5);
+        if (canCtrl) handleSeek(nextTime);
+        else handleRequestAction('seek', { time: nextTime });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const nextTime = Math.min(duration || 9999, currentTimeRef.current + 5);
+        if (canCtrl) handleSeek(nextTime);
+        else handleRequestAction('seek', { time: nextTime });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        handleSetVolume(Math.min(100, volume + 10));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleSetVolume(Math.max(0, volume - 10));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    handlePause,
+    handlePlay,
+    handleRequestAction,
+    handleToggleMute,
+    handleToggleFullscreen,
+    handleToggleTheater,
+    handleGoLive,
+    handleToggleCaptions,
+    duration,
+    handleSeek,
+    volume,
+    handleSetVolume,
+  ]);
+
   const handleRespondRequest = useCallback(
     (requestId: string, approved: boolean, mode?: 'now' | 'next') => {
       emitRespondActionRequest(requestId, approved, mode);
       if (approved) {
-        onNotify(mode === 'next' ? 'Request approved and queued as Next Up!' : 'Request approved!', 'success');
+        onNotify(mode === 'next' ? '🎉 Approved! Queued up right next in line! 🎬' : '🎉 Sweet! Approved your crew member\'s request! 🚀', 'success');
       } else {
-        onNotify('Request rejected.', 'error');
+        onNotify('😅 Request turned down. Maybe next time! 🎬', 'error');
       }
     },
     [onNotify]
@@ -1032,6 +1382,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
+        onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+        currentUser={currentUser}
         isTheaterMode={isTheaterMode}
         onToggleTheater={handleToggleTheaterMode}
         syncState={syncState}
@@ -1042,6 +1396,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       <main className="room-container">
         {/* Left Side: Large Theater Video Stage with YouTube Ambient Lighting & Floating Overlay Controls */}
         <div className="stage-area">
+
           {/* Floating Host Approval Alert Banner for incoming Participant requests */}
           {pendingRequests.length > 0 && (userRole === 'HOST' || userRole === 'MODERATOR') && (
             <div className="host-approval-banner">
@@ -1075,36 +1430,23 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             </div>
           )}
 
-          <div
-            className="stage-ambient-wrapper"
-            style={{
-              '--ambient-primary': ambientPalette.primary,
-              '--ambient-secondary': ambientPalette.secondary,
-              '--ambient-tertiary': ambientPalette.tertiary,
-              '--ambient-blur': `${ambientBlur * 1.2}px`,
-              '--ambient-spread': ambientSpread / 100,
-            } as React.CSSProperties}
-          >
-          {/* Ambient Mode Backdrop — only shown after server confirms state */}
-          {ambientMode && syncState && videoId && (
-            <div
-              className={`ambient-backdrop ${syncState.playState === 'playing' ? 'ambient-live' : ''}`}
-              aria-hidden="true"
-            >
-              <img
-                key={videoId}
-                src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
-                alt=""
-                className="ambient-backdrop-img"
-                crossOrigin="anonymous"
-                onLoad={handleAmbientImageLoad}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-                }}
-              />
-              <div className="ambient-backdrop-overlay" />
-            </div>
-          )}
+          {/* Extension Status Banner */}
+          <ExtensionStatusBanner
+            extensionInstalled={extensionInstalled}
+            partyMedia={syncState?.mediaIdentity || null}
+            activeTabMedia={null}
+          />
+
+          <div className="stage-ambient-wrapper">
+            {/* Real-time Video Ambient Mode Backdrop */}
+            <VideoAmbientBackdrop
+              containerRef={stageContainerRef}
+              isEnabled={ambientMode}
+              playState={syncState?.playState || 'paused'}
+              blur={ambientBlur}
+              spread={ambientSpread}
+              videoId={videoId}
+            />
 
             <div
               ref={stageContainerRef}
@@ -1116,59 +1458,281 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               <div className="video-wrapper">
                 <ReactionOverlay reactions={activeReactions} />
 
+                
+
                 {videoId ? (
-                  <YouTubePlayer
-                    ref={ytPlayerRef}
-                    videoId={videoId}
-                    syncState={syncState}
-                    userRole={userRole}
-                    playbackSpeed={playbackSpeed}
-                    isMuted={isMuted}
-                    onLocalPlay={handlePlay}
-                    onLocalPause={handlePause}
-                    onLocalSeek={handleSeek}
-                    onCurrentTimeChange={handleTimeChange}
-                    onVideoEnded={handleVideoEnded}
-                  />
+                  (() => {
+                    const detectedMedia = detectClientMedia(videoId);
+
+                    // 2. Browser Tab Screen Share Stream
+                    if (detectedMedia?.category === 'tab_share' || videoId.startsWith('tab:')) {
+                      return (
+                        <RoomTabPlayer
+                          userRole={userRole}
+                          userId={userId}
+                          roomId={roomId}
+                          socket={socket}
+                          onNotify={onNotify}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                        />
+                      );
+                    }
+
+                    // 3. Direct Video File / HLS Stream
+                    if (detectedMedia?.category === 'direct_stream') {
+                      return (
+                        <DirectVideoPlayer
+                          ref={ytPlayerRef}
+                          mediaUrl={videoId}
+                          syncState={syncState}
+                          userRole={userRole}
+                          playbackSpeed={playbackSpeed}
+                          isMuted={isMuted}
+                          onLocalPlay={handlePlay}
+                          onLocalPause={handlePause}
+                          onLocalSeek={handleSeek}
+                          onCurrentTimeChange={handleTimeChange}
+                          onVideoEnded={handleVideoEnded}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                        />
+                      );
+                    }
+
+                    // 3. Movie Website Hub Card (Watch Party Cinema Stage)
+                    if (detectedMedia?.category === 'movie_website') {
+                      return (
+                        <CinemaStageCard
+                          media={detectedMedia}
+                          roomId={roomId}
+                          userRole={userRole}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                          onNotify={onNotify}
+                        />
+                      );
+                    }
+
+                    return (
+                      <YouTubePlayer
+                        ref={ytPlayerRef}
+                        videoId={detectedMedia?.mediaId || videoId}
+                        syncState={syncState}
+                        userRole={userRole}
+                        playbackSpeed={playbackSpeed}
+                        isMuted={isMuted}
+                        onLocalPlay={handlePlay}
+                        onLocalPause={handlePause}
+                        onLocalSeek={handleSeek}
+                        onCurrentTimeChange={handleTimeChange}
+                        onVideoEnded={handleVideoEnded}
+                      />
+                    );
+                  })()
                 ) : (
-                  <div className="video-empty-state">
-                    <span>No video selected</span>
-                    {(userRole === 'HOST' || userRole === 'MODERATOR') && (
-                      <small>Use "Change Video" to choose a YouTube video.</small>
-                    )}
+                  (!isRoomLive && userRole !== 'HOST' && userRole !== 'MODERATOR') ? (
+                    <div className="video-empty-state cinema-waiting-state">
+                      <div className="cinema-waiting-badge">
+                        <span className="live-badge-dot live-dot-dvr" />
+                        <span>STREAM STARTING SOON</span>
+                      </div>
+                      <div className="cinema-waiting-icon-wrap">
+                        <span className="cinema-waiting-emoji">🍿</span>
+                      </div>
+                      <h3 className="cinema-waiting-title">Grab Your Popcorn! The Show Starts Soon</h3>
+                      <p className="cinema-waiting-desc">
+                        Our host <strong>@{participants.find((p) => p.role === 'HOST')?.username || 'the host'}</strong> is backstage calibrating the cinema projector, tuning the sound system, and testing the popcorn butter levels. Hang tight, we're going live any moment! 🎬✨
+                      </p>
+                      <div className="cinema-waiting-fun-ticker">
+                        <span>✨ Behind the scenes: <i>"Testing popcorn crispiness... 100% crispy & delicious!"</i> 🥤🍿</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="video-empty-state host-prep-state">
+                      <div className="video-empty-icon">
+                        <Film size={32} />
+                      </div>
+                      <span className="video-empty-title">
+                        {userRole === 'HOST' || userRole === 'MODERATOR'
+                          ? "🎬 You're in the Director's Chair, Boss!"
+                          : "🍿 Popcorn Ready! Waiting for Host to Roll Film"}
+                      </span>
+                      <small className="video-empty-subtitle">
+                        {userRole === 'HOST' || userRole === 'MODERATOR'
+                          ? "Viewers are seated with their popcorn! Pick a YouTube video, launch Netflix/Prime from Browser Hub, share a tab, or click GO LIVE to kick off the watch party! 🚀"
+                          : "Host is picking out peak entertainment. Sit back, chat with friends, and relax! 🎬✨"}
+                      </small>
+                      {(userRole === 'HOST' || userRole === 'MODERATOR') && (
+                        <div className="video-empty-actions-row">
+                          <button
+                            type="button"
+                            className="btn btn-primary video-empty-action-btn"
+                            onClick={() => setIsSearchModalOpen(true)}
+                          >
+                            <Search size={15} />
+                            <span>YouTube Search 🔍</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={() => setIsBrowserHubOpen(true)}
+                            id="empty-state-open-browser-btn"
+                          >
+                            <Globe size={15} color="#60a5fa" />
+                            <span>Browser Hub 🌐</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-accent video-empty-action-btn go-live-stage-btn"
+                            onClick={handleGoLive}
+                          >
+                            <Radio size={15} />
+                            <span>Go Live Now 🔴</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+
+                {/* Stage Quick Reactions floating pill overlay */}
+                <div
+                  className={`stage-quick-reactions-dock ${isControlsVisible ? 'dock-visible' : ''}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="dock-hint">React</span>
+                  {['❤️', '🔥', '😂', '👏', '😮', '🎉', '🍿'].map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="stage-dock-rx-btn"
+                      onClick={() => handleSendReaction(emoji)}
+                      title={`Send ${emoji} to room`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Reconnecting to Live Broadcast Banner */}
+                {connectionStatus !== 'connected' && (
+                  <div className="player-reconnecting-banner">
+                    <RefreshCw size={14} className="spin-icon" />
+                    <span>Hold tight! The internet had a momentary brain freeze 🥤 Re-syncing your cinema feed...</span>
+                    <button type="button" className="btn btn-xs btn-primary banner-retry-btn" onClick={handleResync}>
+                      Kickstart Connection ⚡
+                    </button>
                   </div>
                 )}
 
-                {/* Playback Controls overlay */}
-                <PlaybackControls
-                  playState={syncState?.playState || 'paused'}
-                  currentTime={currentTime}
-                  duration={duration}
-                  userRole={userRole}
-                  visible={isControlsVisible}
-                  onPlay={handlePlay}
-                  onPause={handlePause}
-                  onSeek={handleSeek}
-                  onNextVideo={playlist.length > 0 ? handleNextVideo : undefined}
-                  onToggleFullscreen={handleToggleFullscreen}
-                  isFullscreen={isFullscreen}
-                  ambientMode={ambientMode}
-                  onToggleAmbient={handleToggleAmbientMode}
-                  onToggleMute={handleToggleMute}
-                  onResync={handleResync}
-                  isMuted={isMuted}
-                  onSetQuality={handleSetQuality}
-                  onToggleCaptions={handleToggleCaptions}
-                  currentQuality={currentQuality}
-                  isCaptionsOn={isCaptionsOn}
-                  playbackSpeed={playbackSpeed}
-                  onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
-                  onRequestAction={handleRequestAction}
-                  onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-                  reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
-                />
+                {/* Stream Ended Screen Overlay */}
+                {isStreamEnded && (
+                  <StreamEndedOverlay
+                    streamTitle={
+                      syncState?.mediaIdentity?.title ||
+                      playlist.find((p) => p.videoId === videoId)?.title ||
+                      (videoId ? 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+                    }
+                    hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
+                    hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
+                    durationSeconds={duration > 0 ? duration : 3480}
+                    peakViewers={Math.max(participants.length, 12)}
+                    onReplay={() => {
+                      setIsStreamEnded(false);
+                      handleSeek(0);
+                      handlePlay(0);
+                    }}
+                    onReturnHome={onLeaveRoom}
+                  />
+                )}
+
+                {/* Playback Controls overlay - only for linear video playback (YouTube / Direct file) */}
+                {videoId && !syncState?.browserSession && !videoId.startsWith('tb:') && !videoId.startsWith('tab:') && detectClientMedia(videoId)?.category !== 'movie_website' && (
+                  <div
+                    onMouseEnter={() => {
+                      isHoveringControlsRef.current = true;
+                      handleUserActivity();
+                    }}
+                    onMouseLeave={() => {
+                      isHoveringControlsRef.current = false;
+                      handleUserActivity();
+                    }}
+                    onMouseMove={handleUserActivity}
+                  >
+                    <PlaybackControls
+                      playState={syncState?.playState || 'paused'}
+                      currentTime={currentTime}
+                      duration={duration}
+                      userRole={userRole}
+                      visible={isControlsVisible}
+                      onPlay={handlePlay}
+                      onPause={handlePause}
+                      onSeek={handleSeek}
+                      onNextVideo={playlist.length > 0 ? handleNextVideo : undefined}
+                      onToggleFullscreen={handleToggleFullscreen}
+                      isFullscreen={isFullscreen}
+                      isTheaterMode={isTheaterMode}
+                      onToggleTheater={handleToggleTheater}
+                      ambientMode={ambientMode}
+                      onToggleAmbient={handleToggleAmbientMode}
+                      onToggleMute={handleToggleMute}
+                      onResync={handleResync}
+                      isMuted={isMuted}
+                      volume={volume}
+                      onSetVolume={handleSetVolume}
+                      onTogglePiP={handleTogglePiP}
+                      onGoLive={handleGoLive}
+                      isLive={isRoomLive}
+                      latencyMode={latencyMode}
+                      onSetLatencyMode={setLatencyMode}
+                      onSetQuality={handleSetQuality}
+                      onToggleCaptions={handleToggleCaptions}
+                      currentQuality={currentQuality}
+                      isCaptionsOn={isCaptionsOn}
+                      playbackSpeed={playbackSpeed}
+                      onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
+                      onRequestAction={handleRequestAction}
+                      onOpenRequestsTab={() => setActiveSidebarTab('requests')}
+                      reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
+                      roomUptimeSeconds={roomUptimeSeconds}
+                    />
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Live Stream Metadata Bar & Experience Info below stage */}
+            <StreamInfoBar
+              roomId={roomId}
+              title={
+                syncState?.mediaIdentity?.title ||
+                playlist.find((p) => p.videoId === videoId)?.title ||
+                (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+              }
+              hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
+              hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
+              hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
+              userRole={userRole}
+              viewersCount={participants.length}
+              streamStartedAt={syncState?.createdAt || streamStartedAt}
+              category={streamCategory}
+              onSetCategory={handleSetCategory}
+              likes={roomLikes}
+              hasLiked={hasLikedRoom}
+              onToggleLike={handleToggleRoomLike}
+              isHostRegistered={Boolean(
+                (userRole === 'HOST' && currentUser?.id && currentUser?.email) ||
+                (participants.find((p) => p.role === 'HOST')?.userId === currentUser?.id && currentUser?.email)
+              )}
+              hostFollowersCount={currentUser?.followersCount}
+              onOpenShare={() => setIsShareModalOpen(true)}
+              onOpenReport={() => setIsReportModalOpen(true)}
+              onNotify={onNotify}
+              thumbnailUrl={
+                playlist.find((p) => p.videoId === videoId)?.thumbnail ||
+                (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
+                  ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                  : undefined)
+              }
+            />
           </div>
 
           {/* Mobile Controller Dock */}
@@ -1186,11 +1750,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onNextVideo={playlist.length > 0 ? handleNextVideo : undefined}
               onToggleFullscreen={handleToggleFullscreen}
               isFullscreen={isFullscreen}
+              isTheaterMode={isTheaterMode}
+              onToggleTheater={handleToggleTheater}
               ambientMode={ambientMode}
               onToggleAmbient={handleToggleAmbientMode}
               onToggleMute={handleToggleMute}
               onResync={handleResync}
               isMuted={isMuted}
+              volume={volume}
+              onSetVolume={handleSetVolume}
+              onTogglePiP={handleTogglePiP}
+              onGoLive={handleGoLive}
+              isLive={isRoomLive}
+              latencyMode={latencyMode}
+              onSetLatencyMode={setLatencyMode}
               onSetQuality={handleSetQuality}
               onToggleCaptions={handleToggleCaptions}
               currentQuality={currentQuality}
@@ -1200,6 +1773,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
               reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
+              roomUptimeSeconds={roomUptimeSeconds}
             />
           </div>
         </div>
@@ -1247,6 +1821,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserId={userId}
                 currentUserRole={userRole}
                 currentUserAvatarId={userSettings.avatarId}
+                readinessList={readinessList}
+                isCurrentUserReady={isCurrentUserReady}
+                onToggleReady={handleToggleReady}
                 onAssignRole={handleAssignRole}
                 onRemoveParticipant={handleRemoveParticipant}
               />
@@ -1277,11 +1854,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserId={userId}
                 currentUserAvatarId={userSettings.avatarId}
                 viewerCount={participants.length}
+                userRole={userRole}
                 activePoll={activePoll}
                 onVotePoll={(optionIndex) => socket.emit('vote_poll', { optionIndex })}
+                onCreatePoll={(question, options) => socket.emit('create_poll', { question, options })}
                 onSendMessage={handleSendChat}
                 onToggleReaction={handleToggleMessageReaction}
                 onSendReaction={handleSendReaction}
+                typingUsers={typingUsers}
+                onTypingChange={handleTypingChange}
               />
             )}
 
@@ -1322,6 +1903,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       />
 
       {/* Floating Animated Emojis & Live Reaction Dock */}
+      <FloatingReactions
+        socket={socket}
+        username={username}
+        avatarId={userSettings.avatarId}
+        currentTime={currentTime}
+        userRole={userRole}
+      />
 
       {/* In-App YouTube Search Modal */}
       <YouTubeSearchModal
@@ -1339,6 +1927,76 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         roomId={roomId}
+        onNotify={onNotify}
+      />
+
+      {/* V2 Auth / Profile Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        apiUrl={apiUrl}
+        onAuthSuccess={(user, token) => {
+          setCurrentUser(user);
+          authStorage.setUser(user);
+          authStorage.setToken(token);
+        }}
+        onLogout={() => {
+          setCurrentUser(null);
+          authStorage.clearToken();
+          authStorage.clearUser();
+        }}
+        onNotify={onNotify}
+      />
+
+      {/* V2 Sync Diagnostics Modal */}
+      <SyncDiagnosticsModal
+        isOpen={isDiagnosticsModalOpen}
+        onClose={() => setIsDiagnosticsModalOpen(false)}
+        syncState={universalSyncState}
+        driftAssessment={driftAssessment}
+        rttMs={50}
+        connectionStatus={connectionStatus}
+      />
+
+      {/* V2 Universal Browser & Cinema Hub Modal */}
+      <BrowserHubModal
+        isOpen={isBrowserHubOpen}
+        onClose={() => setIsBrowserHubOpen(false)}
+        userRole={userRole}
+        extensionInstalled={extensionInstalled}
+        onSelectMedia={(url, title) => {
+          emitChangeVideo(url, true);
+          addActivity(`Selected stream: ${title || url}`, 'playback');
+          onNotify(`Now playing: ${title || url}`, 'success');
+        }}
+        onNotify={onNotify}
+      />
+
+      {/* Share Stream Modal */}
+      <ShareStreamModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        roomId={roomId}
+        streamTitle={
+          syncState?.mediaIdentity?.title ||
+          playlist.find((p) => p.videoId === videoId)?.title ||
+          (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+        }
+        onNotify={onNotify}
+      />
+
+      {/* Report Stream Modal */}
+      <ReportStreamModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        roomId={roomId}
+        streamTitle={
+          syncState?.mediaIdentity?.title ||
+          playlist.find((p) => p.videoId === videoId)?.title ||
+          (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+        }
+        currentTime={currentTime}
         onNotify={onNotify}
       />
     </div>
