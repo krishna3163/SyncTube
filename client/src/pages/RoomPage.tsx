@@ -1552,11 +1552,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           ? "🎬 You're in the Director's Chair, Boss!"
                           : "🍿 Popcorn Ready! Waiting for Host to Roll Film"}
                       </span>
-                      <small className="video-empty-subtitle">
-                        {userRole === 'HOST' || userRole === 'MODERATOR'
-                          ? "Viewers are seated with their popcorn! Pick a YouTube video, launch Netflix/Prime from Browser Hub, share a tab, or click GO LIVE to kick off the watch party! 🚀"
-                          : "Host is picking out peak entertainment. Sit back, chat with friends, and relax! 🎬✨"}
-                      </small>
                       {(userRole === 'HOST' || userRole === 'MODERATOR') && (
                         <div className="video-empty-actions-row">
                           <button
@@ -1575,14 +1570,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           >
                             <Globe size={15} color="#60a5fa" />
                             <span>Browser Hub 🌐</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-accent video-empty-action-btn go-live-stage-btn"
-                            onClick={handleGoLive}
-                          >
-                            <Radio size={15} />
-                            <span>Go Live Now 🔴</span>
                           </button>
                         </div>
                       )}

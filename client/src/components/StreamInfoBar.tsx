@@ -9,7 +9,6 @@ import {
   Flag,
   ThumbsUp,
   ChevronDown,
-  ChevronUp,
   Bell,
   BellRing,
   Sparkles,
@@ -79,7 +78,6 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   const [localLikes, setLocalLikes] = useState<number>(likes);
   const [localHasLiked, setLocalHasLiked] = useState<boolean>(hasLiked);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(category);
 
@@ -327,57 +325,6 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
             <span>Report</span>
           </button>
         </div>
-      </div>
-
-      {/* Bottom: Collapsible Description Card */}
-      <div className="stream-desc-panel">
-        <div className="stream-desc-header" onClick={() => setIsDescExpanded((prev) => !prev)}>
-          <div className="stream-desc-preview">
-            <span className="desc-views-date">
-              {viewersCount} watching now • Live since{' '}
-              {new Date(streamStartedAt || Date.now()).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </span>
-            <div className="stream-tags-list">
-              <span className="stream-tag">#WatchParty</span>
-              <span className="stream-tag">#SyncTubeLive</span>
-              <span className="stream-tag">#CinemaHub</span>
-            </div>
-          </div>
-          <button type="button" className="stream-desc-toggle-btn" aria-label="Toggle Description">
-            {isDescExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-        </div>
-
-        {isDescExpanded && (
-          <div className="stream-desc-body">
-            {thumbnailUrl && (
-              <div className="stream-desc-thumb">
-                <img src={thumbnailUrl} alt={displayTitle} />
-              </div>
-            )}
-            <p className="stream-desc-text">
-              {description ||
-                `Welcome to ${hostUsername}'s synchronized live watch party! Enjoy real-time video synchronization, theater viewing, interactive chat, and live reactions. Invite friends to join room #${roomId} to watch together without delay.`}
-            </p>
-            <div className="stream-extra-meta">
-              <div className="meta-field">
-                <span className="meta-k">Broadcast Platform:</span>
-                <span className="meta-v">SyncTube Universal Cinema</span>
-              </div>
-              <div className="meta-field">
-                <span className="meta-k">Sync Protocol:</span>
-                <span className="meta-v">WebSocket Drift Correction &lt;200ms</span>
-              </div>
-              <div className="meta-field">
-                <span className="meta-k">DVR Capability:</span>
-                <span className="meta-v">Full Scrubbing &amp; Live Catchup</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
