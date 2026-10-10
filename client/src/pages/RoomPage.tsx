@@ -1430,13 +1430,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             </div>
           )}
 
-          {/* Extension Status Banner */}
-          <ExtensionStatusBanner
-            extensionInstalled={extensionInstalled}
-            partyMedia={syncState?.mediaIdentity || null}
-            activeTabMedia={null}
-          />
-
           <div className="stage-ambient-wrapper">
             {/* Real-time Video Ambient Mode Backdrop */}
             <VideoAmbientBackdrop
