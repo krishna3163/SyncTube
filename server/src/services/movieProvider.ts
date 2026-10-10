@@ -188,6 +188,24 @@ export function isMovieboxFixtureEnabled(): boolean {
   return value === '1' || (typeof value === 'string' && value.toLowerCase() === 'true');
 }
 
+function isLiveUnavailableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return (
+    msg.includes('visitor login failed') ||
+    msg.includes('MovieBox API request failed') ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('fetch failed') ||
+    msg.includes('network')
+  );
+}
+
+function fixtureTrending(page: number): MovieSearchResult[] {
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const offset = ((safePage - 1) * 4) % FIXTURE_CATALOGUE.length;
+  const rotated = [...FIXTURE_CATALOGUE.slice(offset), ...FIXTURE_CATALOGUE.slice(0, offset)];
+  return rotated.map(fixtureToResult);
+}
+
 interface FixtureEntry {
   id: string;
   title: string;
@@ -481,10 +499,7 @@ export class MovieProviderService {
 
   public async getTrendingMedia(page = 1): Promise<MovieSearchResult[]> {
     if (isMovieboxFixtureEnabled()) {
-      const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-      const offset = ((safePage - 1) * 4) % FIXTURE_CATALOGUE.length;
-      const rotated = [...FIXTURE_CATALOGUE.slice(offset), ...FIXTURE_CATALOGUE.slice(0, offset)];
-      return rotated.map(fixtureToResult);
+      return fixtureTrending(page);
     }
     try {
       const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -512,7 +527,7 @@ export class MovieProviderService {
           const id = String(s.subjectId || s.id || '');
           if (!id || seen.has(id) || !s.title) continue;
           seen.add(id);
-          const yearMatch = (s.releaseDate || s.year || '').match(/(19\d\d|20\d\d)/);
+          const yearMatch = (s.releaseDate || s.year || '').match(/\b(19\d\d|20\d\d)\b/);
           results.push({
             id,
             title: (s.title || '').trim(),
@@ -526,10 +541,19 @@ export class MovieProviderService {
         }
       }
       if (results.length > 0) return results.slice(0, 24);
-    } catch {
-      // Fallback to top searches
+    } catch (err) {
+      if (isLiveUnavailableError(err)) {
+        return fixtureTrending(page);
+      }
     }
-    return this.searchMedia('Avatar', 1);
+    try {
+      return await this.searchMedia('Avatar', 1);
+    } catch (err) {
+      if (isLiveUnavailableError(err)) {
+        return fixtureTrending(page);
+      }
+      throw err;
+    }
   }
 
   public async searchMedia(query: string, page = 1, subjectType = 0): Promise<MovieSearchResult[]> {
@@ -544,11 +568,23 @@ export class MovieProviderService {
       subjectType: Math.max(0, Math.min(2, Math.floor(subjectType) || 0)),
     };
 
-    const res = await this.requestApi<{
-      code?: number;
-      data?: {
-        results?: Array<{
-          subjects?: Array<{
+    try {
+      const res = await this.requestApi<{
+        code?: number;
+        data?: {
+          results?: Array<{
+            subjects?: Array<{
+              subjectId?: string | number;
+              subjectType?: number;
+              title?: string;
+              releaseDate?: string;
+              duration?: string;
+              genre?: string;
+              cover?: { url?: string };
+              season?: number;
+            }>;
+          }>;
+          list?: Array<{
             subjectId?: string | number;
             subjectType?: number;
             title?: string;
@@ -558,38 +594,33 @@ export class MovieProviderService {
             cover?: { url?: string };
             season?: number;
           }>;
-        }>;
-        list?: Array<{
-          subjectId?: string | number;
-          subjectType?: number;
-          title?: string;
-          releaseDate?: string;
-          duration?: string;
-          genre?: string;
-          cover?: { url?: string };
-          season?: number;
-        }>;
-      };
-    }>('/wefeed-mobile-bff/subject-api/search/v2', 'POST', payload);
-
-    const subjects = res.data?.results?.[0]?.subjects || res.data?.list || [];
-
-    return subjects
-      .filter((s) => s.subjectId && s.title)
-      .map((s) => {
-        const id = String(s.subjectId);
-        const yearMatch = (s.releaseDate || '').match(/\b(19\d\d|20\d\d)\b/);
-        return {
-          id,
-          title: (s.title || '').trim(),
-          mediaType: s.subjectType === 2 ? 'series' : 'movie',
-          year: yearMatch ? yearMatch[1] : undefined,
-          duration: s.duration || undefined,
-          genre: s.genre || undefined,
-          coverUrl: s.cover?.url || undefined,
-          seasonCount: s.season ? Number(s.season) : undefined,
         };
-      });
+      }>('/wefeed-mobile-bff/subject-api/search/v2', 'POST', payload);
+
+      const subjects = res.data?.results?.[0]?.subjects || res.data?.list || [];
+
+      return subjects
+        .filter((s) => s.subjectId && s.title)
+        .map((s) => {
+          const id = String(s.subjectId);
+          const yearMatch = (s.releaseDate || '').match(/\b(19\d\d|20\d\d)\b/);
+          return {
+            id,
+            title: (s.title || '').trim(),
+            mediaType: s.subjectType === 2 ? 'series' : 'movie',
+            year: yearMatch ? yearMatch[1] : undefined,
+            duration: s.duration || undefined,
+            genre: s.genre || undefined,
+            coverUrl: s.cover?.url || undefined,
+            seasonCount: s.season ? Number(s.season) : undefined,
+          };
+        });
+    } catch (err) {
+      if (isLiveUnavailableError(err)) {
+        return fixtureSearch(query, subjectType);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -621,11 +652,13 @@ export class MovieProviderService {
     const subjectType = category === 'movies' ? 1 : category === 'series' ? 2 : 0;
 
     let results: MovieSearchResult[] = [];
+    let hadLiveError = false;
     try {
       results = await this.searchMedia(keyword, 1, subjectType);
       if (category === 'movies') results = results.filter((r) => r.mediaType === 'movie');
       if (category === 'series') results = results.filter((r) => r.mediaType === 'series');
-    } catch {
+    } catch (err) {
+      hadLiveError = isLiveUnavailableError(err);
       results = [];
     }
 
@@ -645,8 +678,12 @@ export class MovieProviderService {
           results.push(item);
         }
       }
-    } catch {
-      // keep whatever the search returned
+    } catch (err) {
+      if (isLiveUnavailableError(err)) hadLiveError = true;
+    }
+
+    if (results.length === 0 && hadLiveError) {
+      return fixtureBrowse(category, safePage);
     }
 
     return results.slice(0, 24);
@@ -677,63 +714,108 @@ export class MovieProviderService {
       }
     }
 
-    const details = await this.requestApi<{
-      code?: number;
-      data?: {
-        subjectId?: string | number;
-        subjectType?: number;
-        title?: string;
-        description?: string;
-        releaseDate?: string;
-        duration?: string;
-        genre?: string;
-        cover?: { url?: string };
-        imdbRatingValue?: string;
-        season?: number;
+    const fallbackFixtureDetails = (): MovieDetails | null => {
+      const entry = FIXTURE_CATALOGUE.find((e) => e.id === subjectId);
+      if (!entry) return null;
+      const result: MovieDetails = {
+        id: entry.id,
+        title: entry.title,
+        description: entry.description,
+        mediaType: entry.mediaType,
+        year: entry.year,
+        duration: entry.duration,
+        genre: entry.genre,
+        coverUrl: fixturePoster(entry),
       };
-    }>(`/wefeed-mobile-bff/subject-api/get?subjectId=${encodeURIComponent(subjectId)}`, 'GET');
-
-    const data = details.data || {};
-    const mediaType = data.subjectType === 2 ? 'series' : 'movie';
-    const yearMatch = (data.releaseDate || '').match(/\b(19\d\d|20\d\d)\b/);
-
-    const result: MovieDetails = {
-      id: String(data.subjectId || subjectId),
-      title: (data.title || 'Unknown Title').trim(),
-      description: data.description || '',
-      mediaType,
-      year: yearMatch ? yearMatch[1] : undefined,
-      duration: data.duration || undefined,
-      genre: data.genre || undefined,
-      coverUrl: data.cover?.url || undefined,
-      rating: data.imdbRatingValue || undefined,
+      if (entry.mediaType === 'series') {
+        const seasonCount = entry.seasonCount || 1;
+        result.seasons = Array.from({ length: seasonCount }, (_, i) => ({
+          seasonNumber: i + 1,
+          episodeCount: 8,
+        }));
+      }
+      return result;
     };
 
-    if (mediaType === 'series') {
-      try {
-        const seasonInfo = await this.requestApi<{
-          code?: number;
-          data?: {
-            seasons?: Array<{
-              se?: number;
-              maxEp?: number;
-            }>;
-          };
-        }>(`/wefeed-mobile-bff/subject-api/season-info?subjectId=${encodeURIComponent(subjectId)}`, 'GET');
+    try {
+      const details = await this.requestApi<{
+        code?: number;
+        data?: {
+          subjectId?: string | number;
+          subjectType?: number;
+          title?: string;
+          description?: string;
+          releaseDate?: string;
+          duration?: string;
+          genre?: string;
+          cover?: { url?: string };
+          imdbRatingValue?: string;
+          season?: number;
+        };
+      }>(`/wefeed-mobile-bff/subject-api/get?subjectId=${encodeURIComponent(subjectId)}`, 'GET');
 
-        if (Array.isArray(seasonInfo.data?.seasons)) {
-          result.seasons = seasonInfo.data.seasons.map((s) => ({
-            seasonNumber: Number(s.se || 1),
-            episodeCount: Number(s.maxEp || 1),
-          }));
+      const data = details.data || {};
+      const mediaType = data.subjectType === 2 ? 'series' : 'movie';
+      const yearMatch = (data.releaseDate || '').match(/\b(19\d\d|20\d\d)\b/);
+
+      const result: MovieDetails = {
+        id: String(data.subjectId || subjectId),
+        title: (data.title || 'Unknown Title').trim(),
+        description: data.description || '',
+        mediaType,
+        year: yearMatch ? yearMatch[1] : undefined,
+        duration: data.duration || undefined,
+        genre: data.genre || undefined,
+        coverUrl: data.cover?.url || undefined,
+        rating: data.imdbRatingValue || undefined,
+      };
+
+      if (mediaType === 'series') {
+        try {
+          const seasonInfo = await this.requestApi<{
+            code?: number;
+            data?: {
+              seasons?: Array<{
+                se?: number;
+                maxEp?: number;
+              }>;
+            };
+          }>(`/wefeed-mobile-bff/subject-api/season-info?subjectId=${encodeURIComponent(subjectId)}`, 'GET');
+
+          if (Array.isArray(seasonInfo.data?.seasons)) {
+            result.seasons = seasonInfo.data.seasons.map((s) => ({
+              seasonNumber: Number(s.se || 1),
+              episodeCount: Number(s.maxEp || 1),
+            }));
+          }
+        } catch {
+          // Fallback: single season if season-info fails
+          result.seasons = [{ seasonNumber: 1, episodeCount: data.season ? Number(data.season) : 1 }];
         }
-      } catch {
-        // Fallback: single season if season-info fails
-        result.seasons = [{ seasonNumber: 1, episodeCount: data.season ? Number(data.season) : 1 }];
       }
-    }
 
-    return result;
+      return result;
+    } catch (err) {
+      const fallback = fallbackFixtureDetails();
+      if (fallback) return fallback;
+      if (isLiveUnavailableError(err)) {
+        // For unknown fx- IDs, still return a generic fixture streams fallback so UI doesn't 502
+        if (subjectId.startsWith('fx-')) {
+          const generic = FIXTURE_CATALOGUE[0];
+          return {
+            id: subjectId,
+            title: generic.title,
+            description: generic.description,
+            mediaType: 'movie',
+            year: generic.year,
+            duration: generic.duration,
+            genre: generic.genre,
+            coverUrl: fixturePoster(generic),
+          };
+        }
+      }
+      throw err;
+    }
   }
 
   public async getStreamSources(
@@ -743,6 +825,11 @@ export class MovieProviderService {
     proxyBase = '/api/movies/proxy'
   ): Promise<PlayStreamsResult> {
     if (isMovieboxFixtureEnabled()) {
+      return fixtureStreams(subjectId, season, episode, proxyBase);
+    }
+
+    // Fixture IDs always serve local sample streams so offline demos work without network/probe delay
+    if (subjectId.startsWith('fx-')) {
       return fixtureStreams(subjectId, season, episode, proxyBase);
     }
 
@@ -984,6 +1071,12 @@ export class MovieProviderService {
         height: h,
         adaptive: !streams.some((s) => s.height === h && !s.adaptive),
       }));
+
+    if (streams.length === 0) {
+      // Live returned nothing — fallback to fixture so UI doesn't show empty error when offline
+      // Only for fixture-like IDs or when live is unreachable
+      return fixtureStreams(subjectId, season, episode, proxyBase);
+    }
 
     return {
       title,
