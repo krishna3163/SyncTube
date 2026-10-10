@@ -6,16 +6,10 @@ import {
   ExternalLink,
   Film,
   Play,
-  Chrome,
-  CheckCircle2,
-  Copy,
-  Check,
-  Search,
-  Sparkles,
-  Shield,
   Layers,
+  Sparkles,
 } from 'lucide-react';
-import { detectClientMedia, CINEMA_SAMPLE_PRESETS, DetectedClientMedia } from '../utils/media.js';
+import { detectClientMedia, CINEMA_SAMPLE_PRESETS } from '../utils/media.js';
 import { Role } from '../types.js';
 import { MovieSearchTab } from './MovieSearchTab.js';
 
@@ -23,7 +17,7 @@ interface BrowserHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   userRole: Role;
-  extensionInstalled: boolean;
+  extensionInstalled?: boolean;
   onSelectMedia: (mediaUrl: string, title?: string, platform?: string) => void;
   onNotify: (msg: string, type: 'info' | 'success' | 'error') => void;
 }
@@ -58,7 +52,7 @@ const STREAMING_PLATFORMS: PlatformShortcut[] = [
     badge: 'Cinema & TV',
     category: 'streaming',
     color: '#00a8e1',
-    description: 'Synchronized Prime Video playback via SyncTube browser tab integration.',
+    description: 'Synchronized Prime Video playback with party members.',
   },
   {
     id: 'disney',
@@ -111,8 +105,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
   onNotify,
 }) => {
   const [urlInput, setUrlInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'movies' | 'platforms' | 'direct' | 'extension'>('movies');
-  const [copiedExtensionPath, setCopiedExtensionPath] = useState(false);
+  const [activeTab, setActiveTab] = useState<'movies' | 'platforms' | 'direct'>('movies');
 
   if (!isOpen) return null;
 
@@ -167,14 +160,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
     onClose();
   };
 
-  const handleCopyExtensionFolder = () => {
-    const extensionDir = `${window.location.origin}/extension (or the extension/ folder in your project repo)`;
-    navigator.clipboard.writeText('chrome://extensions');
-    setCopiedExtensionPath(true);
-    onNotify('Copied "chrome://extensions" to clipboard! Paste in a new tab.', 'success');
-    setTimeout(() => setCopiedExtensionPath(false), 2500);
-  };
-
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card browser-hub-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -183,9 +168,9 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
           <div className="browser-hub-header-title">
             <Compass size={20} color="var(--accent)" />
             <div>
-              <h2>Universal Browser & Cinema Hub</h2>
+              <h2>Cinema & Streaming Hub</h2>
               <span className="browser-hub-subtitle">
-                Watch YouTube, Netflix, Prime, Disney+, Crunchyroll, or any movie stream with friends
+                Watch MovieBox Cinema, YouTube, Netflix, Prime, Disney+, Crunchyroll, or any video stream with friends
               </span>
             </div>
           </div>
@@ -207,7 +192,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
             onClick={() => setActiveTab('movies')}
           >
             <Film size={14} />
-            <span>Movies & Series (HD Cinema)</span>
+            <span>Movies & Series (MovieBox HD)</span>
           </button>
 
           <button
@@ -226,16 +211,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
           >
             <Compass size={14} />
             <span>Direct Movie Streams (4K)</span>
-          </button>
-
-          <button
-            type="button"
-            className={`browser-hub-tab-btn ${activeTab === 'extension' ? 'active' : ''}`}
-            onClick={() => setActiveTab('extension')}
-          >
-            <Chrome size={14} />
-            <span>Extension Setup</span>
-            <span className={`browser-hub-tab-dot ${extensionInstalled ? 'active' : ''}`} />
           </button>
         </div>
 
@@ -350,7 +325,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
               <div className="direct-intro-box">
                 <Film size={18} color="var(--accent)" />
                 <p>
-                  Direct cinema streams (.mp4, .webm, .m3u8) play <strong>directly inside your room stage</strong> with synchronized timeline scrubbing and zero browser extensions needed!
+                  Direct cinema streams (.mp4, .webm, .m3u8) play <strong>directly inside your room stage</strong> with synchronized timeline scrubbing and zero installation needed!
                 </p>
               </div>
 
@@ -382,68 +357,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                     </button>
                   </div>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: Extension Setup */}
-          {activeTab === 'extension' && (
-            <div className="browser-hub-extension-section">
-              <div className={`extension-status-hero ${extensionInstalled ? 'active' : 'idle'}`}>
-                <div className="extension-hero-left">
-                  <Chrome size={28} className={extensionInstalled ? 'text-green' : 'text-purple'} />
-                  <div>
-                    <h3 className="extension-hero-title">
-                      {extensionInstalled ? 'Extension Installed & Active 🟢' : 'Extension Not Detected 🟡'}
-                    </h3>
-                    <p className="extension-hero-subtitle">
-                      {extensionInstalled
-                        ? 'Your browser extension is ready! Open any Netflix, Prime, Disney+, or streaming video tab to sync.'
-                        : 'Install the SyncTube Manifest V3 extension in 30 seconds to sync streaming platforms.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="extension-steps-list">
-                <div className="extension-step-item">
-                  <div className="step-num">1</div>
-                  <div className="step-content">
-                    <h4>Open Chrome Extensions</h4>
-                    <p>Open a new browser tab and navigate to <code>chrome://extensions</code></p>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={handleCopyExtensionFolder}
-                    >
-                      {copiedExtensionPath ? <Check size={13} /> : <Copy size={13} />}
-                      <span>{copiedExtensionPath ? 'Copied chrome://extensions' : 'Copy chrome://extensions URL'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="extension-step-item">
-                  <div className="step-num">2</div>
-                  <div className="step-content">
-                    <h4>Enable Developer Mode</h4>
-                    <p>Turn on the <strong>Developer mode</strong> toggle in the top-right corner.</p>
-                  </div>
-                </div>
-
-                <div className="extension-step-item">
-                  <div className="step-num">3</div>
-                  <div className="step-content">
-                    <h4>Load Unpacked Extension</h4>
-                    <p>Click <strong>Load unpacked</strong> and select the <code>extension</code> directory from your project folder.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="extension-privacy-guarantee">
-                <Shield size={16} color="var(--accent-cyan)" />
-                <p>
-                  <strong>Privacy First:</strong> SyncTube never collects passwords, cookies, or video files. Each friend uses their own legitimate account in their own browser.
-                </p>
               </div>
             </div>
           )}

@@ -76,7 +76,6 @@ import { ExtensionStatusBanner } from '../components/ExtensionStatusBanner.js';
 import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
 import { CinemaStageCard } from '../components/CinemaStageCard.js';
 import { BrowserHubModal } from '../components/BrowserHubModal.js';
-import { RoomBrowserPlayer } from '../components/RoomBrowserPlayer.js';
 import { RoomTabPlayer } from '../components/RoomTabPlayer.js';
 import { VideoAmbientBackdrop } from '../components/VideoAmbientBackdrop.js';
 import { detectClientMedia } from '../utils/media.js';
@@ -274,8 +273,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isCurrentUserReady, setIsCurrentUserReady] = useState<boolean>(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [driftAssessment, setDriftAssessment] = useState<DriftAssessment | null>(null);
-  const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
   const [isBrowserHubOpen, setIsBrowserHubOpen] = useState<boolean>(false);
+  const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
   const apiUrl = getApiUrl();
 
   // Extension detection bridge
@@ -295,7 +294,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       window.removeEventListener('message', handleWindowMessage);
       clearInterval(interval);
     };
-  }, []);
+  }, [roomId]);
+
 
   const handleToggleReady = useCallback(() => {
     setIsCurrentUserReady((prev) => {
@@ -1429,6 +1429,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             </div>
           )}
 
+          {/* Extension Status Banner */}
+          <ExtensionStatusBanner
+            extensionInstalled={extensionInstalled}
+            partyMedia={syncState?.mediaIdentity || null}
+            activeTabMedia={null}
+          />
+
           <div className="stage-ambient-wrapper">
             {/* Real-time Video Ambient Mode Backdrop */}
             <VideoAmbientBackdrop
@@ -1460,25 +1467,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   (() => {
                     const detectedMedia = detectClientMedia(videoId);
 
-                    // 1. Temporary Browser Cinema Stream
-                    if (syncState?.browserSession || detectedMedia?.category === 'temp_browser' || videoId.startsWith('tb:')) {
-                      const bSession = syncState?.browserSession;
-                      const rawId = detectedMedia?.mediaId || videoId;
-                      const activeSessionId = bSession?.sessionId || rawId.replace(/^tb:/, '').replace(/^browser:/, '');
-                      return (
-                        <RoomBrowserPlayer
-                          roomId={roomId}
-                          sessionId={activeSessionId}
-                          userRole={userRole}
-                          guestControl={!!bSession?.guestControl}
-                          currentUrl={bSession?.currentUrl || detectedMedia?.url}
-                          currentTitle={bSession?.currentTitle || detectedMedia?.title}
-                          onNotify={onNotify}
-                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                        />
-                      );
-                    }
-
                     // 2. Browser Tab Screen Share Stream
                     if (detectedMedia?.category === 'tab_share' || videoId.startsWith('tab:')) {
                       return (
@@ -1489,7 +1477,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           socket={socket}
                           onNotify={onNotify}
                           onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                          extensionInstalled={extensionInstalled}
                         />
                       );
                     }
@@ -1514,14 +1501,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       );
                     }
 
-                    // 4. Movie Website Hub Card (offers Temporary Browser launch or local Tab Share)
+                    // 3. Movie Website Hub Card (Watch Party Cinema Stage)
                     if (detectedMedia?.category === 'movie_website') {
                       return (
                         <CinemaStageCard
                           media={detectedMedia}
                           roomId={roomId}
                           userRole={userRole}
-                          extensionInstalled={extensionInstalled}
                           onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
                           onNotify={onNotify}
                         />

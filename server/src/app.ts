@@ -11,7 +11,6 @@ import { extractYouTubeId } from './utils/youtube.js';
 import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
-import { tempBrowserManager } from './services/tempBrowserManager.js';
 import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 
@@ -178,6 +177,41 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     }
   });
 
+  // GET /api/rooms-directory — Public watch party discovery directory
+  app.get('/api/rooms-directory', async (req: Request, res: Response) => {
+    const category = typeof req.query.category === 'string' ? req.query.category.toLowerCase().trim() : '';
+    const q = typeof req.query.q === 'string' ? req.query.q.toLowerCase().trim() : '';
+
+    let rooms = roomManager.getAllRooms()
+      .filter((r) => r.visibility !== 'private')
+      .map((r) => r.toPublicDirectoryItem());
+
+    if (category && category !== 'all') {
+      rooms = rooms.filter((r) => r.category.toLowerCase() === category);
+    }
+
+    if (q) {
+      rooms = rooms.filter((r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.id.toLowerCase().includes(q) ||
+        r.mediaTitle.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q)
+      );
+    }
+
+    // Sort by live status and active viewers
+    rooms.sort((a, b) => {
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      return b.participantCount - a.participantCount;
+    });
+
+    res.status(200).json({
+      success: true,
+      count: rooms.length,
+      rooms,
+    });
+  });
+
   // ── V2 REST API ENDPOINTS ──────────────────────────────────
   const getAuthUser = async (req: Request): Promise<UserProfile | null> => {
     const header = req.headers.authorization;
@@ -185,6 +219,37 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     const token = header.slice(7).trim();
     return auth.validateSession(token);
   };
+
+  // Bookmarks & Moment Highlights
+  app.get('/api/rooms/:roomId/bookmarks', async (req: Request, res: Response) => {
+    const roomId = req.params.roomId.toUpperCase();
+    if (dbService) {
+      const bookmarks = await dbService.getBookmarks(roomId);
+      return res.status(200).json({ success: true, bookmarks });
+    }
+    return res.status(200).json({ success: true, bookmarks: [] });
+  });
+
+  app.post('/api/rooms/:roomId/bookmarks', async (req: Request, res: Response) => {
+    const roomId = req.params.roomId.toUpperCase();
+    const user = await getAuthUser(req);
+    const { timestamp, label } = req.body || {};
+    if (typeof timestamp !== 'number' || !label) {
+      return res.status(400).json({ error: 'Timestamp and label are required' });
+    }
+    const bookmark = {
+      id: randomBytes(16).toString('hex'),
+      roomId,
+      userId: user?.id || 'guest',
+      timestamp,
+      label: String(label).slice(0, 140),
+      createdAt: Date.now(),
+    };
+    if (dbService) {
+      await dbService.addBookmark(bookmark);
+    }
+    return res.status(201).json({ success: true, bookmark });
+  });
 
   // Supported Platforms & Capabilities
   app.get('/api/platforms', (_req: Request, res: Response) => {
@@ -205,14 +270,20 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         {
           id: 'netflix',
           name: 'Netflix',
-          status: 'PLANNED',
-          capabilities: { play: true, pause: true, seek: true, playbackRate: false },
+          status: 'SUPPORTED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: true },
         },
         {
           id: 'prime',
           name: 'Prime Video',
-          status: 'PLANNED',
-          capabilities: { play: true, pause: true, seek: true, playbackRate: false },
+          status: 'SUPPORTED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: true },
+        },
+        {
+          id: 'disney',
+          name: 'Disney+ / JioHotstar',
+          status: 'SUPPORTED',
+          capabilities: { play: true, pause: true, seek: true, playbackRate: true },
         },
       ],
     });
@@ -600,111 +671,21 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
   });
 
   // ==========================================
-  // TEMPORARY BROWSER REST API
-  // ==========================================
-
-  const sessionLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    limit: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (_req, res) => res.status(429).json({ error: 'Too many browser session requests. Please slow down.' }),
-  });
-
-  // POST /api/sessions — Create a temporary browser session
-  app.post('/api/sessions', sessionLimiter, async (req: Request, res: Response) => {
-    try {
-      const { initialUrl, viewport } = req.body || {};
-      const targetUrl = initialUrl || 'https://duckduckgo.com';
-      const result = await tempBrowserManager.createSession(targetUrl, viewport);
-      return res.status(201).json({
-        success: true,
-        session: result.session,
-        token: result.token,
-      });
-    } catch (err: any) {
-      serverSentry.captureException(err);
-      return res.status(400).json({ success: false, error: err?.message || 'Failed to create temporary browser session' });
-    }
-  });
-
-  // Helper middleware to authenticate per-session token
-  const requireSessionToken = (req: Request, res: Response, next: NextFunction) => {
-    const sessionId = req.params.id;
-    const authHeader = req.headers.authorization;
-    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
-    const token = bearerToken || queryToken;
-
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid or missing temporary session token' });
-    }
-    next();
-  };
-
-  // GET /api/sessions/:id — Check session status
-  app.get('/api/sessions/:id', requireSessionToken, (req: Request, res: Response) => {
-    const info = tempBrowserManager.getSessionPublicInfo(req.params.id);
-    if (!info) {
-      return res.status(404).json({ success: false, error: 'Session not found or already closed' });
-    }
-    return res.json({ success: true, session: info });
-  });
-
-  // POST /api/sessions/:id/navigate — Navigate to a URL
-  app.post('/api/sessions/:id/navigate', requireSessionToken, async (req: Request, res: Response) => {
-    try {
-      const { url } = req.body || {};
-      if (!url || typeof url !== 'string') {
-        return res.status(400).json({ success: false, error: 'Target URL is required' });
-      }
-      const info = await tempBrowserManager.navigate(req.params.id, url);
-      return res.json({ success: true, session: info });
-    } catch (err: any) {
-      return res.status(400).json({ success: false, error: err?.message || 'Navigation failed' });
-    }
-  });
-
-  // POST /api/sessions/:id/print — Generate PDF of current page via virtual printer redirection
-  app.post('/api/sessions/:id/print', requireSessionToken, async (req: Request, res: Response) => {
-    try {
-      const result = await tempBrowserManager.printToPdf(req.params.id);
-      return res.json({ success: true, data: result.data, filename: result.filename });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err?.message || 'Print to PDF failed' });
-    }
-  });
-
-  // GET /api/sessions/:id/downloads — List downloaded files
-  app.get('/api/sessions/:id/downloads', requireSessionToken, (req: Request, res: Response) => {
-    const files = tempBrowserManager.getDownloadedFiles(req.params.id);
-    return res.json({ success: true, files });
-  });
-
-  // GET /api/sessions/:id/downloads/:filename — Download a session file to host
-  app.get('/api/sessions/:id/downloads/:filename', requireSessionToken, (req: Request, res: Response) => {
-    const filePath = tempBrowserManager.getDownloadedFilePath(req.params.id, req.params.filename);
-    if (!filePath) {
-      return res.status(404).json({ success: false, error: 'File not found' });
-    }
-    return res.download(filePath, req.params.filename);
-  });
-
-  // DELETE /api/sessions/:id — Terminate and permanently clean up the session
-  app.delete('/api/sessions/:id', requireSessionToken, async (req: Request, res: Response) => {
-    try {
-      await tempBrowserManager.closeSession(req.params.id);
-      return res.json({ success: true, message: 'Temporary browser session closed and all data erased.' });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err?.message || 'Failed to delete session' });
-    }
-  });
-
-  // ==========================================
   // MOVIEBOX INTEGRATION & STREAM PROXY ROUTES
   // ==========================================
 
-  // GET /api/movies/search — Search movies and TV shows
+  // GET /api/movies/trending — Get trending movies & series
+  app.get('/api/movies/trending', async (_req: Request, res: Response) => {
+    try {
+      const results = await movieProvider.getTrendingMedia();
+      return res.json({ success: true, results });
+    } catch (err: any) {
+      serverSentry.captureException(err);
+      return res.status(502).json({ success: false, error: err?.message || 'Failed to fetch trending media' });
+    }
+  });
+
+// GET /api/movies/search — Search movies and TV shows
   app.get('/api/movies/search', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';

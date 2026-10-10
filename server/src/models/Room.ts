@@ -53,9 +53,6 @@ export class Room {
   public universalSync: UniversalSyncSession;
   public name: string = 'Watch Party';
   public visibility: 'public' | 'private' | 'unlisted' = 'public';
-  public browserSessionId: string | null = null;
-  public browserSessionToken: string | null = null;
-  public browserGuestControl: boolean = false;
 
   public readonly createdAt: number;
   public likes: number = 0;
@@ -423,19 +420,7 @@ export class Room {
     return this.participants.size;
   }
 
-  public attachBrowserSession(sessionId: string, token: string, guestControl: boolean = false): void {
-    this.browserSessionId = sessionId;
-    this.browserSessionToken = token;
-    this.browserGuestControl = guestControl;
-    this.videoId = `tb:${sessionId}`;
-    this.changeVideo(`tb:${sessionId}`, 'Temporary Browser Cinema Stream', 'temp_browser');
-  }
 
-  public detachBrowserSession(): void {
-    this.browserSessionId = null;
-    this.browserSessionToken = null;
-    this.browserGuestControl = false;
-  }
 
   public toSyncStatePayload(): SyncStatePayload {
     const isPaused = this.playState === 'paused';
@@ -450,12 +435,6 @@ export class Room {
       likes: this.likes,
       category: this.category,
       isLive: this.isLive,
-      browserSession: this.browserSessionId
-        ? {
-            sessionId: this.browserSessionId,
-            guestControl: this.browserGuestControl,
-          }
-        : undefined,
       mediaIdentity: media
         ? {
             platform: media.platform,
@@ -524,5 +503,35 @@ export class Room {
     if (!alreadySelected) {
       msg.reactions[emoji] = [...(msg.reactions[emoji] || []), userId];
     }
+  }
+
+  // ── Public Directory & Discovery Metadata ────────────────
+  public toPublicDirectoryItem(): {
+    id: string;
+    name: string;
+    category: string;
+    videoId: string;
+    mediaTitle: string;
+    platform: string;
+    participantCount: number;
+    likes: number;
+    isLive: boolean;
+    playState: PlayState;
+    createdAt: number;
+  } {
+    const media = this.universalSync.getMediaIdentity();
+    return {
+      id: this.id,
+      name: this.name || `Room #${this.id}`,
+      category: this.category || 'cinema',
+      videoId: this.videoId,
+      mediaTitle: media?.title || (this.videoId ? 'Video Stream' : 'Lobby'),
+      platform: media?.platform || 'youtube',
+      participantCount: this.getParticipantCount(),
+      likes: this.likes,
+      isLive: this.isLive,
+      playState: this.playState,
+      createdAt: this.createdAt,
+    };
   }
 }

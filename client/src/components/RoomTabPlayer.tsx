@@ -6,8 +6,7 @@ import {
   VolumeX,
   Maximize2,
   Minimize2,
-  Chrome,
-  ShieldCheck,
+    ShieldCheck,
   Sparkles,
   Tv,
   Radio,
@@ -23,7 +22,6 @@ interface RoomTabPlayerProps {
   socket?: any;
   onNotify: (msg: string, type: 'info' | 'success' | 'error') => void;
   onOpenBrowserHub?: () => void;
-  extensionInstalled: boolean;
 }
 
 const RTC_CONFIG: RTCConfiguration = {
@@ -40,7 +38,6 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   socket,
   onNotify,
   onOpenBrowserHub,
-  extensionInstalled,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -441,12 +438,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
               )}
             </div>
 
-            <div className="tab-extension-callout">
-              <Chrome size={18} className="text-purple" />
-              <div className="callout-text">
-                <strong>SyncTube Chrome Extension:</strong> You can open Netflix in any tab, click the SyncTube extension icon, and click <em>Share This Tab to Watch Party</em> to broadcast instantly to room #{roomId || ''}!
-              </div>
-            </div>
+
           </div>
         )}
       </div>

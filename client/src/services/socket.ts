@@ -115,6 +115,21 @@ export const emitToggleMessageReaction = (messageId: string, emoji: string) => {
   socket.emit('toggle_message_reaction', { messageId, emoji });
 };
 
+export const emitExtensionStatus = (
+  installed: boolean,
+  version?: string,
+  activeTabUrl?: string,
+  platform?: string
+) => {
+  if (!socket) return;
+  socket.emit('extension:status', {
+    installed,
+    version,
+    activeTabUrl,
+    platform,
+  });
+};
+
 export const emitSendReaction = (emoji: string) => {
   socket.emit('send_reaction', { emoji });
 };
@@ -217,58 +232,9 @@ export const emitChatTyping = (isTyping: boolean) => {
   socket.emit('chat:typing', { isTyping });
 };
 
-export const emitExtensionStatus = (
-  installed: boolean,
-  activePlatform?: string,
-  currentTabUrl?: string
-) => {
-  socket.emit('extension:status', {
-    installed,
-    activePlatform,
-    currentTabUrl,
-  });
-};
-
 // ── Room Browser Streaming Emitters ─────────────────────────
-export const emitStartBrowserStream = (
-  sessionId: string,
-  sessionToken: string,
-  guestControl = false,
-  callback?: (res: { success: boolean; error?: string; sessionId?: string; roomId?: string }) => void
-) => {
-  socket.emit('room:start_browser_stream', { sessionId, sessionToken, guestControl }, callback);
-};
-
-export const emitStopBrowserStream = () => {
-  socket.emit('room:stop_browser_stream', {});
-};
-
 export const emitBrowserSetGuestControl = (guestControl: boolean) => {
   socket.emit('room:browser_set_guest_control', { guestControl });
-};
-
-export const emitBrowserInput = (payload: {
-  action: 'click' | 'mouse_move' | 'mouse_down' | 'mouse_up' | 'wheel' | 'key_down' | 'key_up' | 'key_press' | 'navigate' | 'back' | 'forward' | 'reload';
-  x?: number;
-  y?: number;
-  button?: 'left' | 'right' | 'middle';
-  clickCount?: number;
-  deltaX?: number;
-  deltaY?: number;
-  key?: string;
-  url?: string;
-}) => {
-  socket.emit('room:browser_input', payload);
-};
-
-export const emitCastBrowserToRoom = (
-  sessionId: string,
-  sessionToken: string,
-  roomId: string,
-  guestControl = false,
-  callback?: (res: { success: boolean; error?: string; roomId?: string }) => void
-) => {
-  socket.emit('browser:cast_to_room', { sessionId, sessionToken, roomId, guestControl }, callback);
 };
 
 export const emitStopCastBrowser = (

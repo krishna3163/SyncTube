@@ -15,16 +15,6 @@ export function detectMediaSource(input: string): DetectedMedia | null {
   const trimmed = input.trim();
   if (trimmed.length === 0 || trimmed.length > 2048) return null;
 
-  // 0. Temporary Browser session check
-  if (trimmed.startsWith('tb:') || trimmed.startsWith('browser:')) {
-    return {
-      platform: 'temp_browser',
-      mediaId: trimmed,
-      title: 'Temporary Browser Cinema Stream',
-      isDirectStream: false,
-    };
-  }
-
   // 1. YouTube check
   const ytId = extractYouTubeId(trimmed);
   if (ytId) {

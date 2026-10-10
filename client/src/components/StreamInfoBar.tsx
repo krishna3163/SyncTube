@@ -260,7 +260,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
             </div>
           </div>
 
-          {/* Subscribe Button - only shown for registered host profiles, never for temporary/guest users */}
+          {/* Subscribe Button - only shown for registered host profiles */}
           {isHostRegistered && (
             <button
               type="button"

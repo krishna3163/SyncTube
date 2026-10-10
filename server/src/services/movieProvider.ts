@@ -310,6 +310,49 @@ export class MovieProviderService {
     throw new Error(`MovieBox API request failed for ${pathAndQuery}`);
   }
 
+  public async getTrendingMedia(): Promise<MovieSearchResult[]> {
+    try {
+      const res = await this.requestApi<any>('/wefeed-mobile-bff/tab-operating?page=1&tabId=0&version=', 'GET');
+      const items = res?.data?.items || res?.items || [];
+      const results: MovieSearchResult[] = [];
+      const seen = new Set<string>();
+
+      for (const group of items) {
+        const subjects: any[] = [];
+        if (Array.isArray(group?.banner?.banners)) {
+          for (const b of group.banner.banners) {
+            if (b?.subject) subjects.push(b.subject);
+          }
+        }
+        if (Array.isArray(group?.customData?.items)) {
+          for (const c of group.customData.items) {
+            if (c?.subject) subjects.push(c.subject);
+          }
+        }
+        for (const s of subjects) {
+          const id = String(s.subjectId || s.id || '');
+          if (!id || seen.has(id) || !s.title) continue;
+          seen.add(id);
+          const yearMatch = (s.releaseDate || s.year || '').match(/(19\d\d|20\d\d)/);
+          results.push({
+            id,
+            title: (s.title || '').trim(),
+            mediaType: s.subjectType === 2 ? 'series' : 'movie',
+            year: yearMatch ? yearMatch[1] : undefined,
+            duration: s.duration || undefined,
+            genre: s.genre || undefined,
+            coverUrl: s.cover?.url || s.coverUrl || undefined,
+            seasonCount: s.season ? Number(s.season) : undefined,
+          });
+        }
+      }
+      if (results.length > 0) return results.slice(0, 24);
+    } catch {
+      // Fallback to top searches
+    }
+    return this.searchMedia('Avatar', 1);
+  }
+
   public async searchMedia(query: string, page = 1): Promise<MovieSearchResult[]> {
     if (!query || !query.trim()) return [];
 
