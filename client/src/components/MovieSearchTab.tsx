@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Search,
   Play,
   Plus,
   Loader2,
@@ -10,9 +9,7 @@ import {
   Calendar,
   Clock,
   Layers,
-  ChevronRight,
   X,
-  Check,
 } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../pages/HomePage.js';

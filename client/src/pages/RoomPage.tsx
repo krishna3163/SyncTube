@@ -280,6 +280,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Extension detection bridge
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data && event.data.type === 'SYNCTUBE_EXTENSION_PONG') {
         setExtensionInstalled(true);
       }

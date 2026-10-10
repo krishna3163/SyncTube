@@ -107,6 +107,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
     const handshakeSuccess: any = await page.evaluate(async () => {
       return new Promise((resolve) => {
         const handler = (e: MessageEvent) => {
+          if (e.origin !== window.location.origin) return;
           if (e.data?.type === 'SYNCTUBE_EXTENSION_PONG') {
             window.removeEventListener('message', handler);
             resolve(e.data);
@@ -137,6 +138,7 @@ test.describe('SyncTube Extension Multi-Site & Real-World Integration Tests', ()
     const pongResponse = await videoPage.evaluate(async () => {
       return new Promise((resolve) => {
         const handler = (e: MessageEvent) => {
+          if (e.origin !== window.location.origin) return;
           if (e.data?.type === 'SYNCTUBE_EXTENSION_PONG') {
             window.removeEventListener('message', handler);
             resolve(e.data);

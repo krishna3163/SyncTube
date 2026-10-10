@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users, CheckCircle, Clock } from 'lucide-react';
 import { ParticipantPublic, Role, ParticipantReadiness } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { getParticipantCharacterId } from '../utils/characterMemory.js';

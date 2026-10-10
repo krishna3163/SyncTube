@@ -31,7 +31,7 @@ export class YouTubeAdapter implements PlatformAdapter {
       const parsed = new URL(url);
       const host = parsed.hostname.toLowerCase();
       if (
-        host.includes('youtube.com') &&
+        (host === 'youtube.com' || host.endsWith('.youtube.com')) &&
         (parsed.pathname === '/watch' ||
           parsed.pathname.startsWith('/embed/') ||
           parsed.pathname.startsWith('/shorts/') ||

@@ -32,7 +32,8 @@ class SentryService {
 
   public captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info'): void {
     if (!this.isEnabled) return;
-    console.log(`[Sentry Captured Message] [${level.toUpperCase()}]: ${message}`);
+    const sanitized = String(message).replace(/[\r\n]+/g, ' ');
+    console.log(`[Sentry Captured Message] [${level.toUpperCase()}]: ${sanitized}`);
   }
 
   public addBreadcrumb(breadcrumb: SentryBreadcrumb): void {

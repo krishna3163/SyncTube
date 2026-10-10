@@ -56,7 +56,7 @@ export class GenericHTML5Adapter implements PlatformAdapter {
     const source = video.currentSrc || video.src || window.location.href;
     
     // Detect movie / streaming platform from hostname
-    let platform = 'generic';
+    let platform: string;
     const hostname = window.location.hostname.toLowerCase();
     if (hostname.includes('netflix')) platform = 'netflix';
     else if (hostname.includes('primevideo') || hostname.includes('amazon')) platform = 'prime';

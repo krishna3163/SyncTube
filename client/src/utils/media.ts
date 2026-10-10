@@ -1,3 +1,7 @@
+function matchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
 import { extractYouTubeId } from './youtube.js';
 
 export type PlaybackCategory = 'youtube' | 'direct_stream' | 'movie_website' | 'tab_share';
@@ -93,7 +97,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
     }
 
     // Specific streaming services
-    if (hostname.includes('netflix.com')) {
+    if (matchesDomain(hostname, 'netflix.com')) {
       return {
         platform: 'netflix',
         mediaId: url.toString(),
@@ -111,7 +115,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
       };
     }
 
-    if (hostname.includes('primevideo.com') || (hostname.includes('amazon.') && pathname.includes('/video/'))) {
+    if (matchesDomain(hostname, 'primevideo.com') || (/(^|\.)amazon\.[a-z.]+$/.test(hostname) && pathname.includes('/video/'))) {
       return {
         platform: 'prime',
         mediaId: url.toString(),
@@ -129,7 +133,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
       };
     }
 
-    if (hostname.includes('disneyplus.com') || hostname.includes('hotstar.com')) {
+    if (matchesDomain(hostname, 'disneyplus.com') || matchesDomain(hostname, 'hotstar.com')) {
       return {
         platform: 'disney',
         mediaId: url.toString(),
@@ -147,7 +151,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
       };
     }
 
-    if (hostname.includes('crunchyroll.com')) {
+    if (matchesDomain(hostname, 'crunchyroll.com')) {
       return {
         platform: 'crunchyroll',
         mediaId: url.toString(),
@@ -165,7 +169,7 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
       };
     }
 
-    if (hostname.includes('twitch.tv')) {
+    if (matchesDomain(hostname, 'twitch.tv')) {
       return {
         platform: 'twitch',
         mediaId: url.toString(),

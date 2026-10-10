@@ -302,6 +302,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   // Extension communication bridge
   useEffect(() => {
     const handleExtensionMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === 'SYNCTUBE_START_TAB_SHARE' && isHost) {
         startScreenShare(event.data.tabTitle);
       }

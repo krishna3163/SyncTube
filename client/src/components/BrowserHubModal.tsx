@@ -6,8 +6,6 @@ import {
   ExternalLink,
   Film,
   Play,
-  Layers,
-  Sparkles,
 } from 'lucide-react';
 import { detectClientMedia, CINEMA_SAMPLE_PRESETS } from '../utils/media.js';
 import { Role } from '../types.js';

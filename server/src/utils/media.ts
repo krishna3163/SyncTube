@@ -1,3 +1,7 @@
+function matchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
 import { extractYouTubeId } from './youtube.js';
 
 export interface DetectedMedia {
@@ -58,7 +62,7 @@ export function detectMediaSource(input: string): DetectedMedia | null {
     }
 
     // 2b. Known Movie / Anime / Streaming platforms
-    if (hostname.includes('netflix.com')) {
+    if (matchesDomain(hostname, 'netflix.com')) {
       return {
         platform: 'netflix',
         mediaId: url.toString(),
@@ -67,7 +71,7 @@ export function detectMediaSource(input: string): DetectedMedia | null {
         isDirectStream: false,
       };
     }
-    if (hostname.includes('primevideo.com') || hostname.includes('amazon.') && pathname.includes('/video/')) {
+    if (matchesDomain(hostname, 'primevideo.com') || (/(^|\.)amazon\.[a-z.]+$/.test(hostname) && pathname.includes('/video/'))) {
       return {
         platform: 'prime',
         mediaId: url.toString(),
@@ -76,7 +80,7 @@ export function detectMediaSource(input: string): DetectedMedia | null {
         isDirectStream: false,
       };
     }
-    if (hostname.includes('disneyplus.com') || hostname.includes('hotstar.com')) {
+    if (matchesDomain(hostname, 'disneyplus.com') || matchesDomain(hostname, 'hotstar.com')) {
       return {
         platform: 'disney',
         mediaId: url.toString(),
@@ -85,7 +89,7 @@ export function detectMediaSource(input: string): DetectedMedia | null {
         isDirectStream: false,
       };
     }
-    if (hostname.includes('crunchyroll.com')) {
+    if (matchesDomain(hostname, 'crunchyroll.com')) {
       return {
         platform: 'crunchyroll',
         mediaId: url.toString(),
@@ -94,7 +98,7 @@ export function detectMediaSource(input: string): DetectedMedia | null {
         isDirectStream: false,
       };
     }
-    if (hostname.includes('twitch.tv')) {
+    if (matchesDomain(hostname, 'twitch.tv')) {
       return {
         platform: 'twitch',
         mediaId: url.toString(),

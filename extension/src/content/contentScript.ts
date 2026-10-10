@@ -153,7 +153,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
 
 // Global detection bridge for web application (SyncTube client tab on localhost:5173 or web)
 window.addEventListener('message', async (event) => {
-  if (!event.data) return;
+  if (event.source !== window || event.origin !== window.location.origin || !event.data) return;
 
   if (event.data.type === 'SYNCTUBE_EXTENSION_PING' || event.data.type === 'SYNCTUBE_ROOM_ANNOUNCE') {
     if (event.data.roomId && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {

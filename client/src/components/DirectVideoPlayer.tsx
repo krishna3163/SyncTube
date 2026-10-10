@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { AlertTriangle, RefreshCw, ExternalLink, Globe, Sparkles } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ExternalLink, Globe } from 'lucide-react';
 import * as dashjs from 'dashjs';
 import { Role, SyncStatePayload } from '../types.js';
 import type { YouTubePlayerHandle } from './YouTubePlayer.js';

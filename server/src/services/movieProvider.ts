@@ -18,12 +18,20 @@ export const STREAM_REFERER = 'https://sportslive.wine';
 export function isDeprecationNoticeUrl(url?: string | null): boolean {
   if (!url) return false;
   const lower = url.toLowerCase();
+  let isMacdnOther = false;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    if ((host === 'macdn.aoneroom.com' || host.endsWith('.macdn.aoneroom.com')) && u.pathname.includes('/other/')) {
+      isMacdnOther = true;
+    }
+  } catch {}
   return (
     lower.includes('1c7de0bd3393702d9191801f15f88f8d') ||
     lower.includes('9a0461bc39da389663bf3dbb17091d3f') ||
     lower.includes('b164fbfb4347792950bdfbfb563d39d9') ||
     lower.includes('/notice.mp4') ||
-    (lower.includes('macdn.aoneroom.com') && lower.includes('/other/'))
+    isMacdnOther
   );
 }
 

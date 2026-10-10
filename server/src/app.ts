@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
@@ -13,6 +14,21 @@ import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
 import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
+
+function isAllowedMediaHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  const allowedMediaDomains = [
+    'aoneroom.com',
+    'inmoviebox.com',
+    'akamaihd.net',
+    'cloudfront.net',
+    'fastly.net',
+    'sportslive.wine',
+    'googleapis.com',
+    'archive.org',
+  ];
+  return allowedMediaDomains.some((domain) => host === domain || host.endsWith('.' + domain));
+}
 
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
@@ -341,14 +357,19 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
   });
 
   // Auth: Login
+  const LoginSchema = z.object({
+    email: z.string().trim().min(1, 'Email is required.'),
+    password: z.string().min(1, 'Password is required.'),
+  });
+
   app.post('/api/auth/login', apiRateLimiter(30, 60000), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { email, password } = req.body || {};
-      if (!email || !password) {
+      const parsed = LoginSchema.safeParse(req.body);
+      if (!parsed.success) {
         return res.status(400).json({ error: 'Email and password are required.' });
       }
 
-      const result = await auth.login(email, password);
+      const result = await auth.login(parsed.data.email, parsed.data.password);
       res.status(200).json(result);
     } catch (err: any) {
       if (err.message?.includes('Invalid email or password')) {
@@ -753,11 +774,16 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(403).json({ error: 'Target manifest URL is prohibited' });
     }
 
+    const parsedUrl = new URL(validated.normalizedUrl);
+    if (!isAllowedMediaHost(parsedUrl.hostname)) {
+      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    }
+
     // Determine target URL for manifest or segment
     let targetUrl = validated.normalizedUrl;
     if (file && file !== 'index.mpd') {
       const baseDir = validated.normalizedUrl.substring(0, validated.normalizedUrl.lastIndexOf('/'));
-      const safeFile = file.replace(/(\.\.[/\\])+/g, '');
+      const safeFile = path.posix.basename(file);
       targetUrl = `${baseDir}/${safeFile}`;
     }
 
@@ -837,6 +863,11 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     const validated = await validateSafeUrl(rawUrl);
     if (!validated.safe || !validated.normalizedUrl) {
       return res.status(403).json({ error: validated.error || 'Access to target URL is prohibited' });
+    }
+
+    const parsedUrl = new URL(validated.normalizedUrl);
+    if (!isAllowedMediaHost(parsedUrl.hostname)) {
+      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
 
     try {
