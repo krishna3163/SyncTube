@@ -7,6 +7,7 @@ import { DatabaseService } from './services/db.js';
 import { AuthService } from './services/auth.js';
 import { setupSocketHandlers } from './socket/handler.js';
 import { serverSentry } from './services/sentry.js';
+import { isAllowedOrigin } from './utils/cors.js';
 
 dotenv.config();
 
@@ -22,24 +23,6 @@ async function bootstrap() {
 
   const app = createApp(roomManager, dbService, authService);
   const server = http.createServer(app);
-
-  const isAllowedOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin) return callback(null, true);
-    if (process.env.NODE_ENV !== 'production') return callback(null, true);
-    if (process.env.FRONTEND_URL && (origin === process.env.FRONTEND_URL || origin.startsWith(process.env.FRONTEND_URL))) {
-      return callback(null, true);
-    }
-    if (
-      origin.includes('localhost') ||
-      origin.includes('127.0.0.1') ||
-      origin.endsWith('.vercel.app') ||
-      origin.endsWith('.onrender.com') ||
-      /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin)
-    ) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS origin rejected'), false);
-  };
 
   const io = new Server(server, {
     cors: {

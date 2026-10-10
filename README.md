@@ -135,7 +135,7 @@ The host can play videos immediately. Participants can use the request controls 
 
 ### Requirements
 
-- Node.js 18 or later
+- Node.js 22.12+ in the 22.x line, 24.x, or 26+ (including the production server container)
 - npm
 
 ### Install and start
@@ -178,7 +178,7 @@ For a production deployment, configure the frontend API and socket URLs to point
 
 ## Scripts
 
-Run from the repository root unless the command says otherwise.
+Run from the repository root unless the command says otherwise. Before the first browser test run, install Playwright's Chromium with `npm run test:e2e:install` (on Linux, use `npx playwright install --with-deps chromium` if system libraries are missing). E2E screenshots are written under `test-results/artifacts`; set `PLAYWRIGHT_ARTIFACTS_DIR` to override that location.
 
 | Command | Description |
 |---|---|
@@ -186,8 +186,9 @@ Run from the repository root unless the command says otherwise.
 | `npm run dev -w client` | Start the Vite frontend. |
 | `npm run dev -w server` | Start the API and Socket.IO server. |
 | `npm run build` | Build the server and frontend for production. |
-| `npm test` | Run the server and client unit-test suites. |
-| `npm run test:e2e` | Run the Playwright end-to-end suite. |
+| `npm test` | Run the server, client, and extension unit-test suites. |
+| `npm run test:e2e:install` | Install Playwright's bundled Chromium browser (one-time setup). |
+| `npm run test:e2e` | Build the extension and run the Playwright end-to-end suite. |
 
 ## Project structure
 

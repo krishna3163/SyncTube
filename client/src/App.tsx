@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { HomePage } from './pages/HomePage.js';
-import { RoomPage } from './pages/RoomPage.js';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
+
+const HomePage = lazy(() => import('./pages/HomePage.js').then(({ HomePage }) => ({ default: HomePage })));
+const RoomPage = lazy(() => import('./pages/RoomPage.js').then(({ RoomPage }) => ({ default: RoomPage })));
 import { CinematicBackground } from './components/CinematicBackground.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { getOrCreateUserId } from './utils/identity.js';
@@ -67,21 +68,23 @@ export function App() {
     <div className="app-root-shell">
       <CinematicBackground />
       <div className="app-content-layer">
-        {roomId ? (
-          <RoomPage
-            roomId={roomId}
-            username={username}
-            userId={userId}
-            onLeaveRoom={handleLeaveRoom}
-            onNotify={showToast}
-          />
-        ) : (
-          <HomePage
-            onEnterRoom={handleEnterRoom}
-            onNotify={showToast}
-            userId={userId}
-          />
-        )}
+        <Suspense fallback={<div className="app-page-loading" role="status">Loading SyncTube…</div>}>
+          {roomId ? (
+            <RoomPage
+              roomId={roomId}
+              username={username}
+              userId={userId}
+              onLeaveRoom={handleLeaveRoom}
+              onNotify={showToast}
+            />
+          ) : (
+            <HomePage
+              onEnterRoom={handleEnterRoom}
+              onNotify={showToast}
+              userId={userId}
+            />
+          )}
+        </Suspense>
       </div>
 
       {/* Floating Toast Alerts */}

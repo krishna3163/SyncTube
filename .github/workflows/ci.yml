@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Test Suite (Server + Client)
+      - name: Run Test Suite (Server + Client + Extension)
         run: npm test
 
-      - name: Build Application (Server + Client)
+      - name: Build Application (Server + Client + Extension)
         run: npm run build
