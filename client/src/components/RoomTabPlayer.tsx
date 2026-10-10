@@ -42,7 +42,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [, setStream] = useState<MediaStream | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);

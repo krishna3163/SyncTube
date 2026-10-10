@@ -26,7 +26,8 @@ class SentryService {
     if (!this.isEnabled) {
       return;
     }
-    console.error('[Sentry Captured Exception]:', error, context || '');
+    const safeError = error instanceof Error ? error.message.replace(/[\r\n]+/g, ' ') : String(error).replace(/[\r\n]+/g, ' ');
+    console.error('[Sentry Captured Exception]: %s', safeError);
     // In production with @sentry/node installed, this forwards to Sentry.io API
   }
 

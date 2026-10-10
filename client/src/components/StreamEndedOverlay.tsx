@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tv, RotateCcw, Home, Sparkles, CheckCircle2, Eye, Clock } from 'lucide-react';
+import { RotateCcw, Home, Sparkles, CheckCircle2, Eye, Clock } from 'lucide-react';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 
 export interface StreamEndedOverlayProps {

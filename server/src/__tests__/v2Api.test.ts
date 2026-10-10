@@ -53,7 +53,7 @@ describe('V2 REST APIs', () => {
   });
 
   it('GET /api/rooms/:roomId/readiness and GET /api/rooms/:roomId/sync return universal state', async () => {
-    const room = roomManager.createRoom('V2ROOM', 'dQw4w9WgXcQ');
+    roomManager.createRoom('V2ROOM', 'dQw4w9WgXcQ');
 
     const syncRes = await request(app).get('/api/rooms/V2ROOM/sync');
     expect(syncRes.status).toBe(200);

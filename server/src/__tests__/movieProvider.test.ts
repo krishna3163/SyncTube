@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.js';
 import { RoomManager } from '../models/RoomManager.js';
-import { MovieProviderService, movieProvider } from '../services/movieProvider.js';
+import { MovieProviderService } from '../services/movieProvider.js';
 import { detectMediaSource } from '../utils/media.js';
 
 describe('MovieProvider Service & Crypto', () => {

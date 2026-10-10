@@ -8,8 +8,6 @@ import {
   Check,
   Flag,
   ThumbsUp,
-  Tag,
-  Radio,
   ChevronDown,
   ChevronUp,
   Bell,
@@ -19,7 +17,6 @@ import {
   Gamepad2,
   Music,
   Code,
-  Flame,
   Tv,
 } from 'lucide-react';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';

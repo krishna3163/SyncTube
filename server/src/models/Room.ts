@@ -1,5 +1,5 @@
 import { Participant, ParticipantPublic, PlayState, Role, SyncStatePayload, PendingActionRequest, ChatMessage } from '../types.js';
-import { UniversalSyncSession, MediaIdentity, UniversalPlaybackState } from '../sync/universalSync.js';
+import { UniversalSyncSession, UniversalPlaybackState } from '../sync/universalSync.js';
 import { detectMediaSource } from '../utils/media.js';
 
 export interface ServerPlaylistItem {

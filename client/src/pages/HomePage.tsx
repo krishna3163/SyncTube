@@ -27,7 +27,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
-import { detectClientMedia, CINEMA_SAMPLE_PRESETS } from '../utils/media.js';
+import { detectClientMedia } from '../utils/media.js';
 import {
   getStoredParties,
   saveStoredParty,

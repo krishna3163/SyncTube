@@ -106,7 +106,6 @@ test.describe('Viewer Features Group A: Live Video Player & Stream Experience', 
     await expect(page.locator('.room-page-root')).not.toHaveClass(/theater-dimmed/, { timeout: 5000 });
 
     // Check Video Settings Popover (Latency Mode, Quality, Speed, Captions)
-    const settingsBtn = page.locator('.control-btn-icon').filter({ has: page.locator('svg') }).filter({ hasText: '' }).nth(3);
     // Find settings button by aria-label
     const videoSettingsBtn = page.locator('button[aria-label="Video Settings"]').first();
     await expect(videoSettingsBtn).toBeVisible();

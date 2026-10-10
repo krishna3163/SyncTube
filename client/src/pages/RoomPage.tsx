@@ -1460,7 +1460,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
                 {(() => {
                   const detectedMedia = videoId ? detectClientMedia(videoId) : null;
-                  const isLiveStreamMode = !videoId || !!syncState?.browserSession || videoId.startsWith('tb:') || videoId.startsWith('tab:') || detectedMedia?.category === 'movie_website';
+                  
                   return null;
                 })()}
 

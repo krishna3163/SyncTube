@@ -8,7 +8,6 @@ import {
   Send,
   QrCode,
   Globe,
-  Radio,
 } from 'lucide-react';
 
 export interface ShareStreamModalProps {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Flag, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { Flag, CheckCircle2, X } from 'lucide-react';
 
 export interface ReportStreamModalProps {
   isOpen: boolean;

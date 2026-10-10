@@ -15,20 +15,18 @@ import { AuthService, UserProfile } from './services/auth.js';
 import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 
-function isAllowedMediaHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  const allowedMediaDomains = [
-    'aoneroom.com',
-    'inmoviebox.com',
-    'akamaihd.net',
-    'cloudfront.net',
-    'fastly.net',
-    'sportslive.wine',
-    'googleapis.com',
-    'archive.org',
-  ];
-  return allowedMediaDomains.some((domain) => host === domain || host.endsWith('.' + domain));
-}
+const ALLOWED_STREAM_HOSTS = [
+  'macdn.aoneroom.com',
+  'api6.aoneroom.com',
+  'api5.aoneroom.com',
+  'api4.aoneroom.com',
+  'api3.aoneroom.com',
+  'api.inmoviebox.com',
+  'commondatastorage.googleapis.com',
+  'storage.googleapis.com',
+  'archive.org',
+  'sportslive.wine',
+];
 
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
@@ -774,17 +772,17 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(403).json({ error: 'Target manifest URL is prohibited' });
     }
 
-    const parsedUrl = new URL(validated.normalizedUrl);
-    if (!isAllowedMediaHost(parsedUrl.hostname)) {
-      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
-    }
-
     // Determine target URL for manifest or segment
     let targetUrl = validated.normalizedUrl;
     if (file && file !== 'index.mpd') {
       const baseDir = validated.normalizedUrl.substring(0, validated.normalizedUrl.lastIndexOf('/'));
       const safeFile = path.posix.basename(file);
       targetUrl = `${baseDir}/${safeFile}`;
+    }
+
+    const targetObj = new URL(targetUrl);
+    if (!ALLOWED_STREAM_HOSTS.includes(targetObj.hostname) && !targetObj.hostname.endsWith('.aoneroom.com')) {
+      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
 
     try {
@@ -802,7 +800,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
-      const upstreamRes = await fetch(targetUrl, {
+      const upstreamRes = await fetch(targetObj.href, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
@@ -865,8 +863,8 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       return res.status(403).json({ error: validated.error || 'Access to target URL is prohibited' });
     }
 
-    const parsedUrl = new URL(validated.normalizedUrl);
-    if (!isAllowedMediaHost(parsedUrl.hostname)) {
+    const targetObj = new URL(validated.normalizedUrl);
+    if (!ALLOWED_STREAM_HOSTS.includes(targetObj.hostname) && !targetObj.hostname.endsWith('.aoneroom.com')) {
       return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
 
@@ -881,7 +879,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
-      const upstreamRes = await fetch(validated.normalizedUrl, {
+      const upstreamRes = await fetch(targetObj.href, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
