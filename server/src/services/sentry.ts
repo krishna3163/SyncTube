@@ -26,15 +26,14 @@ class SentryService {
     if (!this.isEnabled) {
       return;
     }
-    const safeError = error instanceof Error ? error.message.replace(/[\r\n]+/g, ' ') : String(error).replace(/[\r\n]+/g, ' ');
-    console.error('[Sentry Captured Exception]: %s', safeError);
-    // In production with @sentry/node installed, this forwards to Sentry.io API
+    const safeError = error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ') : String(error).replace(/[\r\n\t]/g, ' ');
+    console.error('[Sentry Captured Exception]:', safeError);
   }
 
   public captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info'): void {
     if (!this.isEnabled) return;
-    const sanitized = String(message).replace(/[\r\n]+/g, ' ');
-    console.log(`[Sentry Captured Message] [${level.toUpperCase()}]: ${sanitized}`);
+    const safeMsg = String(message).replace(/[\r\n\t]/g, ' ');
+    console.log('[Sentry Captured Message] [%s]: %s', level.toUpperCase(), safeMsg);
   }
 
   public addBreadcrumb(breadcrumb: SentryBreadcrumb): void {

@@ -1458,11 +1458,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               <div className="video-wrapper">
                 <ReactionOverlay reactions={activeReactions} />
 
-                {(() => {
-                  const detectedMedia = videoId ? detectClientMedia(videoId) : null;
-                  
-                  return null;
-                })()}
+                
 
                 {videoId ? (
                   (() => {

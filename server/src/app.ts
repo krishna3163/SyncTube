@@ -15,18 +15,6 @@ import { AuthService, UserProfile } from './services/auth.js';
 import { movieProvider, STREAM_REFERER, decodeDashToken } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 
-const ALLOWED_STREAM_HOSTS = [
-  'macdn.aoneroom.com',
-  'api6.aoneroom.com',
-  'api5.aoneroom.com',
-  'api4.aoneroom.com',
-  'api3.aoneroom.com',
-  'api.inmoviebox.com',
-  'commondatastorage.googleapis.com',
-  'storage.googleapis.com',
-  'archive.org',
-  'sportslive.wine',
-];
 
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
@@ -781,9 +769,25 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     }
 
     const targetObj = new URL(targetUrl);
-    if (!ALLOWED_STREAM_HOSTS.includes(targetObj.hostname) && !targetObj.hostname.endsWith('.aoneroom.com')) {
-      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
+      return res.status(403).json({ error: 'Invalid protocol' });
     }
+    switch (targetObj.hostname) {
+      case 'macdn.aoneroom.com':
+      case 'api6.aoneroom.com':
+      case 'api5.aoneroom.com':
+      case 'api4.aoneroom.com':
+      case 'api3.aoneroom.com':
+      case 'api.inmoviebox.com':
+      case 'commondatastorage.googleapis.com':
+      case 'storage.googleapis.com':
+      case 'archive.org':
+      case 'sportslive.wine':
+        break;
+      default:
+        return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    }
+    const safeUrl = new URL(targetObj.pathname + targetObj.search, targetObj.origin);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -800,7 +804,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
-      const upstreamRes = await fetch(targetObj.href, {
+      const upstreamRes = await fetch(safeUrl.href, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
@@ -864,9 +868,25 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     }
 
     const targetObj = new URL(validated.normalizedUrl);
-    if (!ALLOWED_STREAM_HOSTS.includes(targetObj.hostname) && !targetObj.hostname.endsWith('.aoneroom.com')) {
-      return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
+      return res.status(403).json({ error: 'Invalid protocol' });
     }
+    switch (targetObj.hostname) {
+      case 'macdn.aoneroom.com':
+      case 'api6.aoneroom.com':
+      case 'api5.aoneroom.com':
+      case 'api4.aoneroom.com':
+      case 'api3.aoneroom.com':
+      case 'api.inmoviebox.com':
+      case 'commondatastorage.googleapis.com':
+      case 'storage.googleapis.com':
+      case 'archive.org':
+      case 'sportslive.wine':
+        break;
+      default:
+        return res.status(403).json({ error: 'Target host is not an authorized media provider' });
+    }
+    const safeUrl = new URL(targetObj.pathname + targetObj.search, targetObj.origin);
 
     try {
       const upstreamHeaders: Record<string, string> = {
@@ -879,7 +899,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         upstreamHeaders['Range'] = req.headers.range;
       }
 
-      const upstreamRes = await fetch(targetObj.href, {
+      const upstreamRes = await fetch(safeUrl.href, {
         method: req.method,
         headers: upstreamHeaders,
         signal: AbortSignal.timeout(15000),
