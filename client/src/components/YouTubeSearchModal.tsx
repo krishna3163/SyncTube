@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward } from 'lucide-react';
+import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward, Film } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../pages/HomePage.js';
 import { getSafeYouTubeThumbnailUrl } from '../utils/identity.js';
 import { extractYouTubeId } from '../utils/youtube.js';
+import { MovieSearchTab } from './MovieSearchTab.js';
 
 interface SearchResultItem {
   videoId: string;
@@ -56,6 +57,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [mediaTab, setMediaTab] = useState<'movies' | 'youtube'>('movies');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -177,13 +179,13 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
     // Always include public Render endpoint as fallback if local/primary fails
     const alreadyHasFallback = endpointsToTry.some((endpoint) => {
       try {
-        return new URL(endpoint, window.location.origin).hostname === 'synctube-2ar4.onrender.com';
+        return new URL(endpoint, window.location.origin).hostname === 'youtube-watch-party-api-buaf.onrender.com';
       } catch {
         return false;
       }
     });
     if (!alreadyHasFallback) {
-      endpointsToTry.push(`https://synctube-2ar4.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
+      endpointsToTry.push(`https://youtube-watch-party-api-buaf.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
     let loadedVideos: SearchResultItem[] | null = null;
@@ -284,10 +286,24 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="glass-panel modal-card yt-search-modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Search size={20} color="var(--accent)" />
-            <h2 className="modal-title">Search YouTube Videos</h2>
+        <div className="modal-header yt-search-modal-header">
+          <div className="search-modal-source-tabs">
+            <button
+              type="button"
+              className={`search-source-tab-btn ${mediaTab === 'movies' ? 'active' : ''}`}
+              onClick={() => setMediaTab('movies')}
+            >
+              <Film size={16} />
+              <span>Movies & Series (HD Cinema)</span>
+            </button>
+            <button
+              type="button"
+              className={`search-source-tab-btn ${mediaTab === 'youtube' ? 'active' : ''}`}
+              onClick={() => setMediaTab('youtube')}
+            >
+              <Search size={16} />
+              <span>YouTube Videos</span>
+            </button>
           </div>
           <button type="button" className="btn-icon" onClick={onClose} title="Close">
             <X size={18} />
@@ -295,8 +311,19 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
         </div>
 
         <div className="modal-body yt-search-modal-body">
-          {/* Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="yt-search-form">
+          {mediaTab === 'movies' ? (
+            <MovieSearchTab
+              userRole={userRole}
+              onPlayStream={(streamUrl) => onPlayVideo(streamUrl)}
+              onAddToPlaylist={onAddToPlaylist}
+              onRequestAction={onRequestAction}
+              onNotify={onNotify}
+              onCloseModal={onClose}
+            />
+          ) : (
+            <>
+              {/* Search Bar */}
+              <form onSubmit={handleSearchSubmit} className="yt-search-form">
             <div className="yt-search-input-wrap">
               <Search size={18} className="yt-search-icon" />
               <input
@@ -417,8 +444,10 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
                 </div>
               ))}
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
+  </div>
+</div>
   );
 };

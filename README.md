@@ -2,7 +2,7 @@
 
 **Watch YouTube together, in sync.** Create a room, invite friends, and enjoy shared playback, a collaborative queue, chat, polls, and live reactions from your browser.
 
-[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://synctube-2ar4.onrender.com/health)
+[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://youtube-watch-party-api-buaf.onrender.com/health)
 
 SyncTube is a responsive, browser-based watch-party application. A room has a shared playback state and participant roles; each guest joins with a room code or invite link. No account is needed to try the app.
 
@@ -215,6 +215,41 @@ flowchart LR
 - **Realtime server:** Express and Socket.IO, with Zod schemas for socket event payloads.
 - **Database:** PostgreSQL is optional and stores room playback metadata. Browser-local settings and room history use local storage.
 - **Tests:** Vitest for unit/API/socket tests and Playwright for browser end-to-end checks.
+
+## Temporary Browser (Ephemeral Isolated Remote Browser)
+
+SyncTube includes a built-in **Temporary Browser** feature for private, zero-trace web browsing directly within your browser.
+
+### How It Works & Architecture
+- **Engine:** Spawns an isolated headless Chromium instance on the backend for each session using Playwright.
+- **Remote Display:** Uses Chrome DevTools Protocol (CDP) `Page.startScreencast` to stream live JPEG frames at ~30 FPS over authenticated Socket.IO WebSockets.
+- **Interactive Control:** Dispatches mouse movements, clicks, scrolling (wheel), and keyboard typing directly into the remote Chromium page in real time with precise coordinate mapping.
+- **Ephemeral Sandbox:**
+  - Every session gets a dedicated temporary user directory in `/tmp/synctube-tb-<id>`.
+  - Zero database persistence: cookies, cache, authentication state, and history are never written to any database.
+  - On "Close & Delete Session": the remote Chromium process is terminated, CDP detached, temporary disk directory wiped with `rmSync`, and session token revoked.
+  - Inactivity Timeout: Sessions automatically terminate and wipe after 8 minutes of idle time or 15 minutes max lifetime.
+
+### Security & SSRF Protection
+- **Protocol Enforcement:** Only `http:` and `https:` schemes are allowed. Schemes like `file:`, `javascript:`, `data:`, `blob:`, and `gopher:` are blocked.
+- **SSRF Network Blocking:** Restricts navigation to private IPs (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `0.0.0.0`), loopback (`localhost`), link-local (`169.254.0.0/16` AWS/GCP/Render metadata endpoints), and IPv6 equivalents (`::1`, `fc00::/7`).
+- **DNS Resolution Verification:** Resolves hostnames before navigation to prevent DNS rebinding attacks to internal infrastructure.
+- **Token Authorization:** Each session is assigned a cryptographically random session token required for both REST API endpoints and Socket.IO events.
+
+### API Endpoints
+- `POST /api/sessions` — Start an isolated session (`{ initialUrl, viewport }`). Rate limited.
+- `GET /api/sessions/:id` — Query session status (requires `Authorization: Bearer <token>`).
+- `POST /api/sessions/:id/navigate` — Navigate to URL with SSRF validation.
+- `DELETE /api/sessions/:id` — Terminate Chromium, wipe temporary directory, and invalidate token.
+- `Socket.IO` — Events for `browser:join`, `browser:frame`, `browser:navigated`, `browser:mouse_move`, `browser:click`, `browser:wheel`, `browser:key_down`, and `browser:close`.
+
+### Deployment & Free-Tier Hosting Constraints
+- **Backend (Render):** Deploy using the included `Dockerfile` (or Docker web service) so Chromium and its required Linux dependencies (`chromium`, `libasound2`, `libnss3`, etc.) are packaged with the container.
+- **Frontend (Vercel):** Deploy `client/` as a static Vite site with `VITE_API_URL` pointing to your Render backend.
+- **Free-Tier Limits:**
+  - Render free tier provides 512 MB RAM. Running Chromium sessions requires ~80-120 MB RAM per active tab. The server enforces `MAX_CONCURRENT_BROWSER_SESSIONS=5` by default to avoid OOM errors.
+  - If Render puts the service to sleep after 15 minutes of inactivity, initial session spin-up may take 30-45 seconds for a cold boot.
+  - Heavy video playback (e.g. 4K streams) inside the remote browser may hit CPU limits on single-core free tier instances; standard browsing, research, and interactive navigation perform smoothly.
 
 ## Data and deployment notes
 

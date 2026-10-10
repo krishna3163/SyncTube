@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://synctube-2ar4.onrender.com/sitemap.xml
+Sitemap: https://youtube-watch-party-api-buaf.onrender.com/sitemap.xml

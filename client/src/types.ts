@@ -14,6 +14,24 @@ export interface SyncStatePayload {
   playState: PlayState;
   currentTime: number;
   updatedAt: number;
+  createdAt?: number;
+  likes?: number;
+  category?: string;
+  isLive?: boolean;
+  browserSession?: {
+    sessionId: string;
+    guestControl: boolean;
+    currentUrl?: string;
+    currentTitle?: string;
+  };
+  mediaIdentity?: {
+    platform: string;
+    mediaId: string;
+    title: string;
+    url?: string;
+    duration?: number;
+    thumbnail?: string;
+  };
 }
 
 export interface UserJoinedPayload {
@@ -174,4 +192,52 @@ export interface RoomSettingsData {
   shuffle: boolean;
   allowLinks: boolean;
   allowEmbeddedLinks: boolean;
+}
+
+// ── V2 Types ──────────────────────────────────────────────
+export interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  avatarId?: string;
+  bio?: string;
+  createdAt: number;
+  followersCount?: number;
+}
+
+export type ReadinessStatus = 'ready' | 'loading' | 'buffering' | 'desynced' | 'not_connected';
+
+export interface ParticipantReadiness {
+  userId: string;
+  username: string;
+  status: ReadinessStatus;
+  reportedPosition?: number;
+  mediaMatched: boolean;
+  activePlatform?: string;
+  activeMediaId?: string;
+  updatedAt: number;
+}
+
+export interface MediaIdentity {
+  platform: string;
+  mediaId: string;
+  title: string;
+  url?: string;
+  duration?: number;
+}
+
+export interface UniversalPlaybackState {
+  revision: number;
+  state: 'CREATED' | 'WAITING' | 'READY' | 'PLAYING' | 'PAUSED' | 'BUFFERING' | 'ENDED' | 'CLOSED';
+  position: number;
+  playbackRate: number;
+  timestamp: number;
+  mediaIdentity: MediaIdentity | null;
+}
+
+export interface DriftAssessment {
+  driftMs: number;
+  action: 'none' | 'soft_rate_adjust' | 'hard_seek';
+  targetRate?: number;
+  targetPosition?: number;
 }

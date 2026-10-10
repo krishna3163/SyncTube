@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HomePage } from './pages/HomePage.js';
 import { RoomPage } from './pages/RoomPage.js';
+import { CinematicBackground } from './components/CinematicBackground.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { getOrCreateUserId } from './utils/identity.js';
 
@@ -17,10 +18,11 @@ export function App() {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Check URL on load (supports both ?room=ABC123 and path /ABC123)
+  // Check URL on load (supports ?room=ABC123, path /ABC123, and path /browser)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get('room');
+
     const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
     const roomFromUrl = (urlRoom || (pathMatch ? pathMatch[1] : null))?.toUpperCase();
 
@@ -45,6 +47,8 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+
+
   const handleEnterRoom = React.useCallback((targetRoomId: string, user: string) => {
     setRoomId(targetRoomId);
     setUsername(user);
@@ -60,18 +64,25 @@ export function App() {
   }, []);
 
   return (
-    <div>
-      {roomId ? (
-        <RoomPage
-          roomId={roomId}
-          username={username}
-          userId={userId}
-          onLeaveRoom={handleLeaveRoom}
-          onNotify={showToast}
-        />
-      ) : (
-        <HomePage onEnterRoom={handleEnterRoom} onNotify={showToast} userId={userId} />
-      )}
+    <div className="app-root-shell">
+      <CinematicBackground />
+      <div className="app-content-layer">
+        {roomId ? (
+          <RoomPage
+            roomId={roomId}
+            username={username}
+            userId={userId}
+            onLeaveRoom={handleLeaveRoom}
+            onNotify={showToast}
+          />
+        ) : (
+          <HomePage
+            onEnterRoom={handleEnterRoom}
+            onNotify={showToast}
+            userId={userId}
+          />
+        )}
+      </div>
 
       {/* Floating Toast Alerts */}
       <div className="toast-container">

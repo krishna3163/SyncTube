@@ -75,17 +75,29 @@ export const AvatarPicker: React.FC<AvatarPickerProps> = ({ selectedId, username
     ? (ANIME_AVATARS.find((a) => a.id === selectedId) ?? getAvatarForUsername(username))
     : getAvatarForUsername(username);
 
+  const [failedImages, setFailedImages] = React.useState<Record<string, boolean>>({});
+
+  const handleImageError = (id: string) => {
+    setFailedImages((prev) => ({ ...prev, [id]: true }));
+  };
+
   return (
     <div className="avatar-picker">
       <div className="avatar-picker-preview">
-        <AnimeAvatarDisplay username={username} avatarId={selectedId} size={72} showTooltip />
+        <AnimeAvatarDisplay username={username} avatarId={selectedId} size={76} showTooltip />
         <div className="avatar-picker-preview-info">
-          <span className="avatar-picker-name">{current.name}</span>
+          <div className="avatar-picker-name-row">
+            <span className="avatar-picker-name">{current.name}</span>
+            <span className="avatar-picker-badge">{current.series}</span>
+          </div>
+          <span className="avatar-picker-desc">Click any character below to change your room identity</span>
         </div>
       </div>
+
       <div className="avatar-picker-grid">
         {ANIME_AVATARS.map((av: AnimeAvatar) => {
           const isSelected = selectedId ? av.id === selectedId : av.id === current.id;
+          const isFailed = failedImages[av.id];
 
           return (
             <button
@@ -94,34 +106,24 @@ export const AvatarPicker: React.FC<AvatarPickerProps> = ({ selectedId, username
               className={`avatar-picker-item ${isSelected ? 'selected' : ''}`}
               onClick={() => onSelect(av.id)}
               title={`${av.name} · ${av.series}`}
+              aria-label={`Select ${av.name} from ${av.series}`}
               style={{
                 background: `linear-gradient(135deg, ${av.bgFrom}, ${av.bgTo})`,
-                overflow: 'hidden',
-                padding: 0,
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
               }}
             >
-              <img
-                src={`/avatars/${av.id}.png`}
-                alt={av.name}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  borderRadius: '50%',
-                  display: 'block',
-                }}
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-                loading="lazy"
-              />
-              <span className="avatar-picker-emoji" style={{ position: 'absolute', pointerEvents: 'none' }}>
-                {av.emoji}
-              </span>
+              {!isFailed ? (
+                <img
+                  src={`/avatars/${av.id}.png`}
+                  alt={av.name}
+                  className="avatar-picker-img"
+                  onError={() => handleImageError(av.id)}
+                  loading="lazy"
+                />
+              ) : (
+                <span className="avatar-picker-emoji">
+                  {av.emoji}
+                </span>
+              )}
             </button>
           );
         })}

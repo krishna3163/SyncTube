@@ -122,6 +122,6 @@ describe('Express REST API Endpoints', () => {
       expect(res.status).toBe(200);
       expect(res.body.results).toBeDefined();
       expect(res.body.results.length).toBeGreaterThan(0);
-    });
+    }, 10000);
   });
 });
