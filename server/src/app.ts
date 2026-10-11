@@ -507,7 +507,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     },
     {
       videoId: 'z2X2nXBahrk',
-      title: 'Rebel Foods Story - Building the World’s Largest Cloud Kitchen',
+      title: 'Rebel Foods Story - Building the World\'s Largest Cloud Kitchen',
       channel: 'Rebel Foods',
       duration: '12:45',
       thumbnail: 'https://img.youtube.com/vi/z2X2nXBahrk/hqdefault.jpg',
@@ -1027,6 +1027,101 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       handler: (_req, res) => res.status(429).json({ error: 'Too many requests. Please slow down.' }),
     }), (_req: Request, res: Response) => {
       res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  } else {
+    // Fallback: serve a basic index.html when client build doesn't exist
+    // This prevents "Cannot GET /" errors on first deployment
+    app.get('/', (_req: Request, res: Response) => {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncTube - Watch Party</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      max-width: 500px;
+    }
+    h1 { font-size: 2.5em; margin-bottom: 10px; }
+    p { font-size: 1.1em; opacity: 0.9; margin-bottom: 20px; line-height: 1.6; }
+    .status {
+      display: inline-block;
+      padding: 10px 20px;
+      background: rgba(76, 175, 80, 0.3);
+      border-left: 4px solid #4caf50;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.9em;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 SyncTube</h1>
+    <p>Watch YouTube together, in sync.</p>
+    <p>The frontend is loading. If you keep seeing this, the client build may not be deployed correctly.</p>
+    <div class="status">API Server: ✓ Running</div>
+  </div>
+</body>
+</html>`);
+    });
+
+    // Catch-all for unmatched routes when no client build
+    app.get('*', (_req: Request, res: Response) => {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncTube - Watch Party</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      max-width: 500px;
+    }
+    h1 { font-size: 2.5em; margin-bottom: 10px; }
+    p { font-size: 1.1em; opacity: 0.9; margin-bottom: 20px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 SyncTube</h1>
+    <p>Frontend assets not yet available. Please check back soon!</p>
+  </div>
+</body>
+</html>`);
     });
   }
 
