@@ -1,12 +1,11 @@
 # ==============================================================================
-# SyncTube & Temporary Browser - Production Dockerfile
+# SyncTube Production Dockerfile
 # Optimized for Render, Fly.io, Railway, or standalone Docker environments.
-# Includes Chromium headless runtime and least-privilege non-root execution.
 # ==============================================================================
 
 FROM node:22-bookworm-slim
 
-# Install system dependencies required for Chromium and sandboxing
+# Install system dependencies required for production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
@@ -43,7 +42,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Configure Chromium binary location for Playwright / TempBrowserManager
+# Configure environment for production
 ENV CHROMIUM_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV NODE_ENV=production
@@ -55,17 +54,17 @@ COPY server/package*.json ./server/
 COPY client/package*.json ./client/
 COPY extension/package*.json ./extension/
 
-# Install dependencies across workspaces
-RUN npm ci --omit=dev --workspace=server
+# Install production dependencies for all workspaces
+RUN npm ci --omit=dev
 
-# Install devDependencies temporarily for server TypeScript build
-RUN cd server && npm install --only=dev && npm run build && npm prune --production
-
-# Copy application source code
+# Copy server source and build
 COPY server/ ./server/
+RUN cd server && npm run build
+
+# Copy pre-built client (should be built before docker build)
 COPY client/dist/ ./client/dist/
 
-# Security: Create non-root node user with access to temp directories
+# Create non-root node user with temp directory access
 RUN mkdir -p /tmp/synctube-tb && chown -R node:node /app /tmp/synctube-tb
 
 USER node
