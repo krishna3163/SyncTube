@@ -462,6 +462,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
   }, [onNotify]);
 
+  const handleRetryConnection = useCallback(() => {
+    setConnectionStatus('connecting');
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      const activeAvatar =
+        userSettings.avatarId ||
+        localStorage.getItem('synctube_avatar_id') ||
+        getParticipantCharacterId(userSettings.name || username) ||
+        'luffy';
+      emitJoinRoom(roomId, userSettings.name || username, userId, activeAvatar, getRoomIdentityToken(roomId));
+    }
+  }, [roomId, username, userId, userSettings.name, userSettings.avatarId]);
+
   const handleSetQuality = useCallback((q: string) => {
     setCurrentQuality(q);
     ytPlayerRef.current?.setQuality(q);
@@ -1363,7 +1377,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         <div className={`connection-status-banner ${connectionStatus}`} role="status" aria-live="polite">
           <span className="connection-status-dot" />
           <span>{connectionStatus === 'connecting' ? 'Connecting to room…' : 'Connection lost — reconnecting…'}</span>
-          <button type="button" className="connection-retry-btn" onClick={handleResync} title="Retry connection">
+          <button type="button" className="connection-retry-btn" onClick={handleRetryConnection} title="Retry connection">
             <RefreshCw size={11} className={connectionStatus === 'connecting' ? 'spin-icon' : ''} />
             <span>Retry</span>
           </button>

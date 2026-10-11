@@ -3,6 +3,7 @@ import { isAllowedOrigin } from '../utils/cors.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalFrontendUrl = process.env.FRONTEND_URL;
+const originalRenderUrl = process.env.RENDER_EXTERNAL_URL;
 
 function checkOrigin(origin: string | undefined) {
   let result: { error: Error | null; allowed?: boolean } | undefined;
@@ -18,6 +19,9 @@ afterEach(() => {
 
   if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
   else process.env.FRONTEND_URL = originalFrontendUrl;
+
+  if (originalRenderUrl === undefined) delete process.env.RENDER_EXTERNAL_URL;
+  else process.env.RENDER_EXTERNAL_URL = originalRenderUrl;
 });
 
 describe('production CORS origin policy', () => {
@@ -26,6 +30,27 @@ describe('production CORS origin policy', () => {
     process.env.FRONTEND_URL = 'https://watch.example.com/app/';
 
     expect(checkOrigin('https://watch.example.com')).toEqual({ error: null, allowed: true });
+  });
+
+  it('allows default deployed SyncTube origins on Render and Vercel', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.FRONTEND_URL;
+
+    expect(checkOrigin('https://synctube-2ar4.onrender.com')).toEqual({ error: null, allowed: true });
+    expect(checkOrigin('https://sync-tube-krishna3163s-projects.vercel.app')).toEqual({ error: null, allowed: true });
+  });
+
+  it('allows multiple comma-separated origins in FRONTEND_URL', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.FRONTEND_URL = 'https://app1.example.com, https://app2.example.com';
+
+    expect(checkOrigin('https://app1.example.com')).toEqual({ error: null, allowed: true });
+    expect(checkOrigin('https://app2.example.com')).toEqual({ error: null, allowed: true });
+  });
+
+  it('allows browser extensions', () => {
+    process.env.NODE_ENV = 'production';
+    expect(checkOrigin('chrome-extension://abcdefghijklm')).toEqual({ error: null, allowed: true });
   });
 
   it('rejects attacker-controlled origins that merely share a prefix or hosting suffix', () => {
@@ -43,7 +68,7 @@ describe('production CORS origin policy', () => {
     }
   });
 
-  it('fails closed when production has no valid frontend URL configured', () => {
+  it('fails closed when production has no valid frontend URL configured and receives unknown domain', () => {
     process.env.NODE_ENV = 'production';
     delete process.env.FRONTEND_URL;
 

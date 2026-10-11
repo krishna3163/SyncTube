@@ -53,9 +53,8 @@ export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    // In Vite dev, always go same-origin so the dev-server proxy hits the local backend
-    // (works for localhost, LAN IPs, and preview hosts alike).
-    if (isLocalhost || import.meta.env.DEV) {
+    // In Vite dev, or when deployed directly on Render, use same-origin relative requests
+    if (isLocalhost || import.meta.env.DEV || hostname.endsWith('.onrender.com')) {
       return '';
     }
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
