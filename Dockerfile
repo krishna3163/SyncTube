@@ -3,8 +3,21 @@
 # Optimized for Render, Fly.io, Railway, or standalone Docker environments.
 # ==============================================================================
 
-FROM node:22-bookworm-slim
+# Stage 1: Build stage
+FROM node:22-bookworm-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+COPY server/package*.json ./server/
+COPY client/package*.json ./client/
+COPY extension/package*.json ./extension/
+RUN npm ci
+COPY server/ ./server/
+COPY client/ ./client/
+COPY extension/ ./extension/
+RUN npm run build:server && npm run build:client && npm run build:extension
 
+# Stage 2: Production runtime stage
+FROM node:22-bookworm-slim
 # Install system dependencies required for production
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
@@ -57,12 +70,10 @@ COPY extension/package*.json ./extension/
 # Install production dependencies for all workspaces
 RUN npm ci --omit=dev
 
-# Copy server source and build
+# Copy server code and pre-built artifacts from builder
 COPY server/ ./server/
-RUN cd server && npm run build
-
-# Copy pre-built client (should be built before docker build)
-COPY client/dist/ ./client/dist/
+COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/client/dist ./client/dist
 
 # Create non-root node user with temp directory access
 RUN mkdir -p /tmp/synctube-tb && chown -R node:node /app /tmp/synctube-tb

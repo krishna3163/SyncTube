@@ -9,6 +9,7 @@ import type {
 
 export interface PlatformAdapter {
   readonly platformId: PlatformId;
+  readonly name?: string;
   readonly capabilities: PlatformCapabilities;
 
   matches(url: string): boolean;

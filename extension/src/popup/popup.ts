@@ -250,7 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         );
       } else {
-        chrome.tabs.create({ url: `http://localhost:5173/room/${roomId}` }, (newTab) => {
+        chrome.tabs.create({ url: `http://localhost:5173/room/${roomId}` }, (newTab?: chrome.tabs.Tab) => {
           setTimeout(() => {
             if (newTab?.id) {
               chrome.scripting?.executeScript?.({
@@ -284,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const selectedTabId = Number(tabSelect?.value);
     let chosenTitle = 'Movie Stream Tab';
     if (typeof chrome !== 'undefined' && chrome.tabs?.get && selectedTabId) {
-      chrome.tabs.get(selectedTabId, (tab) => {
+      chrome.tabs.get(selectedTabId, (tab?: chrome.tabs.Tab) => {
         if (tab?.title) chosenTitle = tab.title;
         triggerTabShareInRoom(roomId, chosenTitle);
       });

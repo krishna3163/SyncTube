@@ -1017,8 +1017,16 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
   }
 
   // Serve static client build if it exists (e.g. monolithic or Render deployment)
-  const clientDist = path.resolve(process.cwd(), '../dist');
-  if (fs.existsSync(clientDist)) {
+  const candidateClientDirs = [
+    path.resolve(process.cwd(), 'client/dist'),
+    path.resolve(process.cwd(), '../client/dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), '../dist'),
+  ];
+  const clientDist = candidateClientDirs.find(
+    (dir) => fs.existsSync(dir) && fs.existsSync(path.join(dir, 'index.html'))
+  );
+  if (clientDist) {
     app.use(express.static(clientDist));
     app.get('*', rateLimit({
       windowMs: 60000,
@@ -1026,7 +1034,10 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       standardHeaders: true,
       legacyHeaders: false,
       handler: (_req, res) => res.status(429).json({ error: 'Too many requests. Please slow down.' }),
-    }), (_req: Request, res: Response) => {
+    }), (req: Request, res: Response) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'Endpoint not found' });
+      }
       res.sendFile(path.join(clientDist, 'index.html'));
     });
   } else {
@@ -1085,7 +1096,10 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     });
 
     // Catch-all for unmatched routes when no client build
-    app.get('*', (_req: Request, res: Response) => {
+    app.get('*', (req: Request, res: Response) => {
+      if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'Endpoint not found' });
+      }
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(200).send(`<!DOCTYPE html>
 <html lang="en">

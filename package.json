@@ -22,7 +22,8 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "build:extension": "npm run build -w extension",
-    "test:extension": "npm run test -w extension"
+    "test:extension": "npm run test -w extension",
+    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p client/tsconfig.json && tsc --noEmit -p extension/tsconfig.json"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

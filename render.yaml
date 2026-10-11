@@ -4,7 +4,7 @@ services:
     runtime: node
     branch: main
     autoDeployTrigger: checksPass
-    buildCommand: npm ci && npm run build:server
+    buildCommand: npm ci && npm run build:server && npm run build:client
     startCommand: npm start -w server
     healthCheckPath: /health
     envVars:

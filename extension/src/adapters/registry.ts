@@ -32,7 +32,7 @@ export class AdapterRegistry {
   public getAllSupportedPlatforms(): Array<{ id: string; name: string; capabilities: any }> {
     return this.adapters.map((a) => ({
       id: a.platformId,
-      name: a.name,
+      name: a.name || a.platformId,
       capabilities: a.capabilities,
     }));
   }

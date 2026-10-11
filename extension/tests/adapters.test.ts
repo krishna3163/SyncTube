@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { YouTubeAdapter } from '../src/adapters/YouTubeAdapter.js';
 import { GenericHTML5Adapter } from '../src/adapters/GenericHTML5Adapter.js';
+import { NetflixAdapter } from '../src/adapters/NetflixAdapter.js';
+import { PrimeVideoAdapter } from '../src/adapters/PrimeVideoAdapter.js';
+import { DisneyHotstarAdapter } from '../src/adapters/DisneyHotstarAdapter.js';
 import { AdapterRegistry } from '../src/adapters/registry.js';
 
 describe('YouTubeAdapter', () => {
@@ -38,6 +41,49 @@ describe('YouTubeAdapter', () => {
   });
 });
 
+describe('NetflixAdapter', () => {
+  const adapter = new NetflixAdapter();
+
+  it('matches netflix watch urls', () => {
+    expect(adapter.matches('https://www.netflix.com/watch/80057281')).toBe(true);
+    expect(adapter.matches('https://netflix.com/watch/12345678')).toBe(true);
+    expect(adapter.matches('https://www.netflix.com/browse')).toBe(false);
+  });
+
+  it('extracts netflix media id correctly', () => {
+    expect(adapter.extractMediaId('https://www.netflix.com/watch/80057281')).toBe('80057281');
+    expect(adapter.extractMediaId('https://www.netflix.com/title/80057281')).toBe(null);
+  });
+});
+
+describe('PrimeVideoAdapter', () => {
+  const adapter = new PrimeVideoAdapter();
+
+  it('matches prime video detail and watch urls', () => {
+    expect(adapter.matches('https://www.primevideo.com/detail/0TIX7S7V/ref=atv')).toBe(true);
+    expect(adapter.matches('https://www.amazon.com/gp/video/detail/B08XYZ')).toBe(true);
+    expect(adapter.matches('https://www.amazon.com/dp/B08XYZ')).toBe(false);
+  });
+
+  it('extracts prime video media id correctly', () => {
+    expect(adapter.extractMediaId('https://www.primevideo.com/detail/0TIX7S7V')).toBe('0TIX7S7V');
+  });
+});
+
+describe('DisneyHotstarAdapter', () => {
+  const adapter = new DisneyHotstarAdapter();
+
+  it('matches disney and hotstar urls', () => {
+    expect(adapter.matches('https://www.hotstar.com/movies/interstellar/1260018440/watch')).toBe(true);
+    expect(adapter.matches('https://www.disneyplus.com/video/abc12345')).toBe(true);
+    expect(adapter.matches('https://www.disneyplus.com/home')).toBe(false);
+  });
+
+  it('extracts disney media id correctly', () => {
+    expect(adapter.extractMediaId('https://www.disneyplus.com/video/abc12345')).toBe('abc12345');
+  });
+});
+
 describe('GenericHTML5Adapter', () => {
   const adapter = new GenericHTML5Adapter();
 
@@ -59,6 +105,24 @@ describe('AdapterRegistry', () => {
     expect(adapter?.platformId).toBe('youtube');
   });
 
+  it('prioritizes NetflixAdapter for netflix URLs', () => {
+    const adapter = registry.getAdapterForUrl('https://www.netflix.com/watch/80057281');
+    expect(adapter).toBeDefined();
+    expect(adapter?.platformId).toBe('netflix');
+  });
+
+  it('prioritizes PrimeVideoAdapter for prime video URLs', () => {
+    const adapter = registry.getAdapterForUrl('https://www.primevideo.com/detail/0TIX7S7V');
+    expect(adapter).toBeDefined();
+    expect(adapter?.platformId).toBe('prime');
+  });
+
+  it('prioritizes DisneyHotstarAdapter for hotstar URLs', () => {
+    const adapter = registry.getAdapterForUrl('https://www.hotstar.com/movies/interstellar/1260018440/watch');
+    expect(adapter).toBeDefined();
+    expect(adapter?.platformId).toBe('disney');
+  });
+
   it('falls back to GenericHTML5Adapter for other websites', () => {
     const adapter = registry.getAdapterForUrl('https://example.com/videos/test.mp4');
     expect(adapter).toBeDefined();
@@ -67,8 +131,11 @@ describe('AdapterRegistry', () => {
 
   it('lists supported platform capabilities', () => {
     const platforms = registry.getAllSupportedPlatforms();
-    expect(platforms.length).toBeGreaterThanOrEqual(2);
+    expect(platforms.length).toBeGreaterThanOrEqual(5);
     expect(platforms.some((p) => p.id === 'youtube')).toBe(true);
+    expect(platforms.some((p) => p.id === 'netflix')).toBe(true);
+    expect(platforms.some((p) => p.id === 'prime')).toBe(true);
+    expect(platforms.some((p) => p.id === 'disney')).toBe(true);
     expect(platforms.some((p) => p.id === 'generic')).toBe(true);
   });
 });
