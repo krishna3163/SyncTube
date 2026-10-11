@@ -1,16 +1,26 @@
 services:
   - type: web
-    name: youtube-watch-party-api
+    name: synctube-server
     runtime: node
     branch: main
     autoDeployTrigger: checksPass
-    buildCommand: npm ci --include=dev && npm run build:server
-    startCommand: npm start
+    buildCommand: npm ci && npm run build:server
+    startCommand: npm start -w server
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "10000"
       - key: FRONTEND_URL
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_JWKS_URL
         sync: false
