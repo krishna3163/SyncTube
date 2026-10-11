@@ -54,12 +54,12 @@ curl -s "localhost:10000/api/movies/streams?id=fx-002&season=1&episode=1" | jq '
 
 ---
 
-## 4. What changed to reach 10k
+## 4. Existing scalability features and limitations
 
 ### 4.1 Server entry — `server/src/index.ts`
-- **Node cluster** — when `CLUSTER=1` or `NODE_ENV=production` with >1 CPU, primary forks `cpus()` workers (capped, configurable via `WORKERS=`). Auto-restart on crash, graceful `SIGTERM`/`SIGINT`, disconnect handling. `CLUSTER=0` disables.
-- **Sticky note** — without Redis, clustered Socket.IO rooms are _per-worker_ (a client on worker A won't see broadcasts from worker B). Two valid ways to scale WS: (a) sticky L7 LB + in-memory, (b) Redis adapter. Code now supports both.
-- **Optional Redis adapter** — if `REDIS_URL` (or `REDIS_TLS_URL`) is set and `ioredis` + `@socket.io/redis-adapter` are installed, every `io` is bridged through Redis so broadcasts are global. Fails open to in-memory with a warning.
+- **Node cluster** — opt-in only: set `CLUSTER=1` (or `true`) to fork workers; `WORKERS=` controls the count. Production defaults to one process because active rooms and participants are stored in a process-local `RoomManager`.
+- **Shared-state limitation** — neither sticky Socket.IO sessions nor the Redis adapter replicate `RoomManager` data (participants, chat, playlist, polls, and permissions). Keep clustering disabled for live watch parties until room state is moved to a shared store and room-aware routing is implemented.
+- **Optional Redis adapter** — if `REDIS_URL` (or `REDIS_TLS_URL`) is set and `ioredis` + `@socket.io/redis-adapter` are installed, Socket.IO broadcasts are bridged through Redis. This shares broadcasts only; it does not make the app's in-memory room state global. Setup failures fall back to the in-memory adapter with a warning.
 - **HTTP tuning** — `keepAliveTimeout 65s / headersTimeout 66s`, `maxHttpBufferSize 1 MB`, `pingInterval 25s / pingTimeout 20s`, `perMessageDeflate: false` (CPU-opt), `connectionStateRecovery` 2 min, `server.maxListeners(0)`.
 - **Graceful shutdown** — quits Redis, closes DB pool, closes HTTP + Socket.IO before `process.exit(0)`.
 - **Emergency room cap** — after each 15-min `cleanupStaleRooms` run, checks `MAX_ROOMS` (default 20k) and forces a 30-min sweep if exceeded.
@@ -84,17 +84,19 @@ curl -s "localhost:10000/api/movies/streams?id=fx-002&season=1&episode=1" | jq '
 
 ---
 
-## 5. How to actually run 10k
+## 5. Requirements for a 10k deployment
+
+> **Current limitation:** the application does not yet share authoritative room state between workers or hosts. Keep `CLUSTER=0` for live watch parties. The estimates and topology below are infrastructure targets, not a supported 10k live-room configuration; Redis Socket.IO broadcasts alone do not synchronize room state.
 
 ### 5.1 Vertical vs horizontal
 
 | Deployment | concurrent WS | HTTP rps | Notes |
 |---|---|---|---|
-| **1× container, 1 process** | ~1–2k | ~1k | Dev / low tier |
-| **1× host, 4 workers (CLUSTER=1)** | ~4–6k HTTP, WS still isolated w/o Redis | ~3–4k | Good for HTTP 10k burst if clients are short-lived |
-| **2× hosts × 4 workers + Redis + sticky ALB + PgBouncer** | **10k+** | **5–10k** | Recommended for watch-party 10k |
+| **1× container, 1 process** | ~1–2k | ~1k | Current supported topology for live rooms |
+| **1× host, 4 workers (CLUSTER=1)** | Not supported for live rooms | ~3–4k (estimate) | HTTP workers have independent room state |
+| **Multiple hosts + Redis + sticky ALB + PgBouncer** | Not supported for live rooms yet | Target only | Requires a shared room-state backend in addition to Redis |
 
-### 5.2 Recommended production topology (10k)
+### 5.2 Target production topology (after shared room state is implemented)
 
 ```
 Client ──►  Cloudflare / CDN (static + cache /movies/trending 60s)
@@ -139,20 +141,22 @@ server {
 NODE_ENV=production
 PORT=10000
 DATABASE_URL=postgres://user:pass@pgbouncer:6432/synctube  # point at PgBouncer for 10k
-# optional but recommended for 10k
-CLUSTER=1                 # or WORKERS=4
-WORKERS=4                 # overrides auto cpus()
-REDIS_URL=redis://redis:6379
+# Current production setting for live watch parties
+CLUSTER=0
+
+# Only for experimental/HTTP-only worker testing. This does not share live-room state:
+# CLUSTER=1
+# WORKERS=4
+# REDIS_URL=redis://redis:6379
 PG_POOL_MAX=20
 PG_POOL_MIN=2
 MAX_ROOMS=20000
 API_RATE_LIMIT=120        # per-worker bucket
-# install WS horizontal deps
-npm i ioredis @socket.io/redis-adapter
-npm i rate-limit-redis    # then wire in app.ts if strict global limiting is needed
 ```
 
 ### 5.4 Build & run
+
+The clustered commands below demonstrate process startup only. Do not use them for live watch-party traffic until a shared room-state backend is implemented.
 
 ```bash
 # single-host cluster

@@ -10,14 +10,13 @@ import { AuthService } from './services/auth.js';
 import { setupSocketHandlers } from './socket/handler.js';
 import { serverSentry } from './services/sentry.js';
 import { isAllowedOrigin } from './utils/cors.js';
+import { isClusterEnabled } from './utils/cluster.js';
 
 dotenv.config();
 
 const PORT = parseInt(process.env.PORT || '10000', 10);
 const HOST = '0.0.0.0';
-const CLUSTER_ENABLED = process.env.CLUSTER === '1' || process.env.CLUSTER === 'true';
-// Auto-enable cluster in production when multiple CPUs are available unless explicitly disabled
-const AUTO_CLUSTER = process.env.CLUSTER !== '0' && process.env.NODE_ENV === 'production' && os.cpus().length > 1;
+const CLUSTER_ENABLED = isClusterEnabled();
 
 async function startWorker() {
   const roomManager = new RoomManager();
@@ -160,7 +159,10 @@ async function startWorker() {
 }
 
 async function bootstrap() {
-  const shouldCluster = CLUSTER_ENABLED || AUTO_CLUSTER;
+  // A single process is the safe default: room and participant state is local
+  // to RoomManager. Set CLUSTER=1 only when the deployment has shared state and
+  // the required Socket.IO/load-balancer configuration.
+  const shouldCluster = CLUSTER_ENABLED;
   if (shouldCluster && cluster.isPrimary) {
     const cpuCount = os.cpus().length;
     // Cap workers to avoid over-subscription on small hosts; allow override via WORKERS env

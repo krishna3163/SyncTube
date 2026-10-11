@@ -2,7 +2,7 @@
 
 **Watch YouTube together, in sync.** Create a room, invite friends, and enjoy shared playback, a collaborative queue, chat, polls, and live reactions from your browser.
 
-[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://youtube-watch-party-api-buaf.onrender.com/health)
+[Open SyncTube](https://sync-tube-tqda.vercel.app) · [Backend health](https://synctube-2ar4.onrender.com/health)
 
 SyncTube is a responsive, browser-based watch-party application. A room has a shared playback state and participant roles; each guest joins with a room code or invite link. No account is needed to try the app.
 
@@ -170,7 +170,8 @@ Copy `.env.example` to `.env` if you need to override defaults. Do not commit re
 | `PORT` | Server | HTTP and Socket.IO port; defaults to `10000`. |
 | `NODE_ENV` | Server | Set to `production` for production proxy/CORS behavior. |
 | `FRONTEND_URL` | Server | Explicit frontend origin allowed by the production CORS policy. |
-| `DATABASE_URL` | Server | Optional PostgreSQL connection string. Without it, server room state runs in memory. |
+| `CLUSTER` | Server | Defaults to `0` (one process) because active room state is process-local. Set to `1` only after configuring shared room state and Socket.IO routing. |
+| `DATABASE_URL` | Server | Optional PostgreSQL connection string for basic playback metadata. Live room state stays in memory; without this, playback metadata also is not persisted. |
 | `VITE_API_URL` | Client | Optional API base URL. Local development uses Vite's `/api` proxy. |
 | `VITE_SOCKET_URL` | Client | Optional Socket.IO server URL. Local development connects to the Vite origin. |
 
