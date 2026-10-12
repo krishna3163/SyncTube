@@ -73,7 +73,7 @@ import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.j
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight } from 'lucide-react';
 import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
@@ -129,14 +129,37 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Active Sidebar Tab: 'participants' | 'playlist' | 'chat' | 'requests' | 'activity'
   const [activeSidebarTab, setActiveSidebarTab] = useState<TabId>('participants');
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Scroll active tab into view when changed
+  const checkTabScroll = useCallback(() => {
+    const el = tabBarRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
+  }, []);
+
+  // Scroll active tab into view when changed and check scroll indicators
   useEffect(() => {
     const activeBtn = tabBarRef.current?.querySelector('.sidebar-tab-btn.active');
     if (activeBtn) {
       activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
-  }, [activeSidebarTab]);
+    const timer = setTimeout(checkTabScroll, 150);
+    return () => clearTimeout(timer);
+  }, [activeSidebarTab, checkTabScroll]);
+
+  useEffect(() => {
+    checkTabScroll();
+    const el = tabBarRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', checkTabScroll, { passive: true });
+    window.addEventListener('resize', checkTabScroll);
+    return () => {
+      el.removeEventListener('scroll', checkTabScroll);
+      window.removeEventListener('resize', checkTabScroll);
+    };
+  }, [checkTabScroll]);
 
   const handleTabBarWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     const tabBar = event.currentTarget;
@@ -144,7 +167,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     if (tabBar.scrollWidth <= tabBar.clientWidth || scrollDelta === 0) return;
 
     tabBar.scrollLeft += scrollDelta;
-  }, []);
+    checkTabScroll();
+  }, [checkTabScroll]);
+
+  const handleScrollTabs = useCallback((direction: 'left' | 'right') => {
+    const el = tabBarRef.current;
+    if (!el) return;
+    const amount = direction === 'left' ? -150 : 150;
+    el.scrollBy({ left: amount, behavior: 'smooth' });
+    setTimeout(checkTabScroll, 200);
+  }, [checkTabScroll]);
 
   // Real-time Chat, Reactions, and Action Requests
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -1638,34 +1670,63 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         <aside className="sidebar">
 
 
-          {/* Button-style Segmented Tab Bar */}
-          <div className="sidebar-tab-bar" role="tablist" ref={tabBarRef} onWheel={handleTabBarWheel}>
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeSidebarTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  className={`sidebar-tab-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => setActiveSidebarTab(tab.id)}
-                >
-                  <Icon size={15} />
-                  <span>{tab.label}</span>
-                  {tab.id === 'participants' && (
-                    <span className="tab-count-pill">{participants.length}</span>
-                  )}
-                  {tab.id === 'playlist' && playlist.length > 0 && (
-                    <span className="tab-count-pill">{playlist.length}</span>
-                  )}
-                  {tab.id === 'requests' && pendingRequests.length > 0 && (
-                    <span className="badge-counter">{pendingRequests.length}</span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Button-style Segmented Tab Bar with smooth horizontal navigation */}
+          <div className="sidebar-tab-wrapper">
+            {canScrollLeft && (
+              <button
+                type="button"
+                className="sidebar-tab-scroll-arrow left"
+                onClick={() => handleScrollTabs('left')}
+                title="Scroll tabs left"
+                aria-label="Scroll tabs left"
+              >
+                <ChevronLeft size={14} />
+              </button>
+            )}
+            <div
+              className={`sidebar-tab-bar ${canScrollLeft ? 'has-left-shadow' : ''} ${canScrollRight ? 'has-right-shadow' : ''}`}
+              role="tablist"
+              ref={tabBarRef}
+              onWheel={handleTabBarWheel}
+            >
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeSidebarTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`sidebar-tab-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => setActiveSidebarTab(tab.id)}
+                  >
+                    <Icon size={14} />
+                    <span>{tab.label}</span>
+                    {tab.id === 'participants' && (
+                      <span className="tab-count-pill">{participants.length}</span>
+                    )}
+                    {tab.id === 'playlist' && playlist.length > 0 && (
+                      <span className="tab-count-pill">{playlist.length}</span>
+                    )}
+                    {tab.id === 'requests' && pendingRequests.length > 0 && (
+                      <span className="badge-counter">{pendingRequests.length}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {canScrollRight && (
+              <button
+                type="button"
+                className="sidebar-tab-scroll-arrow right"
+                onClick={() => handleScrollTabs('right')}
+                title="Scroll tabs right"
+                aria-label="Scroll tabs right"
+              >
+                <ChevronRight size={14} />
+              </button>
+            )}
           </div>
 
           {/* Active Tab Panel */}

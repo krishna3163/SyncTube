@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ListMusic,
   Plus,
@@ -56,7 +57,13 @@ export const Playlist: React.FC<PlaylistProps> = ({
   onOpenSearch,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{
+    id: string;
+    top: number;
+    bottom: number;
+    right: number;
+    openUpwards: boolean;
+  } | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [sortByVotes, setSortByVotes] = useState(false);
   const [sortAlphabetically, setSortAlphabetically] = useState(false);
@@ -81,6 +88,55 @@ export const Playlist: React.FC<PlaylistProps> = ({
     setDraggedIndex(null);
   };
 
+  // Close dropdown on outside click, window resize, or scroll
+  useEffect(() => {
+    if (!menuAnchor) return;
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest('.upnext-dropdown-menu') ||
+        target?.closest('.upnext-menu-trigger')
+      ) {
+        return;
+      }
+      setMenuAnchor(null);
+    };
+
+    const handleScrollOrResize = () => {
+      setMenuAnchor(null);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('touchstart', handlePointerDown);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('touchstart', handlePointerDown);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [menuAnchor]);
+
+  const handleToggleMenu = (e: React.MouseEvent<HTMLButtonElement>, itemId: string) => {
+    e.stopPropagation();
+    if (menuAnchor?.id === itemId) {
+      setMenuAnchor(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpwards = spaceBelow < 210;
+    setMenuAnchor({
+      id: itemId,
+      top: rect.top,
+      bottom: rect.bottom,
+      right: Math.max(8, window.innerWidth - rect.right),
+      openUpwards,
+    });
+  };
+
   // Filter playlist items by local search query
   const filteredPlaylist = playlist.filter((item) => {
     if (!searchQuery.trim()) return true;
@@ -100,7 +156,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
 
   const handleCopyLink = (videoId: string) => {
     navigator.clipboard?.writeText(`https://www.youtube.com/watch?v=${videoId}`);
-    setActiveMenuId(null);
+    setMenuAnchor(null);
   };
 
   return (
@@ -216,7 +272,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
             const isPlaying = item.videoId === currentVideoId;
             const voteCount = item.votes?.length || 0;
             const hasVoted = Boolean(item.votes?.includes(currentUserId));
-            const isMenuOpen = activeMenuId === item.id;
+            const isMenuOpen = menuAnchor?.id === item.id;
 
             return (
               <div
@@ -225,7 +281,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
-                className={`upnext-item-row ${isPlaying ? 'is-playing-row' : ''}`}
+                className={`upnext-item-row ${isPlaying ? 'is-playing-row' : ''} ${isMenuOpen ? 'has-active-menu' : ''}`}
               >
                 {/* Index Number */}
                 <div className="upnext-index-col">
@@ -323,61 +379,12 @@ export const Playlist: React.FC<PlaylistProps> = ({
                   <div className="upnext-menu-container">
                     <button
                       type="button"
-                      className="upnext-menu-trigger"
-                      onClick={() => setActiveMenuId(isMenuOpen ? null : item.id)}
+                      className={`upnext-menu-trigger ${isMenuOpen ? 'active' : ''}`}
+                      onClick={(e) => handleToggleMenu(e, item.id)}
                       title="More options"
                     >
                       <MoreVertical size={15} />
                     </button>
-
-                    {isMenuOpen && (
-                      <div className="upnext-dropdown-menu">
-                        {canControl && (
-                          <button
-                            type="button"
-                            className="upnext-menu-item"
-                            onClick={() => {
-                              onMoveToTop(item.id);
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            <ArrowUp size={14} color="var(--accent-cyan)" />
-                            <span>Move to Top</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="upnext-menu-item"
-                          onClick={() => handleCopyLink(item.videoId)}
-                        >
-                          <Copy size={14} />
-                          <span>Copy Video Link</span>
-                        </button>
-                        <a
-                          href={`https://www.youtube.com/watch?v=${item.videoId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="upnext-menu-item"
-                          onClick={() => setActiveMenuId(null)}
-                        >
-                          <ExternalLink size={14} />
-                          <span>Open on YouTube</span>
-                        </a>
-                        {canControl && (
-                          <button
-                            type="button"
-                            className="upnext-menu-item text-danger"
-                            onClick={() => {
-                              onRemoveItem(item.id);
-                              setActiveMenuId(null);
-                            }}
-                          >
-                            <Trash2 size={14} color="var(--accent-rose)" />
-                            <span>Remove from Queue</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -385,6 +392,75 @@ export const Playlist: React.FC<PlaylistProps> = ({
           })
         )}
       </div>
+
+      {/* Portal Dropdown Menu attached directly to document.body — prevents overflow clipping & disappearing */}
+      {menuAnchor && (() => {
+        const activeItem = playlist.find((i) => i.id === menuAnchor.id);
+        if (!activeItem) return null;
+        return createPortal(
+          <div
+            className="upnext-dropdown-menu portal-dropdown-menu"
+            style={{
+              position: 'fixed',
+              zIndex: 999999,
+              right: `${menuAnchor.right}px`,
+              ...(menuAnchor.openUpwards
+                ? { bottom: `${Math.max(8, window.innerHeight - menuAnchor.top + 6)}px` }
+                : { top: `${Math.max(8, menuAnchor.bottom + 6)}px` }),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {canControl && (
+              <button
+                type="button"
+                className="upnext-menu-item"
+                onClick={() => {
+                  onMoveToTop(activeItem.id);
+                  setMenuAnchor(null);
+                }}
+              >
+                <ArrowUp size={14} color="var(--accent-cyan)" />
+                <span>Move to Top</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="upnext-menu-item"
+              onClick={() => {
+                handleCopyLink(activeItem.videoId);
+                setMenuAnchor(null);
+              }}
+            >
+              <Copy size={14} />
+              <span>Copy Video Link</span>
+            </button>
+            <a
+              href={`https://www.youtube.com/watch?v=${activeItem.videoId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="upnext-menu-item"
+              onClick={() => setMenuAnchor(null)}
+            >
+              <ExternalLink size={14} />
+              <span>Open on YouTube</span>
+            </a>
+            {canControl && (
+              <button
+                type="button"
+                className="upnext-menu-item text-danger"
+                onClick={() => {
+                  onRemoveItem(activeItem.id);
+                  setMenuAnchor(null);
+                }}
+              >
+                <Trash2 size={14} color="var(--accent-rose)" />
+                <span>Remove from Queue</span>
+              </button>
+            )}
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 };
