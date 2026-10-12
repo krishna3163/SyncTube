@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { AlertTriangle, RefreshCw, ExternalLink, Globe, Copy, Check } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ExternalLink, Globe, Copy, Check, Play } from 'lucide-react';
 import * as dashjs from 'dashjs';
 import { Role, SyncStatePayload } from '../types.js';
 import { checkBrowserHevcSupport } from '../utils/codec.js';
@@ -38,6 +38,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const isSyncingFromRemoteRef = useRef(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hevcNotice, setHevcNotice] = useState(false);
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+  const [isHevcBlackScreen, setIsHevcBlackScreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
   // Locked pixel height (null = Auto/ABR). Re-applied when the stream (re)initializes.
@@ -124,6 +126,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   useEffect(() => {
     setVideoError(null);
     setHevcNotice(false);
+    setIsAutoplayBlocked(false);
+    setIsHevcBlackScreen(false);
 
     // A quality lock passed by the stream URL (?quality=720) wins for this stream
     preferredHeightRef.current = parseQualityHint(mediaUrl);
@@ -214,7 +218,9 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     }
 
     if (syncState.playState === 'playing' && video.paused) {
-      video.play().catch(() => {});
+      video.play().catch(() => {
+        setIsAutoplayBlocked(true);
+      });
     } else if (syncState.playState === 'paused' && !video.paused) {
       video.pause();
     }
@@ -231,6 +237,9 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
     const handleTimeUpdate = () => {
       onCurrentTimeChange(video.currentTime, video.duration || 0);
+      if (video.currentTime > 1.5 && video.videoWidth === 0 && !isHevcBlackScreen) {
+        setIsHevcBlackScreen(true);
+      }
     };
 
     const handleEnded = () => {
@@ -382,7 +391,63 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
   return (
     <div className="video-wrapper direct-video-wrapper">
-      {hevcNotice && !videoError && (
+      {isHevcBlackScreen && !videoError && (
+        <div
+          className="direct-video-warning-banner"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            left: '12px',
+            right: '12px',
+            zIndex: 30,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            padding: '10px 16px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            backdropFilter: 'blur(12px)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            color: '#f8fafc',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={20} color="#f87171" />
+            <div>
+              <strong>Black Screen:</strong> Your browser cannot decode this video's HEVC track.
+              <span style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                Fix: Open in Microsoft Edge (built-in HEVC hardware support) or click 'Copy for VLC'.
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyLink}
+              style={{ padding: '5px 12px', fontSize: '12px' }}
+              title="Copy stream link to open in VLC, PotPlayer, or IINA"
+            >
+              {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} />} {copied ? 'Copied' : 'Open in VLC'}
+            </button>
+            {onOpenBrowserHub && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onOpenBrowserHub}
+                style={{ padding: '5px 12px', fontSize: '12px' }}
+              >
+                Change Title
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hevcNotice && !isHevcBlackScreen && !videoError && (
         <div
           className="direct-video-warning-banner"
           style={{
@@ -431,6 +496,52 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {isAutoplayBlocked && !videoError && (
+        <div
+          className="direct-video-autoplay-overlay"
+          onClick={() => {
+            const v = videoRef.current;
+            if (v) {
+              v.play()
+                .then(() => setIsAutoplayBlocked(false))
+                .catch(() => {});
+            }
+          }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 25,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.7)',
+            cursor: 'pointer',
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            style={{
+              padding: '14px 28px',
+              borderRadius: '9999px',
+              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '15px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              boxShadow: '0 8px 30px rgba(99, 102, 241, 0.5)',
+            }}
+          >
+            <Play size={20} fill="#ffffff" /> Click to Start Video
+          </div>
+          <p style={{ marginTop: '12px', fontSize: '13px', color: '#cbd5e1' }}>
+            Browser paused playback until user interaction
+          </p>
         </div>
       )}
 

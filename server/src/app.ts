@@ -890,7 +890,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       if (file.endsWith('.mpd') || targetUrl.endsWith('.mpd')) {
         res.setHeader('Content-Type', 'application/dash+xml');
         const rawMpd = await upstreamRes.text();
-        const shouldFilter = req.query.compat === '1' || req.query.prefer === 'h264';
+        const shouldFilter = req.query.codec !== 'hevc';
         const finalMpd = shouldFilter ? filterMpdHevc(rawMpd) : rawMpd;
         const buf = Buffer.from(finalMpd, 'utf8');
         res.setHeader('Content-Length', buf.length);

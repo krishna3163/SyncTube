@@ -135,7 +135,14 @@ export function filterMpdHevc(mpdXml: string): string {
     return mpdXml;
   }
 
+  // 1. Remove AdaptationSets that declare HEVC at the set level
   let cleaned = mpdXml.replace(
+    /<AdaptationSet\b[^>]*codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)[^"']*["'][^>]*>[\s\S]*?<\/AdaptationSet>/gi,
+    ''
+  );
+
+  // 2. Remove Representation blocks that declare HEVC
+  cleaned = cleaned.replace(
     /<Representation\b[^>]*codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)[^"']*["'][^>]*>[\s\S]*?<\/Representation>/gi,
     ''
   );
@@ -143,6 +150,9 @@ export function filterMpdHevc(mpdXml: string): string {
     /<Representation\b[^>]*codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)[^"']*["'][^>]*\/>/gi,
     ''
   );
+
+  // 3. Remove any empty AdaptationSet elements left behind
+  cleaned = cleaned.replace(/<AdaptationSet\b[^>]*>\s*<\/AdaptationSet>/gi, '');
 
   return cleaned;
 }
