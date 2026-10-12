@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
-import { createApp } from '../app.js';
+import { createApp, getTrustedMovieProxyOrigin } from '../app.js';
 import { RoomManager } from '../models/RoomManager.js';
 import { MovieProviderService, movieProvider } from '../services/movieProvider.js';
 import { detectMediaSource } from '../utils/media.js';
@@ -116,6 +116,19 @@ describe('MovieBox API & Streaming Proxy Routes', () => {
     expect(spy).toHaveBeenCalledWith('anime', 3);
 
     spy.mockRestore();
+  });
+});
+
+describe('MovieBox streaming proxy origins', () => {
+  it('allows numbered MovieBox CDN hosts for DASH and direct streams', () => {
+    expect(getTrustedMovieProxyOrigin('sbcdn3.hakunaymatata.com')).toBe(
+      'https://sbcdn3.hakunaymatata.com'
+    );
+  });
+
+  it('does not allow unrelated subdomains of the MovieBox CDN domain', () => {
+    expect(getTrustedMovieProxyOrigin('attacker.hakunaymatata.com')).toBeNull();
+    expect(getTrustedMovieProxyOrigin('sbcdn3.hakunaymatata.com.attacker.test')).toBeNull();
   });
 });
 

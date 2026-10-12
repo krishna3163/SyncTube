@@ -15,7 +15,7 @@ import {
   Rocket,
 } from 'lucide-react';
 import { Role } from '../types.js';
-import { getApiUrl } from '../pages/HomePage.js';
+import { getApiUrl } from '../utils/api.js';
 
 export interface MovieSearchResultItem {
   id: string;
@@ -103,6 +103,9 @@ const GENRE_CHIPS = [
   'Stranger Things',
 ];
 
+const UNSUPPORTED_HEVC_MESSAGE =
+  "This title's HEVC stream is not supported by this browser. Try another title or a browser/device with HEVC support.";
+
 function formatSize(bytes?: number): string {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return '';
   const gb = bytes / (1024 ** 3);
@@ -122,16 +125,39 @@ function qualityChips(stream: MovieStreamItem, adaptive: boolean): string[] {
   return chips;
 }
 
+function isHevcCodec(codec?: string): boolean {
+  return /hevc|h\.?265|hev1|hvc1/i.test(codec || '');
+}
+
+function supportsStreamCodec(stream: MovieStreamItem): boolean {
+  if (!isHevcCodec(stream.codec)) return true;
+
+  if (stream.adaptive) {
+    return (
+      typeof MediaSource !== 'undefined' &&
+      (MediaSource.isTypeSupported('video/mp4; codecs="hev1"') ||
+        MediaSource.isTypeSupported('video/mp4; codecs="hvc1"'))
+    );
+  }
+
+  if (typeof document === 'undefined') return false;
+  const video = document.createElement('video');
+  return (
+    video.canPlayType('video/mp4; codecs="hev1"') !== '' ||
+    video.canPlayType('video/mp4; codecs="hvc1"') !== ''
+  );
+}
+
 /**
  * Build the YouTube-style quality ladder for a resolved title:
  * [Auto (adaptive)] + 4K/1080p/720p/... rungs, each mapped to a playable stream.
  */
 function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
-  const { streams, qualities, adaptive } = resolved;
-  const adaptiveStream = streams.find((s) => s.adaptive);
+  const { streams, qualities } = resolved;
+  const adaptiveStream = streams.find((s) => s.adaptive && supportsStreamCodec(s));
   const rows: QualityRow[] = [];
 
-  if (adaptive && adaptiveStream) {
+  if (adaptiveStream) {
     rows.push({
       key: 'auto',
       label: 'Auto',
@@ -152,7 +178,9 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
           }));
 
   for (const q of ladder) {
-    const exact = streams.find((s) => s.height === q.height && !s.adaptive);
+    const exact = streams.find(
+      (s) => s.height === q.height && !s.adaptive && supportsStreamCodec(s)
+    );
     const stream = exact || (q.adaptive ? adaptiveStream : undefined);
     if (!stream) continue;
     const lockHeight = exact ? undefined : q.height;
@@ -296,6 +324,11 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   };
 
   const executePlay = (stream: MovieStreamItem, title: string, lockHeight?: number, duration?: string) => {
+    if (!supportsStreamCodec(stream)) {
+      onNotify(UNSUPPORTED_HEVC_MESSAGE, 'error');
+      return;
+    }
+
     let streamUrl = stream.proxiedUrl.startsWith('http')
       ? stream.proxiedUrl
       : `${window.location.origin}${stream.proxiedUrl}`;
@@ -365,7 +398,13 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
       const rows = buildQualityRows(resolved);
 
       if (rows.length === 0) {
-        onNotify('No playable streams available for this title.', 'error');
+        const hasUnsupportedHevc = resolved.streams.some(
+          (stream) => isHevcCodec(stream.codec) && !supportsStreamCodec(stream)
+        );
+        onNotify(
+          hasUnsupportedHevc ? UNSUPPORTED_HEVC_MESSAGE : 'No playable streams available for this title.',
+          'error'
+        );
         return;
       }
 
@@ -400,7 +439,11 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
         onNotify('No stream available to queue.', 'error');
         return;
       }
-      const best = resolved.streams[0];
+      const best = resolved.streams.find(supportsStreamCodec);
+      if (!best) {
+        onNotify(UNSUPPORTED_HEVC_MESSAGE, 'error');
+        return;
+      }
       const streamUrl = best.proxiedUrl.startsWith('http')
         ? best.proxiedUrl
         : `${window.location.origin}${best.proxiedUrl}`;
@@ -546,12 +589,6 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
                       </span>
                     )}
                   </div>
-                  {item.genre && (
-                    <p className="movie-card-genre" title={item.genre}>
-                      {item.genre}
-                    </p>
-                  )}
-
                   <div className="movie-card-actions">
                     <button
                       type="button"

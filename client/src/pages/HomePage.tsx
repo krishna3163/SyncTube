@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import {
   Tv,
   Sparkles,
@@ -39,31 +39,16 @@ import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
 import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
-import { AuthModal } from '../components/AuthModal.js';
 import { authStorage } from '../utils/authStorage.js';
+import { getApiUrl } from '../utils/api.js';
+
+const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthModal }) => ({ default: AuthModal })));
 
 interface HomePageProps {
   userId: string;
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
-
-export const getApiUrl = (): string => {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    // In Vite dev, or when deployed directly on Render, use same-origin relative requests
-    if (isLocalhost || import.meta.env.DEV || hostname.endsWith('.onrender.com')) {
-      return '';
-    }
-    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-      return envUrl;
-    }
-    return 'https://synctube-2ar4.onrender.com';
-  }
-  return envUrl || 'https://synctube-2ar4.onrender.com';
-};
 
 export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
   // Saved user profile from localStorage
@@ -540,9 +525,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
             Watch Together in <span className="hero-highlight">Perfect Sync</span>
           </h1>
 
-          <p className="hero-desc">
-            Synchronize playback, invite your group, and stream videos simultaneously with authoritative role-based controls.
-          </p>
         </div>
 
         {/* YOUR PROFILE CHARACTER Banner (temporarily hidden per user request) */}
@@ -588,9 +570,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               </div>
               <div className="home-card-title-wrap">
                 <h2 className="card-title">Create a Room</h2>
-                <p className="card-subtitle">
-                  Start a new watch party. As the creator, you will automatically have the Host role with full playback controls.
-                </p>
               </div>
             </div>
 
@@ -680,9 +659,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               </div>
               <div className="home-card-title-wrap">
                 <h2 className="card-title">Join a Room</h2>
-                <p className="card-subtitle">
-                  Enter an existing room code or link to join an active watch party with your friends.
-                </p>
               </div>
             </div>
 
@@ -1054,8 +1030,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
       )}
 
       {/* V2 Auth / Profile Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
+      {isAuthModalOpen && <Suspense fallback={null}><AuthModal
+        isOpen
         onClose={() => setIsAuthModalOpen(false)}
         currentUser={currentUser}
         apiUrl={getApiUrl()}
@@ -1078,7 +1054,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
           authStorage.clearUser();
         }}
         onNotify={onNotify}
-      />
+      /></Suspense>}
     </div>
   );
 };

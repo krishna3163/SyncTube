@@ -3,11 +3,12 @@ services:
     name: synctube-server
     runtime: node
     branch: main
-    autoDeployTrigger: checksPass
-    buildCommand: npm ci && npm run build:server && npm run build:client
+    buildCommand: npm ci --include=dev && npm run build:server && npm run build:client
     startCommand: npm start -w server
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: NODE_ENV
         value: production
       - key: PORT

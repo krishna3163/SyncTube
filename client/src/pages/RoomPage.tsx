@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import {
   socket,
   emitJoinRoom,
@@ -27,9 +27,6 @@ import {
   emitPartyReady,
   emitSyncDriftCheck,
   emitChatTyping,
-  emitToggleRoomLike,
-  emitSetRoomCategory,
-  emitGoLive,
 } from '../services/socket.js';
 import {
   Role,
@@ -63,32 +60,32 @@ import { ParticipantList } from '../components/ParticipantList.js';
 import { Playlist } from '../components/Playlist.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
 import { RoomHeader } from '../components/RoomHeader.js';
-import { SettingsModal } from '../components/SettingsModal.js';
 import { Chat } from '../components/Chat.js';
 import { ActionRequestsPanel } from '../components/ActionRequestsPanel.js';
 import { ReactionOverlay } from '../components/ReactionOverlay.js';
 import { FloatingReactions } from '../components/FloatingReactions.js';
-import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
-import { InviteModal } from '../components/InviteModal.js';
-import { AuthModal } from '../components/AuthModal.js';
-import { SyncDiagnosticsModal } from '../components/SyncDiagnosticsModal.js';
 import { ExtensionStatusBanner } from '../components/ExtensionStatusBanner.js';
-import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
-import { CinemaStageCard } from '../components/CinemaStageCard.js';
-import { BrowserHubModal } from '../components/BrowserHubModal.js';
-import { RoomTabPlayer } from '../components/RoomTabPlayer.js';
 import { VideoAmbientBackdrop } from '../components/VideoAmbientBackdrop.js';
 import { detectClientMedia } from '../utils/media.js';
 import { authStorage } from '../utils/authStorage.js';
-import { getApiUrl } from './HomePage.js';
+import { getApiUrl } from '../utils/api.js';
 import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.js';
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
-import { StreamInfoBar } from '../components/StreamInfoBar.js';
-import { ShareStreamModal } from '../components/ShareStreamModal.js';
-import { ReportStreamModal } from '../components/ReportStreamModal.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
 import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio } from 'lucide-react';
+
+const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
+const YouTubeSearchModal = lazy(() => import('../components/YouTubeSearchModal.js').then(({ YouTubeSearchModal }) => ({ default: YouTubeSearchModal })));
+const InviteModal = lazy(() => import('../components/InviteModal.js').then(({ InviteModal }) => ({ default: InviteModal })));
+const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthModal }) => ({ default: AuthModal })));
+const SyncDiagnosticsModal = lazy(() => import('../components/SyncDiagnosticsModal.js').then(({ SyncDiagnosticsModal }) => ({ default: SyncDiagnosticsModal })));
+const BrowserHubModal = lazy(() => import('../components/BrowserHubModal.js').then(({ BrowserHubModal }) => ({ default: BrowserHubModal })));
+const ShareStreamModal = lazy(() => import('../components/ShareStreamModal.js').then(({ ShareStreamModal }) => ({ default: ShareStreamModal })));
+const ReportStreamModal = lazy(() => import('../components/ReportStreamModal.js').then(({ ReportStreamModal }) => ({ default: ReportStreamModal })));
+const DirectVideoPlayer = lazy(() => import('../components/DirectVideoPlayer.js').then(({ DirectVideoPlayer }) => ({ default: DirectVideoPlayer })));
+const CinemaStageCard = lazy(() => import('../components/CinemaStageCard.js').then(({ CinemaStageCard }) => ({ default: CinemaStageCard })));
+const RoomTabPlayer = lazy(() => import('../components/RoomTabPlayer.js').then(({ RoomTabPlayer }) => ({ default: RoomTabPlayer })));
 
 interface RoomPageProps {
   roomId: string;
@@ -98,12 +95,13 @@ interface RoomPageProps {
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-type TabId = 'participants' | 'playlist' | 'chat' | 'requests' | 'activity';
+type TabId = 'participants' | 'playlist' | 'chat' | 'search' | 'requests' | 'activity';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'participants', label: 'Viewers', icon: Users },
   { id: 'playlist', label: 'Playlist', icon: ListMusic },
   { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'search', label: 'Search', icon: Search },
   { id: 'requests', label: 'Requests', icon: Bell },
   { id: 'activity', label: 'Activity', icon: Activity },
 ];
@@ -206,63 +204,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(100);
   const [latencyMode, setLatencyMode] = useState<'ultra_low' | 'low' | 'normal'>('low');
-  const [streamStartedAt, setStreamStartedAt] = useState<number>(() => Date.now());
-  const [streamCategory, setStreamCategory] = useState<string>('cinema');
-  const [roomLikes, setRoomLikes] = useState<number>(0);
-  const [hasLikedRoom, setHasLikedRoom] = useState<boolean>(false);
-  const [roomUptimeSeconds, setRoomUptimeSeconds] = useState<number>(0);
   const [isStreamEnded, setIsStreamEnded] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    const start = syncState?.createdAt || streamStartedAt;
-    const updateTicker = () => {
-      setRoomUptimeSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
-    };
-    updateTicker();
-    const interval = setInterval(updateTicker, 1000);
-    return () => clearInterval(interval);
-  }, [syncState?.createdAt, streamStartedAt]);
-
-  useEffect(() => {
-    if (typeof syncState?.likes === 'number') {
-      setRoomLikes(syncState.likes);
-    }
-    if (syncState?.category) {
-      setStreamCategory(syncState.category);
-    }
-    if (syncState?.createdAt) {
-      setStreamStartedAt(syncState.createdAt);
-    }
-  }, [syncState?.likes, syncState?.category, syncState?.createdAt]);
-
-  useEffect(() => {
-    const onLikesUpdated = (data: { likes: number; userId: string; hasLiked: boolean }) => {
-      setRoomLikes(data.likes);
-      if (data.userId === userId) {
-        setHasLikedRoom(data.hasLiked);
-      }
-    };
-    const onCategoryUpdated = (data: { category: string }) => {
-      setStreamCategory(data.category);
-    };
-    socket.on('room:likes_updated', onLikesUpdated);
-    socket.on('room:category_updated', onCategoryUpdated);
-    return () => {
-      socket.off('room:likes_updated', onLikesUpdated);
-      socket.off('room:category_updated', onCategoryUpdated);
-    };
-  }, [userId]);
-
-  const handleToggleRoomLike = useCallback(() => {
-    emitToggleRoomLike();
-  }, []);
-
-  const handleSetCategory = useCallback((cat: string) => {
-    setStreamCategory(cat);
-    emitSetRoomCategory(cat);
-  }, []);
 
   // V2 Features State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
@@ -270,7 +214,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState<boolean>(false);
   const [universalSyncState, setUniversalSyncState] = useState<UniversalPlaybackState | null>(null);
   const [readinessList, setReadinessList] = useState<ParticipantReadiness[]>([]);
-  const [isCurrentUserReady, setIsCurrentUserReady] = useState<boolean>(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [driftAssessment, setDriftAssessment] = useState<DriftAssessment | null>(null);
   const [isBrowserHubOpen, setIsBrowserHubOpen] = useState<boolean>(false);
@@ -297,15 +240,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     };
   }, [roomId]);
 
-
-  const handleToggleReady = useCallback(() => {
-    setIsCurrentUserReady((prev) => {
-      const next = !prev;
-      emitPartyReady(next ? 'ready' : 'buffering', ytPlayerRef.current?.getCurrentTime() || 0, 'youtube', videoId);
-      onNotifyRef.current(next ? 'Marked as Ready 🟢' : 'Marked as Buffering 🟡', 'info');
-      return next;
-    });
-  }, [videoId]);
 
   const handleTypingChange = useCallback((isTyping: boolean) => {
     emitChatTyping(isTyping);
@@ -1065,18 +999,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     (videoId && (videoId.startsWith('tb:') || videoId.startsWith('tab:')))
   );
 
-  const handleGoLive = useCallback(() => {
-    if (isRoomLive) {
-      onNotify('✨ You are already broadcasting live! Grab some popcorn and enjoy the show 🍿', 'info');
-      return;
-    }
-    emitGoLive();
-    if (videoId && syncState?.playState !== 'playing') {
-      handlePlay(currentTime || 0);
-    }
-    onNotify('🔴 WE ARE LIVE! Lights, camera, action! Viewers are now tuned into the watch party! 🎬🍿', 'success');
-  }, [isRoomLive, videoId, syncState?.playState, currentTime, handlePlay, onNotify]);
-
   const handleToggleTheater = handleToggleTheaterMode;
 
   const handleTogglePiP = useCallback(async () => {
@@ -1297,9 +1219,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault();
         handleToggleTheater();
-      } else if (e.key === 'l' || e.key === 'L') {
-        e.preventDefault();
-        handleGoLive();
       } else if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
         handleToggleCaptions();
@@ -1331,7 +1250,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     handleToggleMute,
     handleToggleFullscreen,
     handleToggleTheater,
-    handleGoLive,
     handleToggleCaptions,
     duration,
     handleSeek,
@@ -1478,47 +1396,53 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                     // 2. Browser Tab Screen Share Stream
                     if (detectedMedia?.category === 'tab_share' || videoId.startsWith('tab:')) {
                       return (
-                        <RoomTabPlayer
-                          userRole={userRole}
-                          userId={userId}
-                          roomId={roomId}
-                          socket={socket}
-                          onNotify={onNotify}
-                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                        />
+                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
+                          <RoomTabPlayer
+                            userRole={userRole}
+                            userId={userId}
+                            roomId={roomId}
+                            socket={socket}
+                            onNotify={onNotify}
+                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                          />
+                        </Suspense>
                       );
                     }
 
                     // 3. Direct Video File / HLS Stream
                     if (detectedMedia?.category === 'direct_stream') {
                       return (
-                        <DirectVideoPlayer
-                          ref={ytPlayerRef}
-                          mediaUrl={videoId}
-                          syncState={syncState}
-                          userRole={userRole}
-                          playbackSpeed={playbackSpeed}
-                          isMuted={isMuted}
-                          onLocalPlay={handlePlay}
-                          onLocalPause={handlePause}
-                          onLocalSeek={handleSeek}
-                          onCurrentTimeChange={handleTimeChange}
-                          onVideoEnded={handleVideoEnded}
-                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                        />
+                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
+                          <DirectVideoPlayer
+                            ref={ytPlayerRef}
+                            mediaUrl={videoId}
+                            syncState={syncState}
+                            userRole={userRole}
+                            playbackSpeed={playbackSpeed}
+                            isMuted={isMuted}
+                            onLocalPlay={handlePlay}
+                            onLocalPause={handlePause}
+                            onLocalSeek={handleSeek}
+                            onCurrentTimeChange={handleTimeChange}
+                            onVideoEnded={handleVideoEnded}
+                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                          />
+                        </Suspense>
                       );
                     }
 
                     // 3. Movie Website Hub Card (Watch Party Cinema Stage)
                     if (detectedMedia?.category === 'movie_website') {
                       return (
-                        <CinemaStageCard
-                          media={detectedMedia}
-                          roomId={roomId}
-                          userRole={userRole}
-                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                          onNotify={onNotify}
-                        />
+                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
+                          <CinemaStageCard
+                            media={detectedMedia}
+                            roomId={roomId}
+                            userRole={userRole}
+                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                            onNotify={onNotify}
+                          />
+                        </Suspense>
                       );
                     }
 
@@ -1548,13 +1472,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       <div className="cinema-waiting-icon-wrap">
                         <span className="cinema-waiting-emoji">🍿</span>
                       </div>
-                      <h3 className="cinema-waiting-title">Grab Your Popcorn! The Show Starts Soon</h3>
-                      <p className="cinema-waiting-desc">
-                        Our host <strong>@{participants.find((p) => p.role === 'HOST')?.username || 'the host'}</strong> is backstage calibrating the cinema projector, tuning the sound system, and testing the popcorn butter levels. Hang tight, we're going live any moment! 🎬✨
-                      </p>
-                      <div className="cinema-waiting-fun-ticker">
-                        <span>✨ Behind the scenes: <i>"Testing popcorn crispiness... 100% crispy & delicious!"</i> 🥤🍿</span>
-                      </div>
+                      <h3 className="cinema-waiting-title">Waiting for the host to start</h3>
                     </div>
                   ) : (
                     <div className="video-empty-state host-prep-state">
@@ -1660,8 +1578,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       volume={volume}
                       onSetVolume={handleSetVolume}
                       onTogglePiP={handleTogglePiP}
-                      onGoLive={handleGoLive}
-                      isLive={isRoomLive}
                       latencyMode={latencyMode}
                       onSetLatencyMode={setLatencyMode}
                       onSetQuality={handleSetQuality}
@@ -1673,47 +1589,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       onRequestAction={handleRequestAction}
                       onOpenRequestsTab={() => setActiveSidebarTab('requests')}
                       reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
-                      roomUptimeSeconds={roomUptimeSeconds}
                     />
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Live Stream Metadata Bar & Experience Info below stage */}
-            <StreamInfoBar
-              roomId={roomId}
-              title={
-                syncState?.mediaIdentity?.title ||
-                playlist.find((p) => p.videoId === videoId)?.title ||
-                (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
-              }
-              hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
-              hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
-              hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
-              userRole={userRole}
-              viewersCount={participants.length}
-              streamStartedAt={syncState?.createdAt || streamStartedAt}
-              category={streamCategory}
-              onSetCategory={handleSetCategory}
-              likes={roomLikes}
-              hasLiked={hasLikedRoom}
-              onToggleLike={handleToggleRoomLike}
-              isHostRegistered={Boolean(
-                (userRole === 'HOST' && currentUser?.id && currentUser?.email) ||
-                (participants.find((p) => p.role === 'HOST')?.userId === currentUser?.id && currentUser?.email)
-              )}
-              hostFollowersCount={currentUser?.followersCount}
-              onOpenShare={() => setIsShareModalOpen(true)}
-              onOpenReport={() => setIsReportModalOpen(true)}
-              onNotify={onNotify}
-              thumbnailUrl={
-                playlist.find((p) => p.videoId === videoId)?.thumbnail ||
-                (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
-                  ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-                  : undefined)
-              }
-            />
           </div>
 
           {/* Mobile Controller Dock */}
@@ -1741,8 +1622,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               volume={volume}
               onSetVolume={handleSetVolume}
               onTogglePiP={handleTogglePiP}
-              onGoLive={handleGoLive}
-              isLive={isRoomLive}
               latencyMode={latencyMode}
               onSetLatencyMode={setLatencyMode}
               onSetQuality={handleSetQuality}
@@ -1754,7 +1633,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
               reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
-              roomUptimeSeconds={roomUptimeSeconds}
             />
           </div>
         </div>
@@ -1803,8 +1681,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 currentUserRole={userRole}
                 currentUserAvatarId={userSettings.avatarId}
                 readinessList={readinessList}
-                isCurrentUserReady={isCurrentUserReady}
-                onToggleReady={handleToggleReady}
                 onAssignRole={handleAssignRole}
                 onRemoveParticipant={handleRemoveParticipant}
               />
@@ -1827,6 +1703,21 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 onClear={handleClearPlaylist}
                 onOpenSearch={() => setIsSearchModalOpen(true)}
               />
+            )}
+
+            {activeSidebarTab === 'search' && (
+              <Suspense fallback={<div className="yt-search-loading">Loading search...</div>}>
+                <YouTubeSearchModal
+                  isOpen
+                  inline
+                  onClose={() => setActiveSidebarTab('participants')}
+                  userRole={userRole}
+                  onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
+                  onAddToPlaylist={handleAddToPlaylist}
+                  onRequestAction={(type, data) => handleRequestAction(type, data)}
+                  onNotify={onNotify}
+                />
+              </Suspense>
             )}
 
             {activeSidebarTab === 'chat' && (
@@ -1866,8 +1757,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       </main>
 
       {/* Settings Modal (User & Room tabs) */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
+      {isSettingsOpen && <Suspense fallback={null}><SettingsModal
+        isOpen
         onClose={() => setIsSettingsOpen(false)}
         currentUserRole={userRole}
         userSettings={userSettings}
@@ -1881,7 +1772,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         ambientSpread={ambientSpread}
         onAmbientBlurChange={handleAmbientBlurChange}
         onAmbientSpreadChange={handleAmbientSpreadChange}
-      />
+      /></Suspense>}
 
       {/* Floating Animated Emojis & Live Reaction Dock */}
       <FloatingReactions
@@ -1893,27 +1784,27 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       />
 
       {/* In-App YouTube Search Modal */}
-      <YouTubeSearchModal
-        isOpen={isSearchModalOpen}
+      {isSearchModalOpen && <Suspense fallback={null}><YouTubeSearchModal
+        isOpen
         onClose={() => setIsSearchModalOpen(false)}
         userRole={userRole}
         onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
         onAddToPlaylist={handleAddToPlaylist}
         onRequestAction={(type, data) => handleRequestAction(type, data)}
         onNotify={onNotify}
-      />
+      /></Suspense>}
 
       {/* Friends Invite & QR Code Modal */}
-      <InviteModal
-        isOpen={isInviteModalOpen}
+      {isInviteModalOpen && <Suspense fallback={null}><InviteModal
+        isOpen
         onClose={() => setIsInviteModalOpen(false)}
         roomId={roomId}
         onNotify={onNotify}
-      />
+      /></Suspense>}
 
       {/* V2 Auth / Profile Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
+      {isAuthModalOpen && <Suspense fallback={null}><AuthModal
+        isOpen
         onClose={() => setIsAuthModalOpen(false)}
         currentUser={currentUser}
         apiUrl={apiUrl}
@@ -1928,21 +1819,21 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           authStorage.clearUser();
         }}
         onNotify={onNotify}
-      />
+      /></Suspense>}
 
       {/* V2 Sync Diagnostics Modal */}
-      <SyncDiagnosticsModal
-        isOpen={isDiagnosticsModalOpen}
+      {isDiagnosticsModalOpen && <Suspense fallback={null}><SyncDiagnosticsModal
+        isOpen
         onClose={() => setIsDiagnosticsModalOpen(false)}
         syncState={universalSyncState}
         driftAssessment={driftAssessment}
         rttMs={50}
         connectionStatus={connectionStatus}
-      />
+      /></Suspense>}
 
       {/* V2 Universal Browser & Cinema Hub Modal */}
-      <BrowserHubModal
-        isOpen={isBrowserHubOpen}
+      {isBrowserHubOpen && <Suspense fallback={null}><BrowserHubModal
+        isOpen
         onClose={() => setIsBrowserHubOpen(false)}
         userRole={userRole}
         extensionInstalled={extensionInstalled}
@@ -1952,11 +1843,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           onNotify(`Now playing: ${title || url}`, 'success');
         }}
         onNotify={onNotify}
-      />
+      /></Suspense>}
 
       {/* Share Stream Modal */}
-      <ShareStreamModal
-        isOpen={isShareModalOpen}
+      {isShareModalOpen && <Suspense fallback={null}><ShareStreamModal
+        isOpen
         onClose={() => setIsShareModalOpen(false)}
         roomId={roomId}
         streamTitle={
@@ -1965,11 +1856,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
         }
         onNotify={onNotify}
-      />
+      /></Suspense>}
 
       {/* Report Stream Modal */}
-      <ReportStreamModal
-        isOpen={isReportModalOpen}
+      {isReportModalOpen && <Suspense fallback={null}><ReportStreamModal
+        isOpen
         onClose={() => setIsReportModalOpen(false)}
         roomId={roomId}
         streamTitle={
@@ -1979,7 +1870,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         }
         currentTime={currentTime}
         onNotify={onNotify}
-      />
+      /></Suspense>}
     </div>
   );
 };

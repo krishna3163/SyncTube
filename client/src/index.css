@@ -1334,6 +1334,53 @@ body {
   animation: tabFadeIn 0.18s ease-out;
 }
 
+.sidebar-youtube-search,
+.sidebar-youtube-search-body {
+  width: 100%;
+  min-width: 0;
+}
+
+.sidebar-youtube-search-body {
+  height: min(560px, 65vh);
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-youtube-search-body > .sidebar-youtube-search-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+  gap: 0.75rem;
+}
+
+.sidebar-youtube-search-content > .yt-search-form,
+.sidebar-youtube-search-content > .yt-search-presets {
+  flex: 0 0 auto;
+}
+
+.sidebar-youtube-search-content .yt-search-results {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.sidebar-youtube-search-content .yt-search-item {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.sidebar-youtube-search-content .yt-search-item-info {
+  flex: 1 1 180px;
+}
+
+.sidebar-youtube-search-content .yt-search-item-actions {
+  margin-left: auto;
+}
+
 @keyframes tabFadeIn {
   from { opacity: 0.65; }
   to { opacity: 1; }
@@ -3270,16 +3317,17 @@ body {
 
 .floating-emoji {
   position: absolute;
-  bottom: 12%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  animation: floatEmoji 2.8s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+  will-change: transform, opacity;
+  animation: floatEmoji var(--reaction-duration, 2.8s) cubic-bezier(0.2, 0.8, 0.4, 1) var(--reaction-delay, 0ms) both;
 }
 
 .floating-emoji .emoji-char {
-  font-size: 2.2rem;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+  font-size: clamp(2.2rem, 4vw, 3.25rem);
+  filter: drop-shadow(0 3px 10px rgba(0,0,0,0.65)) drop-shadow(0 0 12px rgba(255, 210, 31, 0.24));
+  user-select: none;
 }
 
 .floating-emoji .emoji-sender {
@@ -3297,18 +3345,28 @@ body {
 @keyframes floatEmoji {
   0% {
     opacity: 0;
-    transform: translateY(10px) scale(0.6);
+    transform: translate3d(0, 18px, 0) scale(0.25) rotate(0deg);
   }
-  15% {
+  12% {
     opacity: 1;
-    transform: translateY(-20px) scale(1.2);
+    transform: translate3d(0, -12px, 0) scale(1.15) rotate(var(--reaction-rotation, 0deg));
+  }
+  35% {
+    opacity: 1;
+    transform: translate3d(var(--reaction-drift-x, 0px), -55px, 0) scale(var(--reaction-scale, 1)) rotate(var(--reaction-rotation, 0deg));
   }
   75% {
-    opacity: 0.9;
+    opacity: 0.85;
   }
   100% {
     opacity: 0;
-    transform: translateY(-190px) scale(0.95);
+    transform: translate3d(var(--reaction-drift-x, 0px), calc(0px - var(--reaction-rise, 280px)), 0) scale(0.78) rotate(var(--reaction-rotation, 0deg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-emoji {
+    animation-duration: 1ms;
   }
 }
 
@@ -13726,6 +13784,61 @@ body.is-dragging-reaction iframe {
   background: var(--accent, #ffd21f);
   color: #111;
   transform: translateY(-1px);
+}
+
+/* Keep the browser hub header and scrollable content in separate flex regions. */
+.browser-hub-modal-card {
+  overflow: hidden;
+}
+
+.browser-hub-modal-card > .modal-header {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.browser-hub-modal-card > .browser-hub-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.browser-hub-modal-body > div,
+.movie-search-tab-container,
+.yt-search-input-wrap {
+  min-width: 0;
+}
+
+.browser-hub-modal-body .movie-search-results-grid {
+  max-height: none;
+  overflow: visible;
+}
+
+@media (max-width: 640px) {
+  .browser-hub-modal-card > .browser-hub-modal-body {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .browser-hub-modal-body .browser-hub-url-bar,
+  .browser-hub-modal-body .yt-search-form {
+    flex-wrap: wrap;
+  }
+
+  .browser-hub-modal-body .browser-hub-input-wrap,
+  .browser-hub-modal-body .yt-search-input-wrap {
+    flex: 1 1 100%;
+  }
+
+  .browser-hub-modal-body .browser-hub-go-btn,
+  .browser-hub-modal-body .yt-search-submit-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .browser-hub-modal-body .movie-search-results-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ── Quality picker (YouTube-style: Auto / 4K / 1080p / 720p / ...) ── */

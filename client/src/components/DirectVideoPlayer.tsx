@@ -338,8 +338,15 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   }));
 
   const handleVideoError = () => {
-    // If Dash.js is managing the stream via MediaSource, ignore native element file format errors
     if (isDashStream) {
+      const err = videoRef.current?.error;
+      if (err?.code === 3 || err?.code === 4 || hevcNotice) {
+        setVideoError(
+          'This movie uses an HEVC stream that this browser cannot decode. Try another title or a browser/device with HEVC support.'
+        );
+      } else if (err?.code === 2 || err?.code === 4) {
+        setVideoError('The movie stream could not be loaded. It may have expired or be unavailable.');
+      }
       return;
     }
     const err = videoRef.current?.error;
@@ -393,7 +400,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Globe size={16} color="#38bdf8" />
             <span>
-              <strong>HD Audio Live:</strong> If video is blank on Linux/browser without HEVC, launch in Cloud Cinema:
+              <strong>HEVC stream:</strong> If video does not appear, this browser may not support this movie's codec.
             </span>
           </div>
           {onOpenBrowserHub && (
@@ -403,7 +410,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
               onClick={onOpenBrowserHub}
               style={{ padding: '3px 10px', fontSize: '11px', flexShrink: 0 }}
             >
-              Stream in Cloud Browser 🌐
+              Choose another title
             </button>
           )}
         </div>

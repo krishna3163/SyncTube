@@ -54,9 +54,6 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
         </div>
 
         <h2 className="cinema-stage-title">{media.title}</h2>
-        <p className="cinema-stage-desc">
-          Universal Watch Party: Stream synchronized movies, series, or video with your friends with live chat, floating emoji reactions, and millisecond sync.
-        </p>
 
         {/* Streaming Choices */}
         <div className="cinema-stream-choices-grid">
@@ -69,9 +66,6 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
               <div className="choice-badge">RECOMMENDED • FREE HD</div>
             </div>
             <h3 className="choice-title">MovieBox Cinema Stream</h3>
-            <p className="choice-desc">
-              Search thousands of movies, TV series, and anime with full synchronized playback, multiple quality streams, and multi-language subtitles.
-            </p>
             <div className="choice-features">
               <span>🎬 Full Movies &amp; Series</span>
               <span>⚡ Ultra-low drift sync</span>
@@ -96,9 +90,6 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
               <div className="choice-badge">BROWSER TAB &amp; AUDIO</div>
             </div>
             <h3 className="choice-title">Share Browser Tab (With Audio)</h3>
-            <p className="choice-desc">
-              Share your personal Netflix, Prime, Disney+, or Crunchyroll browser tab directly with crystal-clear audio so friends can watch together.
-            </p>
             <div className="choice-features">
               <span>🔊 HD Tab Audio Included</span>
               <span>⚡ Zero Cloud Latency</span>

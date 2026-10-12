@@ -28,6 +28,29 @@ function sanitizeProxyUrl(url: string): string {
   return clean;
 }
 
+const ALLOWED_MOVIE_PROXY_ORIGINS: Record<string, string> = {
+  'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
+  'api6.aoneroom.com': 'https://api6.aoneroom.com',
+  'api5.aoneroom.com': 'https://api5.aoneroom.com',
+  'api4.aoneroom.com': 'https://api4.aoneroom.com',
+  'api3.aoneroom.com': 'https://api3.aoneroom.com',
+  'api.inmoviebox.com': 'https://api.inmoviebox.com',
+  'commondatastorage.googleapis.com': 'https://commondatastorage.googleapis.com',
+  'storage.googleapis.com': 'https://storage.googleapis.com',
+  'archive.org': 'https://archive.org',
+  'sportslive.wine': 'https://sportslive.wine',
+};
+
+export function getTrustedMovieProxyOrigin(hostname: string): string | null {
+  const normalizedHostname = hostname.toLowerCase().replace(/\.$/, '');
+  const knownOrigin = ALLOWED_MOVIE_PROXY_ORIGINS[normalizedHostname];
+  if (knownOrigin) return knownOrigin;
+
+  return /^sbcdn\d+\.hakunaymatata\.com$/.test(normalizedHostname)
+    ? `https://${normalizedHostname}`
+    : null;
+}
+
 export function createApp(roomManager: RoomManager, dbService?: DatabaseService, authService?: AuthService): Express {
   const auth = authService || new AuthService(dbService);
   const app = express();
@@ -824,19 +847,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
       return res.status(403).json({ error: 'Invalid protocol' });
     }
-    const ALLOWED_PROXY_ORIGINS: Record<string, string> = {
-      'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
-      'api6.aoneroom.com': 'https://api6.aoneroom.com',
-      'api5.aoneroom.com': 'https://api5.aoneroom.com',
-      'api4.aoneroom.com': 'https://api4.aoneroom.com',
-      'api3.aoneroom.com': 'https://api3.aoneroom.com',
-      'api.inmoviebox.com': 'https://api.inmoviebox.com',
-      'commondatastorage.googleapis.com': 'https://commondatastorage.googleapis.com',
-      'storage.googleapis.com': 'https://storage.googleapis.com',
-      'archive.org': 'https://archive.org',
-      'sportslive.wine': 'https://sportslive.wine',
-    };
-    const trustedOrigin = ALLOWED_PROXY_ORIGINS[targetObj.hostname.toLowerCase()];
+    const trustedOrigin = getTrustedMovieProxyOrigin(targetObj.hostname);
     if (!trustedOrigin) {
       return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }
@@ -926,19 +937,7 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     if (targetObj.protocol !== 'https:' && targetObj.protocol !== 'http:') {
       return res.status(403).json({ error: 'Invalid protocol' });
     }
-    const ALLOWED_PROXY_ORIGINS: Record<string, string> = {
-      'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
-      'api6.aoneroom.com': 'https://api6.aoneroom.com',
-      'api5.aoneroom.com': 'https://api5.aoneroom.com',
-      'api4.aoneroom.com': 'https://api4.aoneroom.com',
-      'api3.aoneroom.com': 'https://api3.aoneroom.com',
-      'api.inmoviebox.com': 'https://api.inmoviebox.com',
-      'commondatastorage.googleapis.com': 'https://commondatastorage.googleapis.com',
-      'storage.googleapis.com': 'https://storage.googleapis.com',
-      'archive.org': 'https://archive.org',
-      'sportslive.wine': 'https://sportslive.wine',
-    };
-    const trustedOrigin = ALLOWED_PROXY_ORIGINS[targetObj.hostname.toLowerCase()];
+    const trustedOrigin = getTrustedMovieProxyOrigin(targetObj.hostname);
     if (!trustedOrigin) {
       return res.status(403).json({ error: 'Target host is not an authorized media provider' });
     }

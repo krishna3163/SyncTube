@@ -1,5 +1,5 @@
 import React from 'react';
-import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users, CheckCircle, Clock } from 'lucide-react';
+import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
 import { ParticipantPublic, Role, ParticipantReadiness } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { getParticipantCharacterId } from '../utils/characterMemory.js';
@@ -10,8 +10,6 @@ interface ParticipantListProps {
   currentUserRole: Role;
   currentUserAvatarId?: string;
   readinessList?: ParticipantReadiness[];
-  isCurrentUserReady?: boolean;
-  onToggleReady?: () => void;
   onAssignRole: (userId: string, role: Role) => void;
   onRemoveParticipant: (userId: string) => void;
 }
@@ -28,8 +26,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   currentUserRole,
   currentUserAvatarId,
   readinessList,
-  isCurrentUserReady,
-  onToggleReady,
   onAssignRole,
   onRemoveParticipant,
 }) => {
@@ -78,34 +74,6 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           </span>
         )}
       </div>
-
-      {onToggleReady && (
-        <div style={{ padding: '0 0.5rem 0.6rem 0.5rem' }}>
-          <button
-            type="button"
-            onClick={onToggleReady}
-            style={{
-              width: '100%',
-              padding: '0.35rem 0.6rem',
-              borderRadius: '8px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.35rem',
-              cursor: 'pointer',
-              border: isCurrentUserReady ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
-              background: isCurrentUserReady ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-              color: isCurrentUserReady ? '#34d399' : '#fbbf24',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {isCurrentUserReady ? <CheckCircle size={13} /> : <Clock size={13} />}
-            {isCurrentUserReady ? 'You are Ready' : 'Mark Yourself Ready'}
-          </button>
-        </div>
-      )}
 
       <div className="participant-list">
         {participants.map((p) => {

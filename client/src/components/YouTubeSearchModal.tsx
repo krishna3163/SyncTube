@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward, Film } from 'lucide-react';
 import { Role } from '../types.js';
-import { getApiUrl } from '../pages/HomePage.js';
+import { getApiUrl } from '../utils/api.js';
 import { getSafeYouTubeThumbnailUrl } from '../utils/identity.js';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { MovieSearchTab } from './MovieSearchTab.js';
@@ -16,6 +16,7 @@ interface SearchResultItem {
 
 interface YouTubeSearchModalProps {
   isOpen: boolean;
+  inline?: boolean;
   onClose: () => void;
   userRole: Role;
   onPlayVideo: (videoId: string) => void;
@@ -47,6 +48,7 @@ const PRESET_TAGS = [
 
 export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   isOpen,
+  inline = false,
   onClose,
   userRole,
   onPlayVideo,
@@ -57,7 +59,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [mediaTab, setMediaTab] = useState<'movies' | 'youtube'>('movies');
+  const [mediaTab, setMediaTab] = useState<'movies' | 'youtube'>(inline ? 'youtube' : 'movies');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -284,9 +286,15 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="glass-panel modal-card yt-search-modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header yt-search-modal-header">
+    <div
+      className={inline ? 'sidebar-youtube-search' : 'modal-backdrop'}
+      onClick={inline ? undefined : onClose}
+    >
+      <div
+        className={inline ? 'sidebar-youtube-search-body' : 'glass-panel modal-card yt-search-modal-card'}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {!inline && <div className="modal-header yt-search-modal-header">
           <div className="search-modal-source-tabs">
             <button
               type="button"
@@ -308,10 +316,10 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
           <button type="button" className="btn-icon" onClick={onClose} title="Close">
             <X size={18} />
           </button>
-        </div>
+        </div>}
 
-        <div className="modal-body yt-search-modal-body">
-          {mediaTab === 'movies' ? (
+        <div className={inline ? 'yt-search-modal-body sidebar-youtube-search-content' : 'modal-body yt-search-modal-body'}>
+          {!inline && mediaTab === 'movies' ? (
             <MovieSearchTab
               userRole={userRole}
               onPlayStream={(streamUrl) => onPlayVideo(streamUrl)}
