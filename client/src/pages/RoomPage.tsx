@@ -87,6 +87,7 @@ const ReportStreamModal = lazy(() => import('../components/ReportStreamModal.js'
 const DirectVideoPlayer = lazy(() => import('../components/DirectVideoPlayer.js').then(({ DirectVideoPlayer }) => ({ default: DirectVideoPlayer })));
 const CinemaStageCard = lazy(() => import('../components/CinemaStageCard.js').then(({ CinemaStageCard }) => ({ default: CinemaStageCard })));
 const RoomTabPlayer = lazy(() => import('../components/RoomTabPlayer.js').then(({ RoomTabPlayer }) => ({ default: RoomTabPlayer })));
+import { CallOverlay } from '../components/CallOverlay.js';
 
 interface RoomPageProps {
   roomId: string;
@@ -1929,6 +1930,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         currentTime={currentTime}
         onNotify={onNotify}
       /></Suspense>}
+
+      {/* Adaptive Voice & Video Chat Floating Dock & Grid */}
+      <CallOverlay
+        currentUserId={userId}
+        currentUsername={username}
+        currentUserAvatarId={participants.find((p) => p.userId === userId)?.avatarId}
+        onNotify={onNotify}
+      />
     </div>
   );
 };

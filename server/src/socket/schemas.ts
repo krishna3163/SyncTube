@@ -208,3 +208,17 @@ export const WebRtcRequestStreamSchema = z.object({
   streamerSocketId: z.string().trim().optional(),
 }).optional();
 
+export const CallJoinSchema = z.object({
+  hasAudio: z.boolean().default(true),
+  hasVideo: z.boolean().default(false),
+  isMuted: z.boolean().default(false),
+  isCameraOff: z.boolean().default(true),
+});
+
+export const CallMediaStateSchema = z.object({
+  isMuted: z.boolean(),
+  isCameraOff: z.boolean(),
+  isScreenSharing: z.boolean().default(false),
+  isSpeaking: z.boolean().optional(),
+});
+

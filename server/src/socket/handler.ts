@@ -45,8 +45,24 @@ import {
   WebRtcAnswerSchema,
   WebRtcIceCandidateSchema,
   WebRtcRequestStreamSchema,
+  CallJoinSchema,
+  CallMediaStateSchema,
 } from './schemas.js';
 import { PendingActionRequest, ChatMessage, EmojiReaction, SoundEffectPayload } from '../types.js';
+
+export interface CallParticipant {
+  socketId: string;
+  userId: string;
+  username: string;
+  avatarId?: string;
+  hasAudio: boolean;
+  hasVideo: boolean;
+  isMuted: boolean;
+  isCameraOff: boolean;
+  isScreenSharing: boolean;
+}
+
+const activeRoomCalls = new Map<string, Map<string, CallParticipant>>();
 
 interface SocketData {
   roomId?: string;
@@ -1403,10 +1419,135 @@ export function setupSocketHandlers(
       } catch {}
     });
 
+    // 29. VOICE & VIDEO ADAPTIVE CALL SIGNALING (P2P 1-to-1 / Mesh 2-6 / Adaptive Audio+Video >6)
+    socket.on('call:join', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        const roomId = room.id;
+        const parsed = CallJoinSchema.safeParse(rawPayload);
+        const options = parsed.success ? parsed.data : { hasAudio: true, hasVideo: false, isMuted: false, isCameraOff: true };
+
+        if (!activeRoomCalls.has(roomId)) {
+          activeRoomCalls.set(roomId, new Map());
+        }
+        const roomCalls = activeRoomCalls.get(roomId)!;
+
+        const newCaller: CallParticipant = {
+          socketId: socket.id,
+          userId: participant.userId,
+          username: participant.username,
+          avatarId: participant.avatarId,
+          hasAudio: options.hasAudio,
+          hasVideo: options.hasVideo,
+          isMuted: options.isMuted,
+          isCameraOff: options.isCameraOff,
+          isScreenSharing: false,
+        };
+
+        // Existing participants in the call
+        const existingCallers = Array.from(roomCalls.values());
+
+        // Send existing participants to the joining caller
+        socket.emit('call:existing_participants', {
+          participants: existingCallers,
+        });
+
+        // Add to room's active call map
+        roomCalls.set(socket.id, newCaller);
+
+        // Notify other room participants in call
+        socket.to(roomId).emit('call:user_joined', newCaller);
+
+        // Notify room of current total caller count
+        io.to(roomId).emit('call:participants_updated', {
+          count: roomCalls.size,
+          participants: Array.from(roomCalls.values()),
+        });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to join voice/video call');
+      }
+    });
+
+    socket.on('call:media_state', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+        const roomId = room.id;
+        const parsed = CallMediaStateSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        const roomCalls = activeRoomCalls.get(roomId);
+        if (roomCalls && roomCalls.has(socket.id)) {
+          const caller = roomCalls.get(socket.id)!;
+          caller.isMuted = parsed.data.isMuted;
+          caller.isCameraOff = parsed.data.isCameraOff;
+          caller.isScreenSharing = parsed.data.isScreenSharing;
+
+          socket.to(roomId).emit('call:user_media_state', {
+            socketId: socket.id,
+            userId: socket.data.userId,
+            ...parsed.data,
+          });
+        }
+      } catch {}
+    });
+
+    socket.on('call:speaking', (rawPayload: { isSpeaking: boolean }) => {
+      try {
+        const roomId = socket.data.roomId;
+        if (!roomId) return;
+        socket.to(roomId).emit('call:user_speaking', {
+          socketId: socket.id,
+          userId: socket.data.userId,
+          isSpeaking: Boolean(rawPayload?.isSpeaking),
+        });
+      } catch {}
+    });
+
+    socket.on('call:leave', () => {
+      try {
+        const roomId = socket.data.roomId;
+        if (!roomId) return;
+        const roomCalls = activeRoomCalls.get(roomId);
+        if (roomCalls && roomCalls.has(socket.id)) {
+          roomCalls.delete(socket.id);
+          io.to(roomId).emit('call:user_left', {
+            socketId: socket.id,
+            userId: socket.data.userId,
+          });
+          io.to(roomId).emit('call:participants_updated', {
+            count: roomCalls.size,
+            participants: Array.from(roomCalls.values()),
+          });
+          if (roomCalls.size === 0) {
+            activeRoomCalls.delete(roomId);
+          }
+        }
+      } catch {}
+    });
+
     // DISCONNECT
     socket.on('disconnect', () => {
       const roomId = socket.data.roomId;
       if (!roomId) return;
+
+      // Clean up call presence immediately
+      const roomCalls = activeRoomCalls.get(roomId);
+      if (roomCalls && roomCalls.has(socket.id)) {
+        roomCalls.delete(socket.id);
+        io.to(roomId).emit('call:user_left', {
+          socketId: socket.id,
+          userId: socket.data.userId,
+        });
+        io.to(roomId).emit('call:participants_updated', {
+          count: roomCalls.size,
+          participants: Array.from(roomCalls.values()),
+        });
+        if (roomCalls.size === 0) {
+          activeRoomCalls.delete(roomId);
+        }
+      }
 
       const room = roomManager.getRoom(roomId);
       if (room) {

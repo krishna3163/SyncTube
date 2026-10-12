@@ -14367,3 +14367,54 @@ body.is-dragging-reaction iframe {
     transform: translateY(calc(-1 * var(--reaction-rise, 260px))) translateX(var(--reaction-drift-x, 0px)) scale(calc(var(--reaction-scale, 1) * 1.35)) rotate(calc(var(--reaction-rotation, 0deg) * 1.5));
   }
 }
+
+/* ── Adaptive Voice & Video Chat Call Overlay ─────────────── */
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 8px #10b981;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+    box-shadow: 0 0 16px #10b981;
+  }
+}
+
+.call-launcher-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(99, 102, 241, 0.7) !important;
+  transition: all 0.2s ease;
+}
+
+.call-participant-tile:hover {
+  transform: scale(1.02);
+}
+
+.call-participant-tile.speaking {
+  animation: speakingPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes speakingPulse {
+  0%, 100% {
+    border-color: #10b981;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.5);
+  }
+  50% {
+    border-color: #34d399;
+    box-shadow: 0 0 22px rgba(52, 211, 153, 0.8);
+  }
+}
