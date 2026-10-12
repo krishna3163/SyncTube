@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
-import { AlertTriangle, RefreshCw, ExternalLink, Globe } from 'lucide-react';
+import { AlertTriangle, RefreshCw, ExternalLink, Globe, Copy, Check } from 'lucide-react';
 import * as dashjs from 'dashjs';
 import { Role, SyncStatePayload } from '../types.js';
+import { checkBrowserHevcSupport } from '../utils/codec.js';
 import type { YouTubePlayerHandle } from './YouTubePlayer.js';
 
 interface DirectVideoPlayerProps {
@@ -37,6 +38,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const isSyncingFromRemoteRef = useRef(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hevcNotice, setHevcNotice] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
   // Locked pixel height (null = Auto/ABR). Re-applied when the stream (re)initializes.
   const preferredHeightRef = useRef<number | null>(null);
@@ -164,10 +166,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           applyDashQuality(preferredHeightRef.current);
 
           setTimeout(() => {
-            const hasHevcSupport =
-              typeof MediaSource !== 'undefined' &&
-              (MediaSource.isTypeSupported('video/mp4; codecs="hev1"') ||
-                MediaSource.isTypeSupported('video/mp4; codecs="hvc1"'));
+            const hasHevcSupport = checkBrowserHevcSupport(true);
 
             if (!hasHevcSupport && video && video.videoWidth === 0) {
               setHevcNotice(true);
@@ -373,6 +372,14 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     }
   };
 
+  const handleCopyLink = () => {
+    if (!mediaUrl) return;
+    const fullUrl = mediaUrl.startsWith('http') ? mediaUrl : `${window.location.origin}${mediaUrl}`;
+    navigator.clipboard?.writeText(fullUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="video-wrapper direct-video-wrapper">
       {hevcNotice && !videoError && (
@@ -389,7 +396,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
             justifyContent: 'space-between',
             gap: '10px',
             padding: '8px 14px',
-            background: 'rgba(15, 23, 42, 0.85)',
+            background: 'rgba(15, 23, 42, 0.90)',
             border: '1px solid rgba(56, 189, 248, 0.35)',
             backdropFilter: 'blur(12px)',
             borderRadius: '8px',
@@ -400,19 +407,30 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Globe size={16} color="#38bdf8" />
             <span>
-              <strong>HEVC stream:</strong> If video does not appear, this browser may not support this movie's codec.
+              <strong>HEVC Stream:</strong> If playback is black, open in Microsoft Edge or enable Hardware Acceleration at <code>chrome://settings/system</code>.
             </span>
           </div>
-          {onOpenBrowserHub && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               type="button"
-              className="btn btn-primary btn-sm"
-              onClick={onOpenBrowserHub}
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyLink}
               style={{ padding: '3px 10px', fontSize: '11px', flexShrink: 0 }}
+              title="Copy stream link for VLC or external media player"
             >
-              Choose another title
+              {copied ? <Check size={12} color="#4ade80" /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy for VLC'}
             </button>
-          )}
+            {onOpenBrowserHub && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={onOpenBrowserHub}
+                style={{ padding: '3px 10px', fontSize: '11px', flexShrink: 0 }}
+              >
+                Choose another
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -433,6 +451,14 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
               onClick={handleRetry}
             >
               <RefreshCw size={13} /> Retry Stream
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyLink}
+              title="Copy stream link to open in VLC, PotPlayer, or MPV"
+            >
+              {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} />} {copied ? 'Copied URL' : 'Copy for VLC / PotPlayer'}
             </button>
             {onOpenBrowserHub && (
               <button

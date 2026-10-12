@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../utils/api.js';
+import { checkBrowserHevcSupport, isHevcCodec, supportsStreamCodec } from '../utils/codec.js';
 
 export interface MovieSearchResultItem {
   id: string;
@@ -103,8 +104,6 @@ const GENRE_CHIPS = [
   'Stranger Things',
 ];
 
-const UNSUPPORTED_HEVC_MESSAGE =
-  "This title's HEVC stream is not supported by this browser. Try another title or a browser/device with HEVC support.";
 
 function formatSize(bytes?: number): string {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return '';
@@ -125,36 +124,34 @@ function qualityChips(stream: MovieStreamItem, adaptive: boolean): string[] {
   return chips;
 }
 
-function isHevcCodec(codec?: string): boolean {
-  return /hevc|h\.?265|hev1|hvc1/i.test(codec || '');
-}
-
-function supportsStreamCodec(stream: MovieStreamItem): boolean {
-  if (!isHevcCodec(stream.codec)) return true;
-
-  if (stream.adaptive) {
-    return (
-      typeof MediaSource !== 'undefined' &&
-      (MediaSource.isTypeSupported('video/mp4; codecs="hev1"') ||
-        MediaSource.isTypeSupported('video/mp4; codecs="hvc1"'))
-    );
-  }
-
-  if (typeof document === 'undefined') return false;
-  const video = document.createElement('video');
-  return (
-    video.canPlayType('video/mp4; codecs="hev1"') !== '' ||
-    video.canPlayType('video/mp4; codecs="hvc1"') !== ''
-  );
+function supportsItemCodec(stream: MovieStreamItem): boolean {
+  return supportsStreamCodec(stream.codec, Boolean(stream.adaptive));
 }
 
 /**
  * Build the YouTube-style quality ladder for a resolved title:
  * [Auto (adaptive)] + 4K/1080p/720p/... rungs, each mapped to a playable stream.
+ * Automatically falls back to all available streams so playback is never blocked.
  */
 function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
   const { streams, qualities } = resolved;
-  const adaptiveStream = streams.find((s) => s.adaptive && supportsStreamCodec(s));
+  const browserSupportsHevc = checkBrowserHevcSupport(true);
+
+  // Find adaptive stream: prefer codec-supported, fall back to any adaptive
+  const baseAdaptive =
+    streams.find((s) => s.adaptive && supportsItemCodec(s)) ||
+    streams.find((s) => s.adaptive);
+
+  // If browser lacks HEVC support, request compat mode from DASH proxy
+  let adaptiveStream = baseAdaptive;
+  if (adaptiveStream && !browserSupportsHevc && adaptiveStream.proxiedUrl) {
+    const sep = adaptiveStream.proxiedUrl.includes('?') ? '&' : '?';
+    adaptiveStream = {
+      ...adaptiveStream,
+      proxiedUrl: `${adaptiveStream.proxiedUrl}${sep}compat=1`,
+    };
+  }
+
   const rows: QualityRow[] = [];
 
   if (adaptiveStream) {
@@ -178,9 +175,14 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
           }));
 
   for (const q of ladder) {
-    const exact = streams.find(
-      (s) => s.height === q.height && !s.adaptive && supportsStreamCodec(s)
+    // Prefer non-adaptive stream that matches browser codecs, then any exact match
+    const exactSupported = streams.find(
+      (s) => s.height === q.height && !s.adaptive && supportsItemCodec(s)
     );
+    const exactAny = streams.find(
+      (s) => s.height === q.height && !s.adaptive
+    );
+    const exact = exactSupported || exactAny;
     const stream = exact || (q.adaptive ? adaptiveStream : undefined);
     if (!stream) continue;
     const lockHeight = exact ? undefined : q.height;
@@ -192,6 +194,23 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
       chips: qualityChips(stream, Boolean(lockHeight)),
     };
     rows.push(row);
+  }
+
+  // Fallback: If ladder produced no rows, ensure every stream is available to pick
+  if (rows.length === 0 && streams.length > 0) {
+    for (const s of streams) {
+      let finalStream = s;
+      if (s.adaptive && !browserSupportsHevc && s.proxiedUrl) {
+        const sep = s.proxiedUrl.includes('?') ? '&' : '?';
+        finalStream = { ...s, proxiedUrl: `${s.proxiedUrl}${sep}compat=1` };
+      }
+      rows.push({
+        key: `stream-${s.id}`,
+        label: s.resolution || `${s.height || 'HD'}p`,
+        stream: finalStream,
+        chips: qualityChips(finalStream, Boolean(s.adaptive)),
+      });
+    }
   }
 
   // De-duplicate keys (auto row can share the underlying stream with a rung)
@@ -324,9 +343,11 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
   };
 
   const executePlay = (stream: MovieStreamItem, title: string, lockHeight?: number, duration?: string) => {
-    if (!supportsStreamCodec(stream)) {
-      onNotify(UNSUPPORTED_HEVC_MESSAGE, 'error');
-      return;
+    if (isHevcCodec(stream.codec) && !checkBrowserHevcSupport(Boolean(stream.adaptive))) {
+      onNotify(
+        'Notice: This stream uses HEVC (H.265). If playback remains blank, open in Microsoft Edge or enable Hardware Acceleration in Chrome settings.',
+        'info'
+      );
     }
 
     let streamUrl = stream.proxiedUrl.startsWith('http')
@@ -398,14 +419,17 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
       const rows = buildQualityRows(resolved);
 
       if (rows.length === 0) {
-        const hasUnsupportedHevc = resolved.streams.some(
-          (stream) => isHevcCodec(stream.codec) && !supportsStreamCodec(stream)
-        );
-        onNotify(
-          hasUnsupportedHevc ? UNSUPPORTED_HEVC_MESSAGE : 'No playable streams available for this title.',
-          'error'
-        );
+        onNotify('No playable streams available for this title.', 'error');
         return;
+      }
+
+      const hasHevcOnly = resolved.streams.every((s) => isHevcCodec(s.codec));
+      const browserSupportsHevc = checkBrowserHevcSupport(resolved.streams.some((s) => s.adaptive));
+      if (hasHevcOnly && !browserSupportsHevc) {
+        onNotify(
+          'Notice: This stream uses HEVC (H.265). If playback remains blank, use Edge or enable Hardware Acceleration in Chrome settings.',
+          'info'
+        );
       }
 
       if (rows.length === 1) {
@@ -435,18 +459,20 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
     setResolvingId(`${item.id}_${season}_${episode}_q`);
     try {
       const resolved = await resolveStreams(item, season, episode);
-      if (!resolved) {
+      if (!resolved || resolved.streams.length === 0) {
         onNotify('No stream available to queue.', 'error');
         return;
       }
-      const best = resolved.streams.find(supportsStreamCodec);
-      if (!best) {
-        onNotify(UNSUPPORTED_HEVC_MESSAGE, 'error');
-        return;
+      const browserSupportsHevc = checkBrowserHevcSupport(true);
+      const best = resolved.streams.find(supportsItemCodec) || resolved.streams[0];
+      let proxied = best.proxiedUrl;
+      if (best.adaptive && !browserSupportsHevc && !proxied.includes('compat=')) {
+        const sep = proxied.includes('?') ? '&' : '?';
+        proxied = `${proxied}${sep}compat=1`;
       }
-      const streamUrl = best.proxiedUrl.startsWith('http')
-        ? best.proxiedUrl
-        : `${window.location.origin}${best.proxiedUrl}`;
+      const streamUrl = proxied.startsWith('http')
+        ? proxied
+        : `${window.location.origin}${proxied}`;
 
       const title = buildEpisodeTitle(item, season, episode);
       onAddToPlaylist(streamUrl, title, item.duration, 'MovieBox Cinema', item.coverUrl);

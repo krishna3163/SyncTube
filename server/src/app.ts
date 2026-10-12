@@ -14,7 +14,7 @@ import { extractYouTubeId } from './utils/youtube.js';
 import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
-import { movieProvider, STREAM_REFERER, decodeDashToken, MovieBrowseCategory } from './services/movieProvider.js';
+import { movieProvider, STREAM_REFERER, decodeDashToken, filterMpdHevc, MovieBrowseCategory } from './services/movieProvider.js';
 import { validateSafeUrl } from './utils/ssrfValidator.js';
 import { isAllowedOrigin } from './utils/cors.js';
 import { isClusterEnabled } from './utils/cluster.js';
@@ -883,10 +883,22 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Accept-Ranges', 'bytes');
 
-      let contentType = upstreamRes.headers.get('content-type') || 'application/octet-stream';
+      if (req.method === 'HEAD' || !upstreamRes.body) {
+        return res.end();
+      }
+
       if (file.endsWith('.mpd') || targetUrl.endsWith('.mpd')) {
-        contentType = 'application/dash+xml';
-      } else if (file.endsWith('.m4s') || targetUrl.endsWith('.m4s')) {
+        res.setHeader('Content-Type', 'application/dash+xml');
+        const rawMpd = await upstreamRes.text();
+        const shouldFilter = req.query.compat === '1' || req.query.prefer === 'h264';
+        const finalMpd = shouldFilter ? filterMpdHevc(rawMpd) : rawMpd;
+        const buf = Buffer.from(finalMpd, 'utf8');
+        res.setHeader('Content-Length', buf.length);
+        return res.status(upstreamRes.status).send(buf);
+      }
+
+      let contentType = upstreamRes.headers.get('content-type') || 'application/octet-stream';
+      if (file.endsWith('.m4s') || targetUrl.endsWith('.m4s')) {
         contentType = 'video/iso.segment';
       }
       res.setHeader('Content-Type', contentType);
@@ -902,11 +914,6 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
       }
 
       res.status(upstreamRes.status);
-
-      if (req.method === 'HEAD' || !upstreamRes.body) {
-        return res.end();
-      }
-
       const nodeStream = Readable.fromWeb(upstreamRes.body as any);
       nodeStream.pipe(res);
     } catch (err: any) {

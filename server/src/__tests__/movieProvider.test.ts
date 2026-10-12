@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { createApp, getTrustedMovieProxyOrigin } from '../app.js';
 import { RoomManager } from '../models/RoomManager.js';
-import { MovieProviderService, movieProvider } from '../services/movieProvider.js';
+import { MovieProviderService, movieProvider, filterMpdHevc } from '../services/movieProvider.js';
 import { detectMediaSource } from '../utils/media.js';
 
 describe('MovieProvider Service & Crypto', () => {
@@ -349,5 +349,41 @@ describe('Offline fixture catalogue (MOVIEBOX_FIXTURE=1)', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.results.length).toBeGreaterThan(0);
     expect(res.body.results.every((r: any) => r.mediaType === 'movie')).toBe(true);
+  });
+
+  it('filterMpdHevc filters out HEVC representations when AVC representations are present', () => {
+    const mpdWithBoth = `
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period id="0">
+    <AdaptationSet contentType="video">
+      <Representation id="1080p_hevc" codecs="hev1.1.6.L93.B0" width="1920" height="1080">
+        <BaseURL>1080_hevc.mp4</BaseURL>
+      </Representation>
+      <Representation id="720p_avc" codecs="avc1.64001f" width="1280" height="720">
+        <BaseURL>720_avc.mp4</BaseURL>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>`;
+
+    const filtered = filterMpdHevc(mpdWithBoth);
+    expect(filtered).not.toContain('1080p_hevc');
+    expect(filtered).not.toContain('hev1.1.6.L93.B0');
+    expect(filtered).toContain('720p_avc');
+    expect(filtered).toContain('avc1.64001f');
+  });
+
+  it('filterMpdHevc leaves manifest untouched if only HEVC representations exist', () => {
+    const mpdHevcOnly = `
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011">
+  <Period id="0">
+    <AdaptationSet contentType="video">
+      <Representation id="1080p_hevc" codecs="hev1.1.6.L93.B0" width="1920" height="1080" />
+    </AdaptationSet>
+  </Period>
+</MPD>`;
+
+    const result = filterMpdHevc(mpdHevcOnly);
+    expect(result).toBe(mpdHevcOnly);
   });
 });

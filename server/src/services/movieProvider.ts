@@ -120,6 +120,33 @@ export function decodeDashToken(token: string): DashProxyToken | null {
   return null;
 }
 
+/**
+ * Rewrites a DASH MPD XML manifest to remove HEVC representations when H.264/AVC
+ * representations are available. Allows standard web browsers without HEVC codecs to play
+ * seamlessly without capability errors.
+ */
+export function filterMpdHevc(mpdXml: string): string {
+  if (!mpdXml || typeof mpdXml !== 'string') return mpdXml;
+
+  const hasAvc = /codecs\s*=\s*["'][^"']*avc[13]?/i.test(mpdXml);
+  const hasHevc = /codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)/i.test(mpdXml);
+
+  if (!hasAvc || !hasHevc) {
+    return mpdXml;
+  }
+
+  let cleaned = mpdXml.replace(
+    /<Representation\b[^>]*codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)[^"']*["'][^>]*>[\s\S]*?<\/Representation>/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /<Representation\b[^>]*codecs\s*=\s*["'][^"']*(?:hev1|hvc1|hevc|h265)[^"']*["'][^>]*\/>/gi,
+    ''
+  );
+
+  return cleaned;
+}
+
 export interface MovieSearchResult {
   id: string;
   title: string;
@@ -965,7 +992,7 @@ export class MovieProviderService {
             hasAdaptive = true;
 
             const primaryRes = `${dashHeight}p`;
-            const codec = st.codecName || st.codec || 'hevc';
+            const codec = st.codecName || st.codec || 'dash';
             const format = 'DASH';
 
             const token = encodeDashToken(dashManifestUrl, st.signCookie);
