@@ -2,13 +2,18 @@
   "framework": "vite",
   "buildCommand": "npm run build:client",
   "outputDirectory": "client/dist",
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://synctube-2ar4.onrender.com",
+      "VITE_SOCKET_URL": "https://synctube-2ar4.onrender.com"
+    }
+  },
   "env": {
     "VITE_API_URL": "https://synctube-2ar4.onrender.com",
     "VITE_SOCKET_URL": "https://synctube-2ar4.onrender.com"
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://synctube-2ar4.onrender.com/api/$1" },
-    { "source": "/socket.io/(.*)", "destination": "https://synctube-2ar4.onrender.com/socket.io/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

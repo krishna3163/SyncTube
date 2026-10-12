@@ -54,9 +54,13 @@ export function isAllowedOrigin(origin: string | undefined, callback: OriginCall
 
   try {
     const requestOrigin = new URL(origin);
+    const isVercelOrigin =
+      requestOrigin.hostname.endsWith('.vercel.app') &&
+      (requestOrigin.hostname.includes('sync-tube') || requestOrigin.hostname.includes('synctube'));
+
     if (
       (requestOrigin.protocol === 'http:' || requestOrigin.protocol === 'https:') &&
-      allowedOrigins.has(requestOrigin.origin) &&
+      (allowedOrigins.has(requestOrigin.origin) || isVercelOrigin) &&
       requestOrigin.origin === origin
     ) {
       callback(null, true);

@@ -3,6 +3,15 @@ export const getApiUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+    // Vercel deployment: call Render backend directly
+    if (hostname.includes('vercel.app')) {
+      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+        return envUrl;
+      }
+      return 'https://synctube-2ar4.onrender.com';
+    }
+
     if (isLocalhost || import.meta.env.DEV || hostname.endsWith('.onrender.com')) {
       return '';
     }

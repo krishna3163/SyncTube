@@ -6,6 +6,15 @@ const getSocketUrl = (): string => {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+    // Vercel deployment: connect directly to Render backend (Vercel edge doesn't proxy websockets)
+    if (hostname.includes('vercel.app')) {
+      if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+        return envUrl;
+      }
+      return 'https://synctube-2ar4.onrender.com';
+    }
+
     // In Vite dev, or when running directly on the backend domain (e.g. Render), connect same-origin
     if (isLocalhost || import.meta.env.DEV || hostname.endsWith('.onrender.com')) {
       return window.location.origin;
@@ -17,6 +26,7 @@ const getSocketUrl = (): string => {
   }
   return envUrl || 'https://synctube-2ar4.onrender.com';
 };
+
 
 
 export const socket: Socket = io(getSocketUrl(), {
