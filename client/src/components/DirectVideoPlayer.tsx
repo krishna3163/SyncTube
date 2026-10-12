@@ -193,12 +193,22 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
             },
           });
 
-          // Attach lid-labs/hevc.js WASM transcoder middleware (HEVC -> H.264 client-side)
+          // Attach lid-labs/hevc.js WASM transcoder middleware (HEVC -> H.264 client-side).
+          // On Chromium & Firefox on Windows/Linux, MediaSource accepts hev1 without throwing,
+          // but lacks actual software/hardware decode capability (yielding audio-only black screen).
+          // We must set forceTranscode: true for non-Safari browsers to force the WASM transcoder pipeline!
+          const isSafari =
+            typeof navigator !== 'undefined' &&
+            /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+          const shouldForceTranscode = !isSafari;
+
           try {
+            console.log(`[SyncTube] Initializing attachHevcSupport (forceTranscode=${shouldForceTranscode})...`);
             const cleanup = await attachHevcSupport(player, {
               workerUrl: '/transcode-worker.js',
               wasmUrl: '/hevc-decode.js',
               wasmBinaryUrl: '/hevc-decode.wasm',
+              forceTranscode: shouldForceTranscode,
             });
             if (isCancelled) {
               cleanup?.();
@@ -206,7 +216,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
             }
             hevcCleanupRef.current = cleanup;
             isHevcAttachedRef.current = true;
-            console.log('[SyncTube] @hevcjs/dashjs-plugin successfully attached for HEVC playback');
+            console.log('[SyncTube] @hevcjs/dashjs-plugin WASM pipeline successfully installed!');
           } catch (hevcErr) {
             console.warn('[SyncTube] attachHevcSupport setup warning:', hevcErr);
           }
