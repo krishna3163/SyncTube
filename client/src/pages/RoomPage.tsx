@@ -1005,7 +1005,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       ) {
         emitHostSyncPulse(currentTimeRef.current);
       }
-    }, 1000);
+    }, 2500);
     return () => clearInterval(interval);
   }, []);
 

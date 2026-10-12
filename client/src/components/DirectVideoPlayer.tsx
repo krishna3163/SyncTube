@@ -39,6 +39,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const isHevcAttachedRef = useRef(false);
   const isSeekingLocallyRef = useRef(false);
   const isSyncingFromRemoteRef = useRef(false);
+  const lastHardSeekTimeRef = useRef<number>(0);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [hevcNotice, setHevcNotice] = useState(false);
   const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
@@ -181,6 +182,10 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           const player = dashjs.MediaPlayer().create();
           dashPlayerRef.current = player;
 
+          const isMobileDevice =
+            typeof navigator !== 'undefined' &&
+            /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+
           player.updateSettings({
             streaming: {
               abr: {
@@ -188,7 +193,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
               },
               buffer: {
                 fastSwitchEnabled: true,
-                bufferTimeAtTopQuality: 25,
+                bufferTimeAtTopQuality: isMobileDevice ? 8 : 16,
               },
             },
           });
@@ -299,31 +304,72 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     }
   }, [isMuted]);
 
-  // Handle remote syncState changes
+  // Handle remote syncState changes with smooth drift reconciliation
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !syncState) return;
 
-    isSyncingFromRemoteRef.current = true;
-
-    // Check drift
-    const timeDiff = Math.abs(video.currentTime - syncState.currentTime);
-    if (timeDiff > 0.8) {
-      video.currentTime = syncState.currentTime;
+    // 1. Paused state reconciliation
+    if (syncState.playState === 'paused') {
+      if (!video.paused) {
+        isSyncingFromRemoteRef.current = true;
+        video.pause();
+        setTimeout(() => {
+          isSyncingFromRemoteRef.current = false;
+        }, 300);
+      }
+      const timeDiff = Math.abs(video.currentTime - syncState.currentTime);
+      if (timeDiff > 1.2) {
+        isSyncingFromRemoteRef.current = true;
+        video.currentTime = syncState.currentTime;
+        setTimeout(() => {
+          isSyncingFromRemoteRef.current = false;
+        }, 500);
+      }
+      video.playbackRate = playbackSpeed;
+      return;
     }
 
-    if (syncState.playState === 'playing' && video.paused) {
+    // 2. Playing state reconciliation
+    // Calculate effective target time factoring transit delay
+    const now = Date.now();
+    const transit = syncState.updatedAt ? Math.max(0, (now - syncState.updatedAt) / 1000) : 0;
+    const targetTime = syncState.currentTime + transit;
+    const drift = video.currentTime - targetTime; // positive = local ahead, negative = local behind
+    const absDrift = Math.abs(drift);
+
+    // If video is paused while remote is playing, resume playback
+    if (video.paused) {
+      isSyncingFromRemoteRef.current = true;
       video.play().catch(() => {
         setIsAutoplayBlocked(true);
       });
-    } else if (syncState.playState === 'paused' && !video.paused) {
-      video.pause();
+      setTimeout(() => {
+        isSyncingFromRemoteRef.current = false;
+      }, 500);
     }
 
-    setTimeout(() => {
-      isSyncingFromRemoteRef.current = false;
-    }, 200);
-  }, [syncState]);
+    // 3-tiered Drift Reconciliation:
+    // Tier 1: Large drift (>= 3.2s) - throttled hard seek (at most once every 3.5s)
+    if (absDrift >= 3.2 && (now - lastHardSeekTimeRef.current > 3500)) {
+      lastHardSeekTimeRef.current = now;
+      isSyncingFromRemoteRef.current = true;
+      video.currentTime = targetTime;
+      video.playbackRate = playbackSpeed;
+      setTimeout(() => {
+        isSyncingFromRemoteRef.current = false;
+      }, 1000);
+    } else if (absDrift >= 1.0 && absDrift < 3.2) {
+      // Tier 2: Medium drift (1.0s to 3.2s) - gentle rate catch-up.
+      // NEVER hard-seek here! Hard-seeking on mobile flushes hardware decoder buffers and stutters.
+      // If local is behind, slightly increase speed (1.07x). If ahead, slightly decrease speed (0.93x).
+      const rateMultiplier = drift < 0 ? 1.07 : 0.93;
+      video.playbackRate = playbackSpeed * rateMultiplier;
+    } else {
+      // Tier 3: In sync (< 1.0s) - smoothly maintain normal user playbackSpeed
+      video.playbackRate = playbackSpeed;
+    }
+  }, [syncState, playbackSpeed]);
 
   // Time update listener
   useEffect(() => {
