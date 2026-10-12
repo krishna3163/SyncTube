@@ -1076,7 +1076,7 @@ export class MovieProviderService {
         resolution: resLabel,
         height: itemHeight,
         adaptive: false,
-        codec: resItem.codecName || undefined,
+        codec: resItem.codecName || 'h264',
         sizeBytes: resItem.size ? Number(resItem.size) : undefined,
         streamUrl: link,
         proxiedUrl,

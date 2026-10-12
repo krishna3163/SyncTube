@@ -355,7 +355,6 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
     const browserSupportsHevc = checkBrowserHevcSupport(Boolean(chosenStream.adaptive));
 
     // If stream is HEVC and browser cannot decode it, automatically fallback to a compatible H.264 stream
-    // (Strategy 1 from research: Multi-codec packaging / alternative streams)
     if (isHevcCodec(chosenStream.codec) && !browserSupportsHevc) {
       const pool = allStreams || pendingPlay?.streams || [];
       const compatibleFallback = pool.find((s) => !isHevcCodec(s.codec));
@@ -373,18 +372,18 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
       }
     }
 
-    let streamUrl = stream.proxiedUrl.startsWith('http')
-      ? stream.proxiedUrl
-      : `${window.location.origin}${stream.proxiedUrl}`;
+    let streamUrl = chosenStream.proxiedUrl.startsWith('http')
+      ? chosenStream.proxiedUrl
+      : `${window.location.origin}${chosenStream.proxiedUrl}`;
 
     // Lock the adaptive (DASH) ladder to the chosen rung — mirrors YouTube quality selection
-    if (lockHeight && stream.adaptive) {
+    if (lockHeight && chosenStream.adaptive) {
       streamUrl += `${streamUrl.includes('?') ? '&' : '?'}quality=${lockHeight}`;
     }
 
     if (userRole === 'HOST' || userRole === 'MODERATOR') {
       onPlayStream(streamUrl, title);
-      const suffix = lockHeight ? ` at ${lockHeight}p` : stream.adaptive ? ' on Auto quality' : ` at ${stream.resolution}`;
+      const suffix = lockHeight ? ` at ${lockHeight}p` : chosenStream.adaptive ? ' on Auto quality' : ` at ${chosenStream.resolution}`;
       onNotify(`Playing "${title}"${suffix} in the room! 🎬🍿`, 'success');
       if (onCloseModal) onCloseModal();
     } else if (onRequestAction) {

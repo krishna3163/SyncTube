@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import { AlertTriangle, RefreshCw, ExternalLink, Globe, Copy, Check, Play } from 'lucide-react';
 import * as dashjs from 'dashjs';
 import { Role, SyncStatePayload } from '../types.js';
@@ -42,11 +42,33 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const [isHevcBlackScreen, setIsHevcBlackScreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [currentQuality, setCurrentQuality] = useState<string>('auto');
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_CONTROLLED_RETRIES = 2;
   // Locked pixel height (null = Auto/ABR). Re-applied when the stream (re)initializes.
   const preferredHeightRef = useRef<number | null>(null);
 
   // Synchronously compute DASH format so <video> never receives raw XML as native src
   const isDashStream = Boolean(mediaUrl && (mediaUrl.includes('.mpd') || mediaUrl.includes('/dash/')));
+
+  const handleControlledRetry = useCallback(() => {
+    if (retryCount >= MAX_CONTROLLED_RETRIES) return;
+    setRetryCount((prev) => prev + 1);
+    setVideoError(null);
+    setIsHevcBlackScreen(false);
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    console.info(`[SyncTube Player] Controlled retry ${retryCount + 1}/${MAX_CONTROLLED_RETRIES} for stream`);
+
+    if (isDashStream && dashPlayerRef.current) {
+      dashPlayerRef.current.reset();
+      dashPlayerRef.current.initialize(video, mediaUrl, false);
+    } else {
+      video.load();
+      video.play().catch(() => {});
+    }
+  }, [retryCount, isDashStream, mediaUrl]);
 
   // YouTube-style quality label → pixel height (hd1080 → 1080, large → 480, ...)
   const QUALITY_LABEL_HEIGHTS: Record<string, number> = {
@@ -128,6 +150,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     setHevcNotice(false);
     setIsAutoplayBlocked(false);
     setIsHevcBlackScreen(false);
+    setRetryCount(0);
 
     // A quality lock passed by the stream URL (?quality=720) wins for this stream
     preferredHeightRef.current = parseQualityHint(mediaUrl);
@@ -160,8 +183,9 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
         player.initialize(video, mediaUrl, false);
 
         player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
-          if (e?.error === 'capability' || e?.event === 'capability') {
+          if (e?.error === 'capability' || e?.event === 'capability' || e?.error === 'mediasource') {
             setHevcNotice(true);
+            setIsHevcBlackScreen(true);
           }
         });
 
@@ -172,10 +196,11 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           setTimeout(() => {
             const hasHevcSupport = checkBrowserHevcSupport(true);
 
-            if (!hasHevcSupport && video && video.videoWidth === 0) {
+            if (!hasHevcSupport && video && video.readyState >= 2 && video.videoWidth === 0) {
               setHevcNotice(true);
+              setIsHevcBlackScreen(true);
             }
-          }, 1500);
+          }, 3000);
         });
       } catch (err: any) {
         setVideoError(`DASH player failed to initialize: ${err?.message || 'Unsupported stream'}`);
@@ -237,8 +262,26 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
     const handleTimeUpdate = () => {
       onCurrentTimeChange(video.currentTime, video.duration || 0);
-      if (video.currentTime > 1.5 && video.videoWidth === 0 && !isHevcBlackScreen) {
+
+      // Robust black-screen detection:
+      // Only verify when video is actively playing (not paused, not seeking),
+      // has reached readyState >= 2 (HAVE_CURRENT_DATA), and audio/timeline has progressed > 3.0s.
+      // This strictly prevents false positives during normal buffering/loading.
+      if (
+        !video.paused &&
+        !video.seeking &&
+        video.readyState >= 2 &&
+        video.currentTime > 3.0 &&
+        video.videoWidth === 0 &&
+        !isHevcBlackScreen
+      ) {
+        const hasHevcSupport = checkBrowserHevcSupport(isDashStream);
+        console.warn(`[SyncTube Player] Black screen detected (videoWidth=0 while playing >3s, hasHevc=${hasHevcSupport})`);
         setIsHevcBlackScreen(true);
+        setHevcNotice(true);
+        if (retryCount < MAX_CONTROLLED_RETRIES && hasHevcSupport) {
+          handleControlledRetry();
+        }
       }
     };
 
@@ -253,7 +296,7 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [onCurrentTimeChange, onVideoEnded]);
+  }, [onCurrentTimeChange, onVideoEnded, isHevcBlackScreen, isDashStream, retryCount, handleControlledRetry]);
 
   const canControl = userRole === 'HOST' || userRole === 'MODERATOR';
 
@@ -346,25 +389,41 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   }));
 
   const handleVideoError = () => {
+    const err = videoRef.current?.error;
+    if (err?.code === 1) return; // user aborted
+
+    console.warn(`[SyncTube Player Error] MediaError code=${err?.code}, message=${err?.message}`);
+
+    if (err?.code === 3 || err?.code === 4) {
+      const hasHevc = checkBrowserHevcSupport(isDashStream);
+      if (!hasHevc) {
+        setIsHevcBlackScreen(true);
+        setHevcNotice(true);
+      }
+    }
+
+    // Controlled automatic retry on temporary glitch before showing permanent error
+    if (retryCount < MAX_CONTROLLED_RETRIES && (!isHevcBlackScreen || checkBrowserHevcSupport(isDashStream))) {
+      setTimeout(handleControlledRetry, 1000);
+      return;
+    }
+
     if (isDashStream) {
-      const err = videoRef.current?.error;
       if (err?.code === 3 || err?.code === 4 || hevcNotice) {
         setVideoError(
-          'This movie uses an HEVC stream that this browser cannot decode. Try another title or a browser/device with HEVC support.'
+          'This movie uses an HEVC stream that this browser cannot decode. Select an H.264 stream or open in Microsoft Edge/Safari.'
         );
-      } else if (err?.code === 2 || err?.code === 4) {
+      } else {
         setVideoError('The movie stream could not be loaded. It may have expired or be unavailable.');
       }
       return;
     }
-    const err = videoRef.current?.error;
+
     let msg = 'The video stream could not be loaded.';
-    if (err?.code === 1) {
-      msg = 'Playback aborted by user or browser.';
-    } else if (err?.code === 2) {
+    if (err?.code === 2) {
       msg = 'Network error while fetching the stream.';
     } else if (err?.code === 3) {
-      msg = 'Video decoding failed or codec unsupported.';
+      msg = 'Video decoding failed or codec unsupported (H.264 fallback needed).';
     } else if (err?.code === 4) {
       msg = 'Stream rejected access (Access Denied / 403 Forbidden or expired URL).';
     }
@@ -374,10 +433,13 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
   const handleRetry = () => {
     setVideoError(null);
     setHevcNotice(false);
+    setIsHevcBlackScreen(false);
+    setRetryCount(0);
     if (isDashStream && dashPlayerRef.current) {
       dashPlayerRef.current.attachSource(mediaUrl);
     } else if (videoRef.current) {
       videoRef.current.load();
+      videoRef.current.play().catch(() => {});
     }
   };
 

@@ -49,4 +49,27 @@ describe('HEVC Codec Support & Detection', () => {
       (globalThis as any).MediaSource = originalMediaSource;
     }
   });
+
+  it('strictly requires probably from canPlayType and rejects ambiguous maybe', () => {
+    const originalDoc = globalThis.document;
+    try {
+      // Mock video element returning 'maybe' (Chrome false-positive)
+      (globalThis as any).document = {
+        createElement: vi.fn(() => ({
+          canPlayType: vi.fn((mime: string) => (mime.includes('hev1') ? 'maybe' : '')),
+        })),
+      };
+      expect(checkBrowserHevcSupport(false)).toBe(false);
+
+      // Mock video element returning 'probably' (True support)
+      (globalThis as any).document = {
+        createElement: vi.fn(() => ({
+          canPlayType: vi.fn((mime: string) => (mime.includes('hev1.1.6.L93.B0') ? 'probably' : '')),
+        })),
+      };
+      expect(checkBrowserHevcSupport(false)).toBe(true);
+    } finally {
+      (globalThis as any).document = originalDoc;
+    }
+  });
 });
