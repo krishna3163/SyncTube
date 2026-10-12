@@ -118,7 +118,11 @@ function qualityChips(stream: MovieStreamItem, adaptive: boolean): string[] {
   const chips: string[] = [];
   if (adaptive) chips.push('ABR Auto');
   chips.push((stream.format || 'MP4').toUpperCase());
-  if (stream.codec) chips.push(stream.codec.toUpperCase());
+  if (isHevcCodec(stream.codec)) {
+    chips.push('HEVC (Edge/HW)');
+  } else {
+    chips.push('H.264 (Universal)');
+  }
   const size = formatSize(stream.sizeBytes);
   if (size) chips.push(size);
   return chips;
@@ -135,31 +139,34 @@ function supportsItemCodec(stream: MovieStreamItem): boolean {
  */
 function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
   const { streams, qualities } = resolved;
-  const browserSupportsHevc = checkBrowserHevcSupport(true);
+  const browserSupportsHevc = checkBrowserHevcSupport(false);
 
-  // Find adaptive stream: prefer codec-supported, fall back to any adaptive
-  const baseAdaptive =
-    streams.find((s) => s.adaptive && supportsItemCodec(s)) ||
-    streams.find((s) => s.adaptive);
+  // Check if adaptive stream is compatible with current browser
+  const compatibleAdaptive = streams.find((s) => s.adaptive && supportsItemCodec(s));
+  const bestCompatibleDirect = streams.find((s) => !s.adaptive && supportsItemCodec(s));
+  const anyAdaptive = streams.find((s) => s.adaptive);
 
-  // If browser lacks HEVC support, request compat mode from DASH proxy
-  let adaptiveStream = baseAdaptive;
-  if (adaptiveStream && !browserSupportsHevc && adaptiveStream.proxiedUrl) {
-    const sep = adaptiveStream.proxiedUrl.includes('?') ? '&' : '?';
-    adaptiveStream = {
-      ...adaptiveStream,
-      proxiedUrl: `${adaptiveStream.proxiedUrl}${sep}compat=1`,
-    };
-  }
+  // Pick the best default stream for this browser: prefer compatible stream
+  const chosenDefault = compatibleAdaptive || bestCompatibleDirect || anyAdaptive || streams[0];
 
   const rows: QualityRow[] = [];
 
-  if (adaptiveStream) {
+  if (chosenDefault) {
+    const isHevc = isHevcCodec(chosenDefault.codec);
+    let label = 'Auto';
+    if (!browserSupportsHevc && !isHevc) {
+      label = `Auto (${chosenDefault.resolution} H.264 Universal)`;
+    } else if (chosenDefault.adaptive) {
+      label = 'Auto (Adaptive)';
+    } else {
+      label = `Auto (${chosenDefault.resolution})`;
+    }
+
     rows.push({
       key: 'auto',
-      label: 'Auto',
-      stream: adaptiveStream,
-      chips: qualityChips(adaptiveStream, true),
+      label,
+      stream: chosenDefault,
+      chips: ['Recommended', ...qualityChips(chosenDefault, Boolean(chosenDefault.adaptive))],
     });
   }
 
@@ -175,7 +182,7 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
           }));
 
   for (const q of ladder) {
-    // Prefer non-adaptive stream that matches browser codecs, then any exact match
+    // Prefer non-adaptive H.264 stream that matches browser codecs, then any exact match
     const exactSupported = streams.find(
       (s) => s.height === q.height && !s.adaptive && supportsItemCodec(s)
     );
@@ -183,7 +190,7 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
       (s) => s.height === q.height && !s.adaptive
     );
     const exact = exactSupported || exactAny;
-    const stream = exact || (q.adaptive ? adaptiveStream : undefined);
+    const stream = exact || (q.adaptive ? chosenDefault : undefined);
     if (!stream) continue;
     const lockHeight = exact ? undefined : q.height;
     const row: QualityRow = {
@@ -199,16 +206,11 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
   // Fallback: If ladder produced no rows, ensure every stream is available to pick
   if (rows.length === 0 && streams.length > 0) {
     for (const s of streams) {
-      let finalStream = s;
-      if (s.adaptive && !browserSupportsHevc && s.proxiedUrl) {
-        const sep = s.proxiedUrl.includes('?') ? '&' : '?';
-        finalStream = { ...s, proxiedUrl: `${s.proxiedUrl}${sep}compat=1` };
-      }
       rows.push({
         key: `stream-${s.id}`,
         label: s.resolution || `${s.height || 'HD'}p`,
-        stream: finalStream,
-        chips: qualityChips(finalStream, Boolean(s.adaptive)),
+        stream: s,
+        chips: qualityChips(s, Boolean(s.adaptive)),
       });
     }
   }
@@ -342,12 +344,33 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
     };
   };
 
-  const executePlay = (stream: MovieStreamItem, title: string, lockHeight?: number, duration?: string) => {
-    if (isHevcCodec(stream.codec) && !checkBrowserHevcSupport(Boolean(stream.adaptive))) {
-      onNotify(
-        'Notice: This stream uses HEVC (H.265). If playback remains blank, open in Microsoft Edge or enable Hardware Acceleration in Chrome settings.',
-        'info'
-      );
+  const executePlay = (
+    stream: MovieStreamItem,
+    title: string,
+    lockHeight?: number,
+    duration?: string,
+    allStreams?: MovieStreamItem[]
+  ) => {
+    let chosenStream = stream;
+    const browserSupportsHevc = checkBrowserHevcSupport(Boolean(chosenStream.adaptive));
+
+    // If stream is HEVC and browser cannot decode it, automatically fallback to a compatible H.264 stream
+    // (Strategy 1 from research: Multi-codec packaging / alternative streams)
+    if (isHevcCodec(chosenStream.codec) && !browserSupportsHevc) {
+      const pool = allStreams || pendingPlay?.streams || [];
+      const compatibleFallback = pool.find((s) => !isHevcCodec(s.codec));
+      if (compatibleFallback) {
+        chosenStream = compatibleFallback;
+        onNotify(
+          `Playing in Universal H.264 mode (${chosenStream.resolution}) to prevent black screen in your browser! 🎬🍿`,
+          'success'
+        );
+      } else {
+        onNotify(
+          'Notice: This stream uses HEVC (H.265). If playback remains blank, open in Microsoft Edge or enable Hardware Acceleration in Chrome settings.',
+          'info'
+        );
+      }
     }
 
     let streamUrl = stream.proxiedUrl.startsWith('http')
@@ -434,7 +457,7 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
 
       if (rows.length === 1) {
         // Single quality — play immediately without the picker
-        executePlay(rows[0].stream, title, rows[0].lockHeight, item.duration);
+        executePlay(rows[0].stream, title, rows[0].lockHeight, item.duration, resolved.streams);
         return;
       }
 
@@ -450,9 +473,9 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
 
   const handleQualityPick = (row: QualityRow) => {
     if (!pendingPlay) return;
-    const { title, item } = pendingPlay;
+    const { title, item, streams } = pendingPlay;
     setPendingPlay(null);
-    executePlay(row.stream, title, row.lockHeight, item.duration);
+    executePlay(row.stream, title, row.lockHeight, item.duration, streams);
   };
 
   const handleQueueMedia = async (item: MovieSearchResultItem, season = 0, episode = 0) => {

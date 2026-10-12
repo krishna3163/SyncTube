@@ -433,16 +433,14 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
             >
               {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} />} {copied ? 'Copied' : 'Open in VLC'}
             </button>
-            {onOpenBrowserHub && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={onOpenBrowserHub}
-                style={{ padding: '5px 12px', fontSize: '12px' }}
-              >
-                Change Title
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleRetry}
+              style={{ padding: '5px 12px', fontSize: '12px' }}
+            >
+              <RefreshCw size={13} /> Retry
+            </button>
           </div>
         </div>
       )}
@@ -485,16 +483,6 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
             >
               {copied ? <Check size={12} color="#4ade80" /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy for VLC'}
             </button>
-            {onOpenBrowserHub && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={onOpenBrowserHub}
-                style={{ padding: '3px 10px', fontSize: '11px', flexShrink: 0 }}
-              >
-                Choose another
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -569,17 +557,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
               onClick={handleCopyLink}
               title="Copy stream link to open in VLC, PotPlayer, or MPV"
             >
-              {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} />} {copied ? 'Copied URL' : 'Copy for VLC / PotPlayer'}
+              {copied ? <Check size={13} color="#4ade80" /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy for VLC'}
             </button>
-            {onOpenBrowserHub && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={onOpenBrowserHub}
-              >
-                Change Video in Hub
-              </button>
-            )}
             <a
               href={mediaUrl}
               target="_blank"

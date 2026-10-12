@@ -120,6 +120,11 @@ export function decodeDashToken(token: string): DashProxyToken | null {
   return null;
 }
 
+export function isHevcCodec(codec?: string): boolean {
+  if (!codec) return false;
+  return /hevc|h\.?265|hev1|hvc1/i.test(codec);
+}
+
 /**
  * Rewrites a DASH MPD XML manifest to remove HEVC representations when H.264/AVC
  * representations are available. Allows standard web browsers without HEVC codecs to play
@@ -1002,7 +1007,7 @@ export class MovieProviderService {
             hasAdaptive = true;
 
             const primaryRes = `${dashHeight}p`;
-            const codec = st.codecName || st.codec || 'dash';
+            const codec = st.codecName || st.codec || 'hevc';
             const format = 'DASH';
 
             const token = encodeDashToken(dashManifestUrl, st.signCookie);
@@ -1101,7 +1106,8 @@ export class MovieProviderService {
 
     const missingHeights = [...knownHeights].filter((h) => !isCovered(h)).sort((a, b) => b - a);
 
-    if (!hasAdaptive && missingHeights.length > 0) {
+    const hasCompatibleDirect = streams.some((s) => !s.adaptive && !isHevcCodec(s.codec));
+    if ((!hasAdaptive || !hasCompatibleDirect) && missingHeights.length > 0) {
       const perResolution = await Promise.allSettled(
         missingHeights.slice(0, 5).map((h) =>
           this.requestApi<{
