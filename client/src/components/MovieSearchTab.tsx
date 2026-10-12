@@ -366,7 +366,7 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
         );
       } else {
         onNotify(
-          'Notice: This stream uses HEVC (H.265). If playback remains blank, open in Microsoft Edge or enable Hardware Acceleration in Chrome settings.',
+          'Playing HEVC stream with WebAssembly acceleration engine (hevc.js) ⚡🎬',
           'info'
         );
       }

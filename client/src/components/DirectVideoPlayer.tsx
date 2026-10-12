@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import { AlertTriangle, RefreshCw, ExternalLink, Globe, Copy, Check, Play } from 'lucide-react';
 import * as dashjs from 'dashjs';
+import { attachHevcSupport } from '@hevcjs/dashjs-plugin';
 import { Role, SyncStatePayload } from '../types.js';
 import { checkBrowserHevcSupport } from '../utils/codec.js';
 import type { YouTubePlayerHandle } from './YouTubePlayer.js';
@@ -34,6 +35,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const dashPlayerRef = useRef<dashjs.MediaPlayerClass | null>(null);
+  const hevcCleanupRef = useRef<(() => void) | null>(null);
+  const isHevcAttachedRef = useRef(false);
   const isSeekingLocallyRef = useRef(false);
   const isSyncingFromRemoteRef = useRef(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -156,7 +159,14 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     preferredHeightRef.current = parseQualityHint(mediaUrl);
     setCurrentQuality(heightToLabel(preferredHeightRef.current));
 
-    // Clean up previous dash player
+    // Clean up previous dash player and hevc intercept
+    if (hevcCleanupRef.current) {
+      try {
+        hevcCleanupRef.current();
+      } catch {}
+      hevcCleanupRef.current = null;
+    }
+    isHevcAttachedRef.current = false;
     if (dashPlayerRef.current) {
       dashPlayerRef.current.destroy();
       dashPlayerRef.current = null;
@@ -164,50 +174,100 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
 
     const video = videoRef.current;
     if (isDashStream && video) {
-      try {
-        const player = dashjs.MediaPlayer().create();
-        dashPlayerRef.current = player;
+      let isCancelled = false;
 
-        player.updateSettings({
-          streaming: {
-            abr: {
-              autoSwitchBitrate: { video: true, audio: true },
+      const initDash = async () => {
+        try {
+          const player = dashjs.MediaPlayer().create();
+          dashPlayerRef.current = player;
+
+          player.updateSettings({
+            streaming: {
+              abr: {
+                autoSwitchBitrate: { video: true, audio: true },
+              },
+              buffer: {
+                fastSwitchEnabled: true,
+                bufferTimeAtTopQuality: 25,
+              },
             },
-            buffer: {
-              fastSwitchEnabled: true,
-              bufferTimeAtTopQuality: 25,
-            },
-          },
-        });
+          });
 
-        player.initialize(video, mediaUrl, false);
-
-        player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
-          if (e?.error === 'capability' || e?.event === 'capability' || e?.error === 'mediasource') {
-            setHevcNotice(true);
-            setIsHevcBlackScreen(true);
+          // Attach lid-labs/hevc.js WASM transcoder middleware (HEVC -> H.264 client-side)
+          try {
+            const cleanup = await attachHevcSupport(player, {
+              workerUrl: '/transcode-worker.js',
+              wasmUrl: '/hevc-decode.js',
+              wasmBinaryUrl: '/hevc-decode.wasm',
+            });
+            if (isCancelled) {
+              cleanup?.();
+              return;
+            }
+            hevcCleanupRef.current = cleanup;
+            isHevcAttachedRef.current = true;
+            console.log('[SyncTube] @hevcjs/dashjs-plugin successfully attached for HEVC playback');
+          } catch (hevcErr) {
+            console.warn('[SyncTube] attachHevcSupport setup warning:', hevcErr);
           }
-        });
 
-        player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
-          // Re-apply the chosen quality (or URL hint) once representations exist
-          applyDashQuality(preferredHeightRef.current);
+          if (isCancelled) return;
 
-          setTimeout(() => {
-            const hasHevcSupport = checkBrowserHevcSupport(true);
+          player.initialize(video, mediaUrl, false);
 
-            if (!hasHevcSupport && video && video.readyState >= 2 && video.videoWidth === 0) {
+          player.on(dashjs.MediaPlayer.events.ERROR, (e: any) => {
+            console.warn('[SyncTube Dash Error]', e);
+            if (e?.error === 'capability' || e?.event === 'capability' || e?.error === 'mediasource') {
               setHevcNotice(true);
               setIsHevcBlackScreen(true);
             }
-          }, 3000);
-        });
-      } catch (err: any) {
-        setVideoError(`DASH player failed to initialize: ${err?.message || 'Unsupported stream'}`);
-      }
+          });
+
+          player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+            // Re-apply the chosen quality (or URL hint) once representations exist
+            applyDashQuality(preferredHeightRef.current);
+
+            setTimeout(() => {
+              const hasHevcSupport = checkBrowserHevcSupport(true);
+              if (!hasHevcSupport && !isHevcAttachedRef.current && video && video.readyState >= 2 && video.videoWidth === 0) {
+                setHevcNotice(true);
+                setIsHevcBlackScreen(true);
+              }
+            }, 3000);
+          });
+        } catch (err: any) {
+          if (!isCancelled) {
+            setVideoError(`DASH player failed to initialize: ${err?.message || 'Unsupported stream'}`);
+          }
+        }
+      };
+
+      initDash();
+
+      return () => {
+        isCancelled = true;
+        if (hevcCleanupRef.current) {
+          try {
+            hevcCleanupRef.current();
+          } catch {}
+          hevcCleanupRef.current = null;
+        }
+        isHevcAttachedRef.current = false;
+        if (dashPlayerRef.current) {
+          dashPlayerRef.current.destroy();
+          dashPlayerRef.current = null;
+        }
+      };
     }
 
     return () => {
+      if (hevcCleanupRef.current) {
+        try {
+          hevcCleanupRef.current();
+        } catch {}
+        hevcCleanupRef.current = null;
+      }
+      isHevcAttachedRef.current = false;
       if (dashPlayerRef.current) {
         dashPlayerRef.current.destroy();
         dashPlayerRef.current = null;
@@ -271,15 +331,15 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
         !video.paused &&
         !video.seeking &&
         video.readyState >= 2 &&
-        video.currentTime > 3.0 &&
+        video.currentTime > (isHevcAttachedRef.current ? 6.0 : 3.0) &&
         video.videoWidth === 0 &&
         !isHevcBlackScreen
       ) {
         const hasHevcSupport = checkBrowserHevcSupport(isDashStream);
-        console.warn(`[SyncTube Player] Black screen detected (videoWidth=0 while playing >3s, hasHevc=${hasHevcSupport})`);
+        console.warn(`[SyncTube Player] Black screen detected (videoWidth=0, hasHevc=${hasHevcSupport}, hevcAttached=${isHevcAttachedRef.current})`);
         setIsHevcBlackScreen(true);
         setHevcNotice(true);
-        if (retryCount < MAX_CONTROLLED_RETRIES && hasHevcSupport) {
+        if (retryCount < MAX_CONTROLLED_RETRIES) {
           handleControlledRetry();
         }
       }
