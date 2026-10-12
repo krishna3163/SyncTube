@@ -21,7 +21,7 @@ const getAudioContext = (): AudioContext | null => {
 };
 
 /**
- * Bubble pop / sparkle sound when sending or receiving live emoji reaction
+ * Rich, synthesized Web Audio reactions for each distinct emoji
  */
 export const playReactSound = (emoji?: string) => {
   const ctx = getAudioContext();
@@ -29,21 +29,202 @@ export const playReactSound = (emoji?: string) => {
 
   try {
     const now = ctx.currentTime;
+    const cleanEmoji = (emoji || '').trim();
+
+    // 1. ❤️ Heart / Love — Warm double heartbeat thump
+    if (cleanEmoji === '❤️' || cleanEmoji === '🥹' || cleanEmoji === '💖') {
+      const playThump = (time: number, freq: number, gainVal: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, time);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.6, time + 0.12);
+        gain.gain.setValueAtTime(gainVal, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.15);
+      };
+      playThump(now, 100, 0.35);
+      playThump(now + 0.14, 85, 0.28);
+      return;
+    }
+
+    // 2. 😂 Laugh / Skull — Bouncy triple giggle chime
+    if (cleanEmoji === '😂' || cleanEmoji === '💀' || cleanEmoji === '🤣') {
+      const notes = [440, 554, 659]; // A4, C#5, E5
+      notes.forEach((freq, idx) => {
+        const t = now + idx * 0.06;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, t);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.15, t + 0.05);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.1);
+      });
+      return;
+    }
+
+    // 3. 👏 Clap — Snappy percussive handclap burst
+    if (cleanEmoji === '👏') {
+      const bufferSize = Math.floor(ctx.sampleRate * 0.08);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1100;
+      filter.Q.value = 1.8;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(now);
+      return;
+    }
+
+    // 4. 🔥 Fire / ⚡ Lightning — Sizzling upward laser riser
+    if (cleanEmoji === '🔥' || cleanEmoji === '⚡') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(260, now);
+      osc.frequency.exponentialRampToValueAtTime(1100, now + 0.18);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.23);
+      return;
+    }
+
+    // 5. 😮 Wow / 🤯 Mindblown / 😱 Shock — Ascending wonder glissando
+    if (cleanEmoji === '😮' || cleanEmoji === '🤯' || cleanEmoji === '😱') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.22);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.26);
+      return;
+    }
+
+    // 6. 😢 Cry / Sad — Downward soft blue note
+    if (cleanEmoji === '😢' || cleanEmoji === '😭') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(540, now);
+      osc.frequency.exponentialRampToValueAtTime(240, now + 0.25);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.29);
+      return;
+    }
+
+    // 7. 😡 Angry — Grumpy low buzz
+    if (cleanEmoji === '😡') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(110, now + 0.18);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.23);
+      return;
+    }
+
+    // 8. 🎉 Celebration / ✨ Magic — Upward festive arpeggio chime
+    if (cleanEmoji === '🎉' || cleanEmoji === '✨' || cleanEmoji === '🌙') {
+      const arpeggio = [523, 659, 784, 1046]; // C5, E5, G5, C6
+      arpeggio.forEach((f, i) => {
+        const t = now + i * 0.05;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, t);
+        gain.gain.setValueAtTime(0.18, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.17);
+      });
+      return;
+    }
+
+    // 9. 🍿 Popcorn — Snappy double woodblock pop
+    if (cleanEmoji === '🍿') {
+      const pops = [750, 920];
+      pops.forEach((f, i) => {
+        const t = now + i * 0.08;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, t);
+        osc.frequency.exponentialRampToValueAtTime(f * 0.4, t + 0.04);
+        gain.gain.setValueAtTime(0.28, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.07);
+      });
+      return;
+    }
+
+    // 10. ⚔️ Sword / 🏴‍☠️ Battle — Metallic cling
+    if (cleanEmoji === '⚔️' || cleanEmoji === '🏴‍☠️' || cleanEmoji === '🍥' || cleanEmoji === '🦊') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1400, now);
+      osc.frequency.exponentialRampToValueAtTime(2200, now + 0.08);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.16);
+      return;
+    }
+
+    // Default Bubble Pop fallback
+    const baseFreq = cleanEmoji ? 380 + (cleanEmoji.charCodeAt(0) % 240) : 480;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-
-    // Fun frequency jump depending on emoji or random variation
-    const baseFreq = emoji ? 380 + (emoji.charCodeAt(0) % 240) : 480;
     osc.type = 'sine';
     osc.frequency.setValueAtTime(baseFreq, now);
     osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.8, now + 0.12);
-
     gain.gain.setValueAtTime(0.2, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     osc.start(now);
     osc.stop(now + 0.19);
   } catch {

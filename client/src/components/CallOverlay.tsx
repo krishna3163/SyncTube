@@ -18,6 +18,7 @@ interface CallOverlayProps {
   currentUserId: string;
   currentUsername: string;
   currentUserAvatarId?: string;
+  userRole?: string;
   onNotify?: (message: string, type: 'info' | 'success' | 'error') => void;
 }
 
@@ -25,6 +26,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   currentUserId,
   currentUsername,
   currentUserAvatarId,
+  userRole,
   onNotify,
 }) => {
   const [inCall, setInCall] = useState(false);
@@ -52,23 +54,35 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       setCallCount(count);
     });
 
+    const unsubForceMute = webrtcCallManager.subscribeForceMuted((mutedBy) => {
+      onNotify?.(`You were muted by ${mutedBy} 🤫`, 'info');
+      setIsMuted(true);
+    });
+
     return () => {
       unsubPeers();
       unsubCount();
+      unsubForceMute();
     };
-  }, [currentUserId, currentUsername, currentUserAvatarId]);
+  }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
   const handleJoinCall = async (withVideo = false) => {
     setJoining(true);
-    const success = await webrtcCallManager.joinCall({ audio: true, video: withVideo });
+    const res = await webrtcCallManager.joinCall({ audio: true, video: withVideo });
     setJoining(false);
-    if (success) {
+    if (res.success) {
       setInCall(true);
       if (onNotify) {
         onNotify(withVideo ? 'Connected to Voice & Video chat! 🎙️📹' : 'Connected to Voice chat! 🎙️', 'success');
       }
     } else if (onNotify) {
-      onNotify('Could not access microphone/camera. Please grant browser permissions.', 'error');
+      if (res.error === 'SECURE_CONTEXT_REQUIRED') {
+        onNotify('Microphone/Camera requires HTTPS or localhost! If accessing via local IP, open chrome://flags/#unsafely-treat-insecure-origin-as-secure to allow.', 'error');
+      } else if (res.error === 'PERMISSION_DENIED') {
+        onNotify('Microphone/Camera permission blocked. Click the lock/camera icon in your URL address bar to allow.', 'error');
+      } else {
+        onNotify(res.error || 'Could not access microphone/camera. Please grant browser permissions.', 'error');
+      }
     }
   };
 
@@ -101,7 +115,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         style={{
           position: 'fixed',
           bottom: '24px',
-          right: '24px',
+          left: '24px',
           zIndex: 100,
           display: 'flex',
           alignItems: 'center',
@@ -209,7 +223,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           }}
         >
           {participants.map((p) => (
-            <ParticipantTile key={p.socketId} participant={p} />
+            <ParticipantTile
+              key={p.socketId}
+              participant={p}
+              isHostOrMod={userRole === 'HOST' || userRole === 'MODERATOR'}
+              onMuteParticipant={(sId, uId, name) => {
+                webrtcCallManager.hostMuteUser(sId, uId);
+                onNotify?.(`Muted ${name} 🤫`, 'info');
+              }}
+            />
           ))}
         </div>
       )}
@@ -361,7 +383,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 };
 
 // ── Participant Video / Voice Tile ─────────────────────────────
-const ParticipantTile: React.FC<{ participant: CallParticipantState }> = ({ participant }) => {
+interface ParticipantTileProps {
+  participant: CallParticipantState;
+  isHostOrMod?: boolean;
+  onMuteParticipant?: (socketId?: string, userId?: string, name?: string) => void;
+}
+
+const ParticipantTile: React.FC<ParticipantTileProps> = ({ participant, isHostOrMod, onMuteParticipant }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -411,6 +439,37 @@ const ParticipantTile: React.FC<{ participant: CallParticipantState }> = ({ part
           transform: participant.isLocal && !participant.isScreenSharing ? 'scaleX(-1)' : 'none',
         }}
       />
+
+      {/* Host remote mute button */}
+      {isHostOrMod && !participant.isLocal && !participant.isMuted && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMuteParticipant?.(participant.socketId, participant.userId, participant.username);
+          }}
+          title={`Host: Mute ${participant.username}`}
+          style={{
+            position: 'absolute',
+            top: '6px',
+            left: '6px',
+            zIndex: 15,
+            padding: '3px 7px',
+            borderRadius: '6px',
+            background: 'rgba(239, 68, 68, 0.9)',
+            color: '#fff',
+            border: 'none',
+            fontSize: '10px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+            cursor: 'pointer',
+          }}
+        >
+          <MicOff size={10} /> Mute
+        </button>
+      )}
 
       {/* Avatar Display when camera is OFF */}
       {!hasVideoTrack && (

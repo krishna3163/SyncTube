@@ -146,8 +146,13 @@ function buildQualityRows(resolved: ResolvedStreams): QualityRow[] {
   const bestCompatibleDirect = streams.find((s) => !s.adaptive && supportsItemCodec(s));
   const anyAdaptive = streams.find((s) => s.adaptive);
 
-  // Pick the best default stream for this browser: prefer compatible stream
-  const chosenDefault = compatibleAdaptive || bestCompatibleDirect || anyAdaptive || streams[0];
+  // Pick the best default stream for this browser:
+  // If browser has native hardware HEVC (Edge, Safari), adaptive HEVC is great.
+  // If browser lacks native HEVC, prioritize universal H.264 direct stream for <1s load & zero stutter!
+  const chosenDefault =
+    (browserSupportsHevc ? (compatibleAdaptive || bestCompatibleDirect) : (bestCompatibleDirect || compatibleAdaptive)) ||
+    anyAdaptive ||
+    streams[0];
 
   const rows: QualityRow[] = [];
 
@@ -352,16 +357,16 @@ export const MovieSearchTab: React.FC<MovieSearchTabProps> = ({
     allStreams?: MovieStreamItem[]
   ) => {
     let chosenStream = stream;
-    const browserSupportsHevc = checkBrowserHevcSupport(Boolean(chosenStream.adaptive));
+    const browserSupportsHevc = checkBrowserHevcSupport(false);
 
-    // If stream is HEVC and browser cannot decode it, automatically fallback to a compatible H.264 stream
+    // If stream is HEVC and browser cannot natively decode it, automatically fallback to a compatible H.264 stream
     if (isHevcCodec(chosenStream.codec) && !browserSupportsHevc) {
       const pool = allStreams || pendingPlay?.streams || [];
       const compatibleFallback = pool.find((s) => !isHevcCodec(s.codec));
       if (compatibleFallback) {
         chosenStream = compatibleFallback;
         onNotify(
-          `Playing in Universal H.264 mode (${chosenStream.resolution}) to prevent black screen in your browser! 🎬🍿`,
+          `Playing in Universal H.264 mode (${chosenStream.resolution}) for instant start & smooth mobile playback! 🎬🍿`,
           'success'
         );
       } else {

@@ -46,6 +46,7 @@ class WebRtcCallManager {
   private onLocalStreamCallbacks: Set<LocalStreamCallback> = new Set();
   private onSpeakingCallbacks: Set<SpeakingCallback> = new Set();
   private onCallCountCallbacks: Set<CallCountCallback> = new Set();
+  private onForceMutedCallbacks: Set<(mutedBy: string) => void> = new Set();
 
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -82,6 +83,11 @@ class WebRtcCallManager {
   public subscribeCallCount(cb: CallCountCallback): () => void {
     this.onCallCountCallbacks.add(cb);
     return () => this.onCallCountCallbacks.delete(cb);
+  }
+
+  public subscribeForceMuted(cb: (mutedBy: string) => void): () => void {
+    this.onForceMutedCallbacks.add(cb);
+    return () => this.onForceMutedCallbacks.delete(cb);
   }
 
   public getParticipantsList(): CallParticipantState[] {
@@ -135,11 +141,18 @@ class WebRtcCallManager {
     return { width: { ideal: 480 }, height: { ideal: 360 }, frameRate: { ideal: 15 } };
   }
 
-  public async joinCall(options: { audio?: boolean; video?: boolean } = {}): Promise<boolean> {
-    if (this.isInCall) return true;
+  public async joinCall(options: { audio?: boolean; video?: boolean } = {}): Promise<{ success: boolean; error?: string }> {
+    if (this.isInCall) return { success: true };
 
     const requestAudio = options.audio ?? true;
     const requestVideo = options.video ?? false;
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        return { success: false, error: 'SECURE_CONTEXT_REQUIRED' };
+      }
+      return { success: false, error: 'MEDIA_DEVICES_NOT_SUPPORTED' };
+    }
 
     try {
       const constraints: MediaStreamConstraints = {
@@ -155,15 +168,27 @@ class WebRtcCallManager {
 
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (err) {
-        // If camera request failed or denied, attempt audio-only fallback
-        if (requestVideo) {
-          console.warn('[SyncTube WebRTC] Camera request failed, falling back to audio only', err);
+      } catch (firstErr: any) {
+        console.warn('[SyncTube WebRTC] Primary constraints failed, retrying with simple constraints:', firstErr);
+        if (firstErr?.name === 'NotAllowedError' || firstErr?.name === 'PermissionDeniedError') {
+          return { success: false, error: 'PERMISSION_DENIED' };
+        }
+
+        try {
           this.localStream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true },
+            audio: requestAudio,
+            video: requestVideo ? true : false,
           });
-        } else {
-          throw err;
+        } catch (secondErr: any) {
+          if (secondErr?.name === 'NotAllowedError' || secondErr?.name === 'PermissionDeniedError') {
+            return { success: false, error: 'PERMISSION_DENIED' };
+          }
+          if (requestAudio) {
+            console.warn('[SyncTube WebRTC] Falling back to audio-only stream');
+            this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } else {
+            return { success: false, error: secondErr?.message || 'Failed to access media devices' };
+          }
         }
       }
 
@@ -185,10 +210,13 @@ class WebRtcCallManager {
       });
 
       this.notifyPeers();
-      return true;
-    } catch (err) {
+      return { success: true };
+    } catch (err: any) {
       console.error('[SyncTube WebRTC] Failed to join call:', err);
-      return false;
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        return { success: false, error: 'PERMISSION_DENIED' };
+      }
+      return { success: false, error: err?.message || 'Could not access microphone/camera' };
     }
   }
 
@@ -240,6 +268,25 @@ class WebRtcCallManager {
       this.notifyPeers();
     }
     return this.isMuted;
+  }
+
+  public muteLocalAudio(forceMute = true): boolean {
+    if (!this.localStream) {
+      this.isMuted = true;
+      return true;
+    }
+    const audioTracks = this.localStream.getAudioTracks();
+    audioTracks.forEach((track) => {
+      track.enabled = !forceMute;
+    });
+    this.isMuted = forceMute;
+    this.broadcastMediaState();
+    this.notifyPeers();
+    return this.isMuted;
+  }
+
+  public hostMuteUser(targetSocketId?: string, targetUserId?: string) {
+    socket.emit('call:host_mute_user', { targetSocketId, targetUserId });
   }
 
   public async toggleCamera(): Promise<boolean> {
@@ -502,6 +549,15 @@ class WebRtcCallManager {
 
     socket.on('webrtc:ice_candidate', async (data: { fromSocketId: string; candidate: RTCIceCandidateInit }) => {
       await this.handleIceCandidate(data.fromSocketId, data.candidate);
+    });
+
+    // 8. Remote Force Mute by Host
+    socket.on('call:force_muted', (data: { mutedBy?: string }) => {
+      const mutedBy = data?.mutedBy || 'Host';
+      this.muteLocalAudio(true);
+      for (const cb of this.onForceMutedCallbacks) {
+        cb(mutedBy);
+      }
     });
   }
 

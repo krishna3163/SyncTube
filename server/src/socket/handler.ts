@@ -1527,6 +1527,35 @@ export function setupSocketHandlers(
       } catch {}
     });
 
+    // Host remote mute participant
+    socket.on('call:host_mute_user', (rawPayload: { targetSocketId?: string; targetUserId?: string }) => {
+      try {
+        const roomId = socket.data.roomId;
+        if (!roomId) return;
+        const room = roomManager.getRoom(roomId);
+        const caller = room?.getParticipant(socket.data.userId || '');
+        if (caller?.role !== 'HOST' && caller?.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only the Host or Moderators can mute participants.');
+        }
+
+        const targetSocketId = rawPayload?.targetSocketId;
+        const targetUserId = rawPayload?.targetUserId;
+
+        if (targetSocketId) {
+          io.to(targetSocketId).emit('call:force_muted', {
+            mutedBy: caller.username,
+          });
+        } else if (targetUserId) {
+          const targetPart = room?.getParticipant(targetUserId);
+          if (targetPart?.socketId) {
+            io.to(targetPart.socketId).emit('call:force_muted', {
+              mutedBy: caller.username,
+            });
+          }
+        }
+      } catch {}
+    });
+
     // DISCONNECT
     socket.on('disconnect', () => {
       const roomId = socket.data.roomId;

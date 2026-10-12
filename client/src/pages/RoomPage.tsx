@@ -88,6 +88,7 @@ const DirectVideoPlayer = lazy(() => import('../components/DirectVideoPlayer.js'
 const CinemaStageCard = lazy(() => import('../components/CinemaStageCard.js').then(({ CinemaStageCard }) => ({ default: CinemaStageCard })));
 const RoomTabPlayer = lazy(() => import('../components/RoomTabPlayer.js').then(({ RoomTabPlayer }) => ({ default: RoomTabPlayer })));
 import { CallOverlay } from '../components/CallOverlay.js';
+import { SidebarCallStage } from '../components/SidebarCallStage.js';
 
 interface RoomPageProps {
   roomId: string;
@@ -1670,6 +1671,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         {/* Right Side: Sidebar with Participants, Playlist, and Activity */}
         <aside className="sidebar">
 
+          {/* Zoom / Google Meet Style Voice & Video Call Stage above Tab Bar */}
+          <SidebarCallStage
+            currentUserId={userId}
+            currentUsername={username}
+            currentUserAvatarId={userSettings.avatarId}
+            userRole={userRole}
+            onNotify={onNotify}
+          />
 
           {/* Button-style Segmented Tab Bar with smooth horizontal navigation */}
           <div className="sidebar-tab-wrapper">
@@ -1936,6 +1945,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         currentUserId={userId}
         currentUsername={username}
         currentUserAvatarId={participants.find((p) => p.userId === userId)?.avatarId}
+        userRole={userRole}
         onNotify={onNotify}
       />
     </div>

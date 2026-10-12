@@ -205,7 +205,10 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           const isSafari =
             typeof navigator !== 'undefined' &&
             /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-          const shouldForceTranscode = !isSafari;
+          const hasNativeHevc = checkBrowserHevcSupport(false);
+          // Never force WASM software transcoding on mobile (causes CPU choke and stutter)
+          // or if the browser natively supports hardware HEVC decode (Edge, Safari)
+          const shouldForceTranscode = !isSafari && !hasNativeHevc && !isMobileDevice;
 
           try {
             console.log(`[SyncTube] Initializing attachHevcSupport (forceTranscode=${shouldForceTranscode})...`);
@@ -377,7 +380,10 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
     if (!video) return;
 
     const handleTimeUpdate = () => {
-      onCurrentTimeChange(video.currentTime, video.duration || 0);
+      const dur = Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : (dashPlayerRef.current?.duration() || 0);
+      onCurrentTimeChange(video.currentTime, dur);
 
       // Robust black-screen detection:
       // Only verify when video is actively playing (not paused, not seeking),
