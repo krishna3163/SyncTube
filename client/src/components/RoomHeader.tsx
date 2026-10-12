@@ -110,19 +110,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           </button>
         )}
 
-        {onOpenBrowserHub && (
-          <button
-            className="btn btn-secondary header-btn"
-            onClick={onOpenBrowserHub}
-            title="Open Universal Browser & Cinema Hub (Netflix, Prime, Disney+, Crunchyroll, Twitch, Direct Links)"
-            aria-label="Browser Hub"
-            id="browser-hub-header-btn"
-          >
-            <Globe size={14} color="#60a5fa" />
-            <span className="header-btn-text">Browser Hub</span>
-          </button>
-        )}
-
         {/* Quick Tools Cluster */}
         <div className="header-tools-group">
           {onToggleTheater && (

@@ -74,6 +74,7 @@ import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
 import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio } from 'lucide-react';
+import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
 const YouTubeSearchModal = lazy(() => import('../components/YouTubeSearchModal.js').then(({ YouTubeSearchModal }) => ({ default: YouTubeSearchModal })));
@@ -663,6 +664,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const onActionRequested = (data: { request: PendingActionRequest }) => {
       rememberParticipantCharacter(data.request.requesterName, data.request.requesterId, data.request.requesterAvatarId);
       setPendingRequests((prev) => [...prev.filter((r) => r.id !== data.request.id), data.request]);
+      playRequestAlertSound();
       if (userRoleRef.current === 'HOST' || userRoleRef.current === 'MODERATOR') {
         const actionLabel = data.request.type === 'request_next_video' ? 'play next video' : data.request.type.replace('_', ' ');
         onNotifyRef.current(`${data.request.requesterName} requested to ${actionLabel}`, 'success');
@@ -705,6 +707,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     // chat_message: real-time incoming chat message
     const onChatMessage = (data: ChatMessage) => {
       rememberParticipantCharacter(data.username, data.userId, data.avatarId);
+      if (data.userId !== userId) {
+        playMessageReceiveSound();
+      }
       setChatMessages((prev) => [...prev.slice(-99), data]);
     };
 
@@ -765,6 +770,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
     // reaction_received: real-time emoji reaction from a viewer
     const onReactionReceived = (data: EmojiReaction) => {
+      playReactSound(data.emoji);
       setActiveReactions((prev) => [...prev, data]);
       addActivity(
         `${data.username} reacted ${data.emoji}${data.videoTime !== undefined ? ` at ${Math.floor(data.videoTime / 60)}:${String(Math.floor(data.videoTime % 60)).padStart(2, '0')}` : ''}`,
@@ -1493,15 +1499,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           >
                             <Search size={15} />
                             <span>YouTube Search 🔍</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary video-empty-action-btn"
-                            onClick={() => setIsBrowserHubOpen(true)}
-                            id="empty-state-open-browser-btn"
-                          >
-                            <Globe size={15} color="#60a5fa" />
-                            <span>Browser Hub 🌐</span>
                           </button>
                         </div>
                       )}

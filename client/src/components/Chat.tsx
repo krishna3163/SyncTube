@@ -4,6 +4,7 @@ import { ChatMessage, ChatReplyPreview, Role, RoomPoll } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { EmojiPicker } from './EmojiPicker.js';
 import { getParticipantCharacterId } from '../utils/characterMemory.js';
+import { playMessageSendSound, playPollVoteSound, playPollWinSound } from '../utils/soundEffects.js';
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -151,11 +152,21 @@ export const Chat: React.FC<ChatProps> = ({
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    playMessageSendSound();
     if (onTypingChange) onTypingChange(false);
     onSendMessage(inputText.trim(), replyingTo || undefined);
     setInputText('');
     setReplyingTo(null);
     inputRef.current?.focus();
+  };
+
+  const handleVoteOption = (index: number, isLeading: boolean) => {
+    if (isLeading) {
+      playPollWinSound();
+    } else {
+      playPollVoteSound();
+    }
+    onVotePoll(index);
   };
 
   const handleReplyClick = (msg: ChatMessage) => {
@@ -316,7 +327,7 @@ export const Chat: React.FC<ChatProps> = ({
             return (
               <div
                 key={msg.id}
-                className={`chat-row-v2 ${isMe ? 'chat-row-me' : ''} ${!isFirst ? 'chat-row-continued' : ''}`}
+                className={`chat-row-v2 ${isMe ? 'chat-row-me chat-msg-send-pop' : 'chat-msg-incoming'} ${!isFirst ? 'chat-row-continued' : ''}`}
               >
                 {/* Avatar — only on first message in a group, left side for others */}
                 {!isMe && (
@@ -484,19 +495,25 @@ export const Chat: React.FC<ChatProps> = ({
                 const totalVotes = Object.values(activePoll.votes).reduce((total, list) => total + list.length, 0);
                 const percentage = totalVotes ? Math.round((voteCount / totalVotes) * 100) : 0;
                 const isSelected = voters.includes(currentUserId);
+                const maxVotes = Math.max(...Object.values(activePoll.votes).map((v) => v.length), 0);
+                const isLeading = maxVotes > 0 && voteCount === maxVotes;
 
                 return (
                   <button
                     key={`${activePoll.id}-${index}`}
                     type="button"
-                    className={`chat-poll-option ${isSelected ? 'selected' : ''}`}
-                    onClick={() => onVotePoll(index)}
+                    className={`chat-poll-option ${isSelected ? 'selected' : ''} ${isLeading ? 'is-leading' : ''}`}
+                    onClick={() => handleVoteOption(index, isLeading)}
                     aria-pressed={isSelected}
                     aria-label={`${option}, ${percentage} percent, ${voteCount} votes${isSelected ? ', your vote' : ''}`}
                   >
-                    <span className="chat-poll-option-fill" style={{ width: `${percentage}%` }} />
+                    <span className={`chat-poll-option-fill ${isLeading ? 'leading-fill' : ''}`} style={{ width: `${percentage}%` }} />
                     <span className="chat-poll-option-content">
-                      <span>{option}</span>
+                      <span className="poll-option-title-wrap">
+                        <span>{option}</span>
+                        {isLeading && <span className="poll-leading-badge">✨ Leading</span>}
+                        {isSelected && <span className="poll-selected-badge">✓ Your Pick</span>}
+                      </span>
                       <small>{percentage}% · {voteCount}</small>
                     </span>
                   </button>

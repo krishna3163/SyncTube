@@ -13937,3 +13937,316 @@ body.is-dragging-reaction iframe {
   color: var(--text-muted, #94a3b8);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC ANIMATION SUITE: TABS, MESSAGES, REQUESTS, POLLS & REACTIONS
+   ───────────────────────────────────────────────────────────── */
+
+/* 1. Button Tab Change Animation */
+.sidebar-tab-btn {
+  position: relative;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  overflow: hidden;
+}
+
+.sidebar-tab-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.sidebar-tab-btn.active {
+  animation: tabPillGlow 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tabPillGlow {
+  0% {
+    transform: scale(0.94);
+    box-shadow: 0 0 0 rgba(255, 210, 31, 0);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 16px rgba(255, 210, 31, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(255, 210, 31, 0.2);
+  }
+}
+
+.sidebar-tab-content {
+  animation: tabFadeSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tabFadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2. Message Outgoing (Send) Animation */
+.chat-msg-send-pop {
+  animation: chatMsgSendPop 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  transform-origin: bottom right;
+}
+
+@keyframes chatMsgSendPop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.6));
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: none;
+  }
+}
+
+/* 3. Message Incoming Animation */
+.chat-msg-incoming {
+  animation: chatMsgIncoming 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  transform-origin: bottom left;
+}
+
+@keyframes chatMsgIncoming {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 4. Request Show Animation (Action requests & approvals) */
+.host-approval-banner {
+  animation: requestBannerPulse 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(255, 210, 31, 0.3), 0 8px 30px rgba(0, 0, 0, 0.6);
+}
+
+.host-approval-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 210, 31, 0.18), transparent);
+  animation: requestShimmer 2.2s infinite;
+  pointer-events: none;
+}
+
+@keyframes requestBannerPulse {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes requestShimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+.badge-counter {
+  animation: badgePop 0.35s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
+}
+
+@keyframes badgePop {
+  0% { transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0.4); }
+  100% { transform: scale(1.12); box-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
+}
+
+/* 5. Error Show Animation (Shake & Crimson Glow) */
+.toast-error {
+  animation: errorShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both !important;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.45), 0 8px 24px rgba(0, 0, 0, 0.7);
+}
+
+@keyframes errorShake {
+  10%, 90% { transform: translate3d(-2px, 0, 0); }
+  20%, 80% { transform: translate3d(3px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-5px, 0, 0); }
+  40%, 60% { transform: translate3d(5px, 0, 0); }
+}
+
+/* 6. Button Horror / Spooky Neon Hover Animation */
+.btn:hover,
+.video-empty-action-btn:hover,
+.chat-send-v2.active:hover {
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.35), 0 0 32px rgba(168, 85, 247, 0.3);
+  transform: translateY(-2px) scale(1.025);
+  animation: horrorButtonTremor 1.8s infinite alternate ease-in-out;
+}
+
+@keyframes horrorButtonTremor {
+  0% {
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.4), 0 0 28px rgba(168, 85, 247, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(244, 63, 94, 0.6), 0 0 38px rgba(147, 51, 234, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.4), 0 0 28px rgba(168, 85, 247, 0.25);
+  }
+}
+
+/* 7. React Button Horror Animation */
+.reaction-toggle-btn:hover,
+.reaction-bar-btn:hover,
+.chat-inline-emoji-btn:hover,
+.chat-quick-rx-btn:hover,
+.reaction-btn:hover {
+  animation: horrorReactPulse 1.2s infinite alternate ease-in-out !important;
+  transform: scale(1.15) rotate(-3deg);
+}
+
+.reaction-toggle-btn:active,
+.reaction-btn:active {
+  transform: scale(0.92) rotate(3deg);
+}
+
+@keyframes horrorReactPulse {
+  0% {
+    box-shadow: 0 0 10px rgba(236, 72, 153, 0.5), 0 0 20px rgba(139, 92, 246, 0.4);
+    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.6));
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(244, 63, 94, 0.8), 0 0 36px rgba(168, 85, 247, 0.6);
+    filter: drop-shadow(0 0 12px rgba(249, 115, 22, 0.7));
+  }
+  100% {
+    box-shadow: 0 0 12px rgba(236, 72, 153, 0.5), 0 0 22px rgba(139, 92, 246, 0.4);
+    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.6));
+  }
+}
+
+/* 8. Poll Vote Animation */
+.chat-poll-option {
+  position: relative;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease !important;
+  overflow: hidden;
+}
+
+.chat-poll-option:active {
+  transform: scale(0.97);
+  animation: pollVoteBounce 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pollVoteBounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.96); }
+  100% { transform: scale(1.01); }
+}
+
+.chat-poll-option-fill {
+  transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* 9. Guess the Right Answer / Leading Option on Poll Animation */
+.chat-poll-option.is-leading {
+  border-color: rgba(34, 197, 94, 0.55) !important;
+  box-shadow: 0 0 14px rgba(34, 197, 94, 0.25) !important;
+  animation: pollLeadingPulse 2s infinite alternate ease-in-out;
+}
+
+@keyframes pollLeadingPulse {
+  0% {
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.45), 0 0 35px rgba(234, 179, 8, 0.25);
+  }
+}
+
+.chat-poll-option-fill.leading-fill {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.35), rgba(234, 179, 8, 0.4), rgba(34, 197, 94, 0.45)) !important;
+  background-size: 200% 100% !important;
+  animation: pollWinningShimmer 2.5s infinite linear;
+}
+
+@keyframes pollWinningShimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.poll-option-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.poll-leading-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(34, 197, 94, 0.35));
+  border: 1px solid rgba(234, 179, 8, 0.55);
+  color: #fef08a;
+  animation: badgeCelebration 1.4s infinite alternate ease-in-out;
+}
+
+@keyframes badgeCelebration {
+  0% { transform: scale(0.96); box-shadow: 0 0 0 rgba(234, 179, 8, 0); }
+  100% { transform: scale(1.06); box-shadow: 0 0 12px rgba(234, 179, 8, 0.5); }
+}
+
+.poll-selected-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  color: #7dd3fc;
+}
+
+/* 10. Floating Reaction Burst Animations */
+.floating-emoji {
+  filter: drop-shadow(0 0 8px rgba(255, 210, 31, 0.45));
+  animation: floatReactionBurst var(--reaction-duration, 2.6s) cubic-bezier(0.12, 0.8, 0.32, 1) forwards;
+}
+
+@keyframes floatReactionBurst {
+  0% {
+    opacity: 0;
+    transform: translateY(0) translateX(0) scale(0.6) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-40px) translateX(calc(var(--reaction-drift-x, 0px) * 0.2)) scale(var(--reaction-scale, 1.2)) rotate(var(--reaction-rotation, 15deg));
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--reaction-rise, 260px))) translateX(var(--reaction-drift-x, 0px)) scale(calc(var(--reaction-scale, 1) * 1.35)) rotate(calc(var(--reaction-rotation, 0deg) * 1.5));
+  }
+}

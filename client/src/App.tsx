@@ -5,6 +5,7 @@ const RoomPage = lazy(() => import('./pages/RoomPage.js').then(({ RoomPage }) =>
 import { CinematicBackground } from './components/CinematicBackground.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { getOrCreateUserId } from './utils/identity.js';
+import { playErrorSound } from './utils/soundEffects.js';
 
 interface Toast {
   id: string;
@@ -46,6 +47,9 @@ export function App() {
   }, []);
 
   const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (type === 'error') {
+      playErrorSound();
+    }
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {

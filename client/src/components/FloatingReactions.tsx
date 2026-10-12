@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import { GripVertical } from 'lucide-react';
 import { getAvatarById } from '../utils/animeAvatars.js';
+import { playReactSound } from '../utils/soundEffects.js';
 
 interface FloatingReactionsProps {
   socket: Socket | null;
@@ -223,6 +224,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
     const now = Date.now();
     if (now - lastSentAtRef.current < 500) return;
     lastSentAtRef.current = now;
+    playReactSound(emoji);
     setRecentReactions((prev) => {
       const next = [emoji, ...prev.filter((item) => item !== emoji)].slice(0, 5);
       localStorage.setItem('synctube_recent_reactions', JSON.stringify(next));
