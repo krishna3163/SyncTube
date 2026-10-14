@@ -412,6 +412,39 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
 
   const currentAvatar = getAvatarById(selectedAvatarId) || ANIME_AVATARS[0];
 
+  const featureCards = [
+    {
+      emoji: '⚡',
+      title: 'Millisecond Sync',
+      description: 'Authoritative server timing keeps everyone locked into the same playback moment.',
+    },
+    {
+      emoji: '🎨',
+      title: 'Anime Avatars',
+      description: 'Choose a recognizable identity for every viewer, host, and guest in the room.',
+    },
+    {
+      emoji: '🎉',
+      title: 'Floating Reactions',
+      description: 'Celebrate big moments with animated emoji bursts and live chat energy.',
+    },
+    {
+      emoji: '🔍',
+      title: 'In-App Search',
+      description: 'Find any YouTube clip or queue a direct stream without leaving the party.',
+    },
+    {
+      emoji: '🎭',
+      title: 'Anime Identity',
+      description: 'Keep your profile, reactions, and room presence consistent across sessions.',
+    },
+    {
+      emoji: '📱',
+      title: 'QR Invite',
+      description: 'Share a room link or QR code so friends can join instantly from any device.',
+    },
+  ];
+
   return (
     <div className="home-page-wrapper">
       {/* Top Navbar */}
@@ -559,6 +592,23 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
             </button>
           </div>
         )}
+
+        <section className="feature-showcase" aria-labelledby="feature-showcase-title">
+          <div className="feature-showcase-header">
+            <span className="feature-showcase-kicker">Features</span>
+            <h2 id="feature-showcase-title">Everything your watch party needs</h2>
+          </div>
+
+          <div className="feature-showcase-grid">
+            {featureCards.map((feature) => (
+              <article className="feature-showcase-card" key={feature.title}>
+                <span className="feature-showcase-emoji" aria-hidden="true">{feature.emoji}</span>
+                <h3>{feature.title}</h3>
+                <p>{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
         {/* The Two Main Action Cards Grid */}
         <div className="home-grid">
