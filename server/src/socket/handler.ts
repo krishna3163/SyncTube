@@ -63,6 +63,7 @@ export interface CallParticipant {
 }
 
 const activeRoomCalls = new Map<string, Map<string, CallParticipant>>();
+const activeRoomScreenShares = new Map<string, { socketId: string; userId: string; username: string; title: string }>();
 
 interface SocketData {
   roomId?: string;
@@ -179,6 +180,24 @@ export function setupSocketHandlers(
         // Send V2 Universal state snapshot and readiness
         socket.emit('sync:state', room.getUniversalSnapshot());
         socket.emit('party:readiness_update', { readiness: room.universalSync.getAllReadiness() });
+
+        // Send active call state upon joining so every viewer sees sidebar-call-header immediately!
+        const existingCalls = activeRoomCalls.get(normalizedRoomId);
+        socket.emit('call:participants_updated', {
+          count: existingCalls ? existingCalls.size : 0,
+          participants: existingCalls ? Array.from(existingCalls.values()) : [],
+        });
+
+        // Send active screen share if one is currently in progress
+        const existingScreen = activeRoomScreenShares.get(normalizedRoomId);
+        if (existingScreen) {
+          socket.emit('room:tab_stream_started', {
+            streamerSocketId: existingScreen.socketId,
+            streamerId: existingScreen.userId,
+            streamerName: existingScreen.username,
+            title: existingScreen.title,
+          });
+        }
 
         // Broadcast to everyone in the room that a user joined
         io.to(normalizedRoomId).emit('user_joined', {
@@ -1227,7 +1246,7 @@ export function setupSocketHandlers(
       }
     });
 
-    // 26. ROOM TAB / EXTENSION STREAMING
+    // 26. ROOM TAB / SCREEN SHARING (SINGLE STREAMER ENFORCEMENT)
     socket.on('room:start_tab_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
         const { room, participant } = getContext();
@@ -1237,16 +1256,25 @@ export function setupSocketHandlers(
           return sendError('NOT_FOUND', err);
         }
 
-        if (!canPerformAction(participant.role, 'change_video')) {
-          const err = 'Only Host can start Tab Stream.';
+        // ONE SCREEN SHARE AT A TIME ENFORCEMENT
+        const existingShare = activeRoomScreenShares.get(room.id);
+        if (existingShare && existingShare.socketId !== socket.id) {
+          const err = `Only one screen share is allowed at a time. @${existingShare.username} is currently sharing.`;
           callback?.({ success: false, error: err });
-          return sendError('FORBIDDEN', err);
+          return sendError('ALREADY_EXISTS', err);
         }
 
         const parsed = RoomStartTabStreamSchema.safeParse(rawPayload);
-        const title = parsed.success && parsed.data?.title ? parsed.data.title : 'Host Shared Browser Tab';
+        const title = parsed.success && parsed.data?.title ? parsed.data.title : `${participant.username}'s Screen`;
 
-                room.changeVideo('tab:share', title, 'tab_share');
+        activeRoomScreenShares.set(room.id, {
+          socketId: socket.id,
+          userId: participant.userId,
+          username: participant.username,
+          title,
+        });
+
+        room.changeVideo('tab:share', title, 'tab_share');
         room.setIsLive(true);
 
         io.to(room.id).emit('sync_state', room.toSyncStatePayload());
@@ -1269,15 +1297,20 @@ export function setupSocketHandlers(
         const { room, participant } = getContext();
         if (!room || !participant) return;
 
-        if (!canPerformAction(participant.role, 'change_video')) {
-          return sendError('FORBIDDEN', 'Only Host can stop Tab Stream.');
-        }
+        const currentShare = activeRoomScreenShares.get(room.id);
+        if (currentShare && (currentShare.socketId === socket.id || canPerformAction(participant.role, 'change_video'))) {
+          activeRoomScreenShares.delete(room.id);
 
-        room.changeVideo('', '', 'generic');
-        io.to(room.id).emit('sync_state', room.toSyncStatePayload());
-        io.to(room.id).emit('room:tab_stream_stopped', {
-          stoppedBy: participant.username,
-        });
+          // Revert stage to current playlist video or empty
+          const fallbackVideo = room.playlist[0]?.videoId ?? '';
+          const fallbackTitle = room.playlist[0]?.title ?? '';
+          room.changeVideo(fallbackVideo, fallbackTitle, fallbackVideo ? 'youtube' : 'generic');
+
+          io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+          io.to(room.id).emit('room:tab_stream_stopped', {
+            stoppedBy: participant.username,
+          });
+        }
       } catch (err: any) {
         sendError('INTERNAL_ERROR', err?.message || 'Failed to stop tab stream.');
       }
@@ -1408,9 +1441,15 @@ export function setupSocketHandlers(
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return;
-        const hostParticipant = room.hostUserId ? room.getParticipant(room.hostUserId) : undefined;
-        if (hostParticipant && hostParticipant.socketId !== socket.id) {
-          io.to(hostParticipant.socketId).emit('webrtc:viewer_joined', {
+
+        const parsed = WebRtcRequestStreamSchema.safeParse(rawPayload);
+        const streamerShare = activeRoomScreenShares.get(room.id);
+        const targetSocketId = (parsed.success && parsed.data?.streamerSocketId)
+          ? parsed.data.streamerSocketId
+          : (streamerShare ? streamerShare.socketId : (room.hostUserId ? room.getParticipant(room.hostUserId)?.socketId : undefined));
+
+        if (targetSocketId && targetSocketId !== socket.id) {
+          io.to(targetSocketId).emit('webrtc:viewer_joined', {
             viewerSocketId: socket.id,
             viewerUserId: participant.userId,
             viewerName: participant.username,
@@ -1575,6 +1614,21 @@ export function setupSocketHandlers(
         });
         if (roomCalls.size === 0) {
           activeRoomCalls.delete(roomId);
+        }
+
+        const roomShare = activeRoomScreenShares.get(roomId);
+        if (roomShare && roomShare.socketId === socket.id) {
+          activeRoomScreenShares.delete(roomId);
+          const room = roomManager.getRoom(roomId);
+          if (room) {
+            const fallbackVideo = room.playlist[0]?.videoId ?? '';
+            const fallbackTitle = room.playlist[0]?.title ?? '';
+            room.changeVideo(fallbackVideo, fallbackTitle, fallbackVideo ? 'youtube' : 'generic');
+            io.to(roomId).emit('sync_state', room.toSyncStatePayload());
+          }
+          io.to(roomId).emit('room:tab_stream_stopped', {
+            stoppedBy: 'Streamer disconnected',
+          });
         }
       }
 

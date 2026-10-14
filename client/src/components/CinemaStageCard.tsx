@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ExternalLink,
-  Film,
+  Globe,
   Share2,
   Tv,
 } from 'lucide-react';
@@ -54,34 +54,36 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
         </div>
 
         <h2 className="cinema-stage-title">{media.title}</h2>
+        <p className="cinema-stage-desc">
+          Universal Watch Party: Stream synchronized media with your friends with live chat, floating emoji reactions, and millisecond sync.
+        </p>
 
-        {/* Streaming Choices */}
         <div className="cinema-stream-choices-grid">
-          {/* Choice 1: MovieBox Catalog */}
-          <div className="cinema-stream-choice-card choice-card-cloud" onClick={onOpenBrowserHub} style={{ cursor: 'pointer' }}>
+          <div className="cinema-stream-choice-card choice-card-cloud" onClick={handleOpenPersonalTab} style={{ cursor: 'pointer' }}>
             <div className="choice-card-header">
               <div className="choice-icon-wrap icon-cyan">
-                <Film size={22} />
+                <ExternalLink size={22} />
               </div>
-              <div className="choice-badge">RECOMMENDED • FREE HD</div>
+              <div className="choice-badge">DIRECT LINK</div>
             </div>
-            <h3 className="choice-title">MovieBox Cinema Stream</h3>
+            <h3 className="choice-title">Open in Your Browser</h3>
+            <p className="choice-desc">
+              Open {media.badge.label} in a dedicated tab on your device with your active subscription or account.
+            </p>
             <div className="choice-features">
-              <span>🎬 Full Movies &amp; Series</span>
-              <span>⚡ Ultra-low drift sync</span>
-              <span>📝 Multi-language subtitles</span>
+              <span>Personal Subscription</span>
+              <span>HD Video &amp; Native Player</span>
             </div>
             <button
               type="button"
               className="btn btn-primary choice-action-btn"
-              onClick={onOpenBrowserHub}
+              onClick={handleOpenPersonalTab}
             >
-              <Film size={16} />
-              <span>Search MovieBox Catalog</span>
+              <ExternalLink size={16} />
+              <span>Open in New Tab</span>
             </button>
           </div>
 
-          {/* Choice 2: Local Tab Share with Audio */}
           <div className="cinema-stream-choice-card choice-card-local">
             <div className="choice-card-header">
               <div className="choice-icon-wrap icon-purple">
@@ -90,10 +92,13 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
               <div className="choice-badge">BROWSER TAB &amp; AUDIO</div>
             </div>
             <h3 className="choice-title">Share Browser Tab (With Audio)</h3>
+            <p className="choice-desc">
+              Share your personal streaming browser tab directly with crystal-clear audio so friends can watch together.
+            </p>
             <div className="choice-features">
-              <span>🔊 HD Tab Audio Included</span>
-              <span>⚡ Zero Cloud Latency</span>
-              <span>👥 Group Watch Mode</span>
+              <span>HD Tab Audio Included</span>
+              <span>Zero Drift Sync</span>
+              <span>Group Watch Mode</span>
             </div>
             {isHost && (
               <button
@@ -108,7 +113,6 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
           </div>
         </div>
 
-        {/* Secondary Actions */}
         <div className="cinema-stage-secondary-actions">
           <button
             type="button"
@@ -124,8 +128,8 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
             className="btn btn-subtle cinema-change-btn"
             onClick={onOpenBrowserHub}
           >
-            <Film size={15} />
-            <span>Change Movie / Search Catalog</span>
+            <Globe size={15} />
+            <span>Change Stream URL</span>
           </button>
         </div>
       </div>

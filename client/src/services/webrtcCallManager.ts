@@ -31,6 +31,7 @@ class WebRtcCallManager {
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private pendingIceCandidates: Map<string, RTCIceCandidateInit[]> = new Map();
   private participants: Map<string, CallParticipantState> = new Map();
 
   private isMuted: boolean = false;
@@ -306,13 +307,12 @@ class WebRtcCallManager {
           this.localStream = videoStream;
         }
 
-        // Add or replace track on all peer connections
+        // Replace track on all video senders without renegotiation
         for (const pc of this.peerConnections.values()) {
-          const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+          const sender = pc.getSenders().find((s) => s.track?.kind === 'video') ||
+            pc.getTransceivers().find((t) => t.receiver?.track?.kind === 'video')?.sender;
           if (sender) {
-            sender.replaceTrack(newVideoTrack);
-          } else {
-            pc.addTrack(newVideoTrack, this.localStream);
+            await sender.replaceTrack(newVideoTrack);
           }
         }
 
@@ -331,9 +331,10 @@ class WebRtcCallManager {
         }
       }
       for (const pc of this.peerConnections.values()) {
-        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video') ||
+          pc.getTransceivers().find((t) => t.receiver?.track?.kind === 'video')?.sender;
         if (sender) {
-          pc.removeTrack(sender);
+          await sender.replaceTrack(null);
         }
       }
       this.isCameraOff = true;
@@ -343,6 +344,12 @@ class WebRtcCallManager {
     this.notifyLocalStream();
     this.notifyPeers();
     return this.isCameraOff;
+  }
+
+  public stopScreenShare(): void {
+    if (this.isScreenSharing) {
+      this.toggleScreenShare();
+    }
   }
 
   public async toggleScreenShare(): Promise<boolean> {
@@ -569,12 +576,20 @@ class WebRtcCallManager {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     this.peerConnections.set(targetSocketId, pc);
 
-    // Send local tracks
+    // Pre-allocate transceivers for both audio and video to enable seamless track hot-swapping
+    const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+    const videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+
     const activeStream = this.screenStream || this.localStream;
     if (activeStream) {
-      activeStream.getTracks().forEach((track) => {
-        pc.addTrack(track, activeStream);
-      });
+      const audioTrack = activeStream.getAudioTracks()[0];
+      if (audioTrack && !this.isMuted) {
+        audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
+      }
+      const videoTrack = activeStream.getVideoTracks()[0];
+      if (videoTrack && !this.isCameraOff) {
+        videoTransceiver.sender.replaceTrack(videoTrack).catch(() => {});
+      }
     }
 
     // Handle incoming remote media tracks
@@ -630,6 +645,13 @@ class WebRtcCallManager {
         pc = await this.createPeerConnection(fromSocketId, false);
       }
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      // Drain queued ICE candidates
+      const queued = this.pendingIceCandidates.get(fromSocketId) || [];
+      for (const cand of queued) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+      }
+      this.pendingIceCandidates.delete(fromSocketId);
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -647,6 +669,11 @@ class WebRtcCallManager {
       const pc = this.peerConnections.get(fromSocketId);
       if (pc && pc.signalingState !== 'stable') {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        const queued = this.pendingIceCandidates.get(fromSocketId) || [];
+        for (const cand of queued) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+        }
+        this.pendingIceCandidates.delete(fromSocketId);
       }
     } catch (err) {
       console.error('[SyncTube WebRTC] Error handling answer:', err);
@@ -656,8 +683,13 @@ class WebRtcCallManager {
   private async handleIceCandidate(fromSocketId: string, candidate: RTCIceCandidateInit): Promise<void> {
     try {
       const pc = this.peerConnections.get(fromSocketId);
-      if (pc && pc.remoteDescription) {
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        if (!this.pendingIceCandidates.has(fromSocketId)) {
+          this.pendingIceCandidates.set(fromSocketId, []);
+        }
+        this.pendingIceCandidates.get(fromSocketId)!.push(candidate);
       }
     } catch (err) {
       console.error('[SyncTube WebRTC] Error adding ICE candidate:', err);

@@ -52,7 +52,7 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
     });
 
     const unsubForceMute = webrtcCallManager.subscribeForceMuted((mutedBy) => {
-      onNotify?.(`You were muted by ${mutedBy} 🤫`, 'info');
+      onNotify?.(`You were muted by ${mutedBy} 🔇`, 'info');
       setIsMuted(true);
     });
 
@@ -99,45 +99,13 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
 
   const isHostOrMod = userRole === 'HOST' || userRole === 'MODERATOR';
 
-  // If no one is in call and user is not in call, show a subtle quick-join bar
-  if (!inCall && callCount === 0) {
-    return (
-      <div className="sidebar-call-bar-inactive">
-        <div className="sidebar-call-bar-left">
-          <div className="call-live-indicator-dot inactive" />
-          <span className="sidebar-call-title">Voice & Video</span>
-        </div>
-        <div className="sidebar-call-bar-actions">
-          <button
-            type="button"
-            onClick={() => handleJoinCall(false)}
-            disabled={joining}
-            className="sidebar-call-join-btn"
-            title="Start voice chat"
-          >
-            <Mic size={12} />
-            <span>{joining ? 'Connecting...' : 'Join Call'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleJoinCall(true)}
-            disabled={joining}
-            className="sidebar-call-join-video-btn"
-            title="Start with video camera"
-          >
-            <Video size={12} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // ALWAYS render .sidebar-call-header so newly joined viewers see it immediately!
   return (
     <div className={`sidebar-call-stage-card ${inCall ? 'active-call' : 'spectating-call'}`}>
-      {/* Header Bar */}
+      {/* Header Bar - Always visible */}
       <div className="sidebar-call-header">
         <div className="sidebar-call-header-left">
-          <span className="call-live-indicator-dot active" />
+          <span className={`call-live-indicator-dot ${callCount > 0 ? 'active' : 'idle'}`} />
           <span className="sidebar-call-header-title">
             Meet Call <span className="call-count-pill">{callCount}</span>
           </span>
@@ -178,15 +146,27 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => handleJoinCall(false)}
-              disabled={joining}
-              className="sidebar-call-join-btn primary"
-            >
-              <Mic size={12} />
-              <span>Join</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <button
+                type="button"
+                onClick={() => handleJoinCall(false)}
+                disabled={joining}
+                className="sidebar-call-join-btn primary"
+                title="Join Voice Chat"
+              >
+                <Mic size={12} />
+                <span>{joining ? 'Connecting...' : 'Join Call'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleJoinCall(true)}
+                disabled={joining}
+                className="sidebar-call-join-video-btn"
+                title="Join with Camera"
+              >
+                <Video size={12} />
+              </button>
+            </div>
           )}
 
           <button
@@ -200,33 +180,38 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
         </div>
       </div>
 
-      {/* Video & Voice Tiles Gallery (Zoom / Google Meet Style) */}
+      {/* Video & Voice Tiles Gallery */}
       {!isCollapsed && (
         <div className="sidebar-call-tiles-gallery">
-          {participants.map((p) => (
-            <SidebarParticipantTile
-              key={p.socketId}
-              participant={p}
-              isHostOrMod={Boolean(isHostOrMod)}
-              onMuteParticipant={(targetSocketId, targetUserId, targetName) => {
-                webrtcCallManager.hostMuteUser(targetSocketId, targetUserId);
-                onNotify?.(`Muted @${targetName} 🤫`, 'info');
-              }}
-            />
-          ))}
+          {participants.length > 0 ? (
+            participants.map((p) => (
+              <SidebarParticipantTile
+                key={p.socketId}
+                participant={p}
+                isHostOrMod={Boolean(isHostOrMod)}
+                onMuteParticipant={(targetSocketId, targetUserId, targetName) => {
+                  webrtcCallManager.hostMuteUser(targetSocketId, targetUserId);
+                  onNotify?.(`Muted @${targetName} 🔇`, 'info');
+                }}
+              />
+            ))
+          ) : (
+            <div className="sidebar-call-empty-prompt">
+              <Users size={16} color="var(--accent)" />
+              <p>Voice & video call is open. Click Join to chat with everyone!</p>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-interface SidebarParticipantTileProps {
+const SidebarParticipantTile: React.FC<{
   participant: CallParticipantState;
   isHostOrMod: boolean;
-  onMuteParticipant: (socketId?: string, userId?: string, name?: string) => void;
-}
-
-const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
+  onMuteParticipant: (socketId: string, userId: string, name: string) => void;
+}> = ({
   participant,
   isHostOrMod,
   onMuteParticipant,
@@ -236,8 +221,9 @@ const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
   useEffect(() => {
     if (videoRef.current && participant.stream) {
       videoRef.current.srcObject = participant.stream;
+      videoRef.current.play().catch(() => {});
     }
-  }, [participant.stream]);
+  }, [participant.stream, participant.isCameraOff]);
 
   const hasVideoTrack =
     participant.stream &&
@@ -249,7 +235,6 @@ const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
       className={`sidebar-meet-tile ${participant.isSpeaking ? 'is-speaking' : ''}`}
       title={`${participant.username} ${participant.isLocal ? '(You)' : ''}`}
     >
-      {/* Video Stream */}
       <video
         ref={videoRef}
         autoPlay
@@ -262,7 +247,6 @@ const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
         }}
       />
 
-      {/* Avatar Display when camera is off */}
       {!hasVideoTrack && (
         <div className="sidebar-meet-avatar-wrap">
           <div className={`sidebar-meet-avatar-ring ${participant.isSpeaking ? 'pulse-speaking' : ''}`}>
@@ -291,7 +275,6 @@ const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
         </div>
       )}
 
-      {/* Host Remote Mute Overlay Button */}
       {isHostOrMod && !participant.isLocal && !participant.isMuted && (
         <button
           type="button"
@@ -307,7 +290,6 @@ const SidebarParticipantTile: React.FC<SidebarParticipantTileProps> = ({
         </button>
       )}
 
-      {/* Footer Tag with Name & Mic Status */}
       <div className="sidebar-meet-footer">
         <span className="sidebar-meet-name">
           {participant.username} {participant.isLocal ? '(You)' : ''}

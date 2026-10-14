@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward, Film } from 'lucide-react';
+import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../utils/api.js';
 import { getSafeYouTubeThumbnailUrl } from '../utils/identity.js';
 import { extractYouTubeId } from '../utils/youtube.js';
-import { MovieSearchTab } from './MovieSearchTab.js';
 
 interface SearchResultItem {
   videoId: string;
@@ -59,7 +58,6 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [mediaTab, setMediaTab] = useState<'movies' | 'youtube'>(inline ? 'youtube' : 'movies');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,91 +69,90 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
     }
   }, [isOpen]);
 
-const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
-  {
-    videoId: 'jJPMnTXl63E',
-    title: 'Agam - Krishna Ki Chetavani (Rashmirathi) | Shreeman Narayan Narayan Hari Hari',
-    channel: 'Agam Aggarwal',
-    duration: '44:47',
-    thumbnail: 'https://img.youtube.com/vi/jJPMnTXl63E/hqdefault.jpg',
-  },
-  {
-    videoId: 'RxabLA7UQ9k',
-    title: 'Hans Zimmer - Time (Official Audio)',
-    channel: 'Hans Zimmer',
-    duration: '4:35',
-    thumbnail: 'https://img.youtube.com/vi/RxabLA7UQ9k/hqdefault.jpg',
-  },
-  {
-    videoId: 'z2X2nXBahrk',
-    title: 'Rebel Foods Story - Building the World’s Largest Cloud Kitchen',
-    channel: 'Rebel Foods',
-    duration: '12:45',
-    thumbnail: 'https://img.youtube.com/vi/z2X2nXBahrk/hqdefault.jpg',
-  },
-  {
-    videoId: 'cl0a3i2wFcc',
-    title: 'Diljit Dosanjh - Lover (Official Music Video)',
-    channel: 'Diljit Dosanjh',
-    duration: '3:31',
-    thumbnail: 'https://img.youtube.com/vi/cl0a3i2wFcc/hqdefault.jpg',
-  },
-  {
-    videoId: 'jfKfPfyJRdk',
-    title: 'Lofi Hip Hop Radio - Beats to Relax/Study to',
-    channel: 'Lofi Girl',
-    duration: 'LIVE',
-    thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
-  },
-  {
-    videoId: '2S4qGKmzBJE',
-    title: 'The Rumbling (TV Size) - Attack on Titan Final Season Part 2 OP',
-    channel: 'SiM Official',
-    duration: '1:30',
-    thumbnail: 'https://img.youtube.com/vi/2S4qGKmzBJE/hqdefault.jpg',
-  },
-  {
-    videoId: 'mpCOh_J_uOU',
-    title: 'LiSA - Gurenge (Demon Slayer Kimetsu no Yaiba OP)',
-    channel: 'LiSA Official',
-    duration: '3:56',
-    thumbnail: 'https://img.youtube.com/vi/mpCOh_J_uOU/hqdefault.jpg',
-  },
-  {
-    videoId: 'KvMY1uzSC1E',
-    title: 'Cyberpunk Edgerunners - I Really Want to Stay at Your House',
-    channel: 'Rosa Walton',
-    duration: '4:06',
-    thumbnail: 'https://img.youtube.com/vi/KvMY1uzSC1E/hqdefault.jpg',
-  },
-  {
-    videoId: 'Way9Dexny3w',
-    title: 'Dune: Part Two | Official Trailer 3',
-    channel: 'Warner Bros. Pictures',
-    duration: '2:53',
-    thumbnail: 'https://img.youtube.com/vi/Way9Dexny3w/hqdefault.jpg',
-  },
-  {
-    videoId: 'UDVtMYqUAyw',
-    title: 'Hans Zimmer - Interstellar Main Theme (Extra Extended)',
-    channel: 'Hans Zimmer',
-    duration: '6:47',
-    thumbnail: 'https://img.youtube.com/vi/UDVtMYqUAyw/hqdefault.jpg',
-  },
-  {
-    videoId: 'dQw4w9WgXcQ',
-    title: 'Rick Astley - Never Gonna Give You Up',
-    channel: 'Rick Astley',
-    duration: '3:33',
-    thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-  },
-];
+  const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
+    {
+      videoId: 'jJPMnTXl63E',
+      title: 'Agam - Krishna Ki Chetavani (Rashmirathi) | Shreeman Narayan Narayan Hari Hari',
+      channel: 'Agam Aggarwal',
+      duration: '44:47',
+      thumbnail: 'https://img.youtube.com/vi/jJPMnTXl63E/hqdefault.jpg',
+    },
+    {
+      videoId: 'RxabLA7UQ9k',
+      title: 'Hans Zimmer - Time (Official Audio)',
+      channel: 'Hans Zimmer',
+      duration: '4:35',
+      thumbnail: 'https://img.youtube.com/vi/RxabLA7UQ9k/hqdefault.jpg',
+    },
+    {
+      videoId: 'z2X2nXBahrk',
+      title: 'Rebel Foods Story - Building the World’s Largest Cloud Kitchen',
+      channel: 'Rebel Foods',
+      duration: '12:45',
+      thumbnail: 'https://img.youtube.com/vi/z2X2nXBahrk/hqdefault.jpg',
+    },
+    {
+      videoId: 'cl0a3i2wFcc',
+      title: 'Diljit Dosanjh - Lover (Official Music Video)',
+      channel: 'Diljit Dosanjh',
+      duration: '3:31',
+      thumbnail: 'https://img.youtube.com/vi/cl0a3i2wFcc/hqdefault.jpg',
+    },
+    {
+      videoId: 'jfKfPfyJRdk',
+      title: 'Lofi Hip Hop Radio - Beats to Relax/Study to',
+      channel: 'Lofi Girl',
+      duration: 'LIVE',
+      thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+    },
+    {
+      videoId: '2S4qGKmzBJE',
+      title: 'The Rumbling (TV Size) - Attack on Titan Final Season Part 2 OP',
+      channel: 'SiM Official',
+      duration: '1:30',
+      thumbnail: 'https://img.youtube.com/vi/2S4qGKmzBJE/hqdefault.jpg',
+    },
+    {
+      videoId: 'mpCOh_J_uOU',
+      title: 'LiSA - Gurenge (Demon Slayer Kimetsu no Yaiba OP)',
+      channel: 'LiSA Official',
+      duration: '3:56',
+      thumbnail: 'https://img.youtube.com/vi/mpCOh_J_uOU/hqdefault.jpg',
+    },
+    {
+      videoId: 'KvMY1uzSC1E',
+      title: 'Cyberpunk Edgerunners - I Really Want to Stay at Your House',
+      channel: 'Rosa Walton',
+      duration: '4:06',
+      thumbnail: 'https://img.youtube.com/vi/KvMY1uzSC1E/hqdefault.jpg',
+    },
+    {
+      videoId: 'Way9Dexny3w',
+      title: 'Dune: Part Two | Official Trailer 3',
+      channel: 'Warner Bros. Pictures',
+      duration: '2:53',
+      thumbnail: 'https://img.youtube.com/vi/Way9Dexny3w/hqdefault.jpg',
+    },
+    {
+      videoId: 'UDVtMYqUAyw',
+      title: 'Hans Zimmer - Interstellar Main Theme (Extra Extended)',
+      channel: 'Hans Zimmer',
+      duration: '6:47',
+      thumbnail: 'https://img.youtube.com/vi/UDVtMYqUAyw/hqdefault.jpg',
+    },
+    {
+      videoId: 'dQw4w9WgXcQ',
+      title: 'Rick Astley - Never Gonna Give You Up',
+      channel: 'Rick Astley',
+      duration: '3:33',
+      thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    },
+  ];
 
   const performSearch = async (searchTerm: string) => {
     const q = searchTerm.trim();
     if (!q) return;
 
-    // Check if user directly pasted a YouTube URL or 11-char ID
     const directId = extractYouTubeId(q);
     if (directId) {
       const directItem: SearchResultItem = {
@@ -178,7 +175,6 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
       endpointsToTry.push(`/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
-    // Always include public Render endpoint as fallback if local/primary fails
     const alreadyHasFallback = endpointsToTry.some((endpoint) => {
       try {
         return new URL(endpoint, window.location.origin).hostname === 'synctube-2ar4.onrender.com';
@@ -205,9 +201,7 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
             break;
           }
         }
-      } catch {
-        // silently fallback to next endpoint or catalogue
-      }
+      } catch {}
     }
 
     if (loadedVideos && loadedVideos.length > 0) {
@@ -216,7 +210,6 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
       return;
     }
 
-    // Client-side catalogue fallback: search matching keywords
     const lower = q.toLowerCase();
     const matched = CLIENT_FALLBACK_CATALOGUE.filter(
       (v) =>
@@ -227,7 +220,7 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
     if (matched.length > 0) {
       setResults(matched);
     } else if (directId) {
-      // direct item already set above
+      // already set
     } else {
       setResults(CLIENT_FALLBACK_CATALOGUE.slice(0, 6));
     }
@@ -286,52 +279,21 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
   if (!isOpen) return null;
 
   return (
-    <div
-      className={inline ? 'sidebar-youtube-search' : 'modal-backdrop'}
-      onClick={inline ? undefined : onClose}
-    >
-      <div
-        className={inline ? 'sidebar-youtube-search-body' : 'glass-panel modal-card yt-search-modal-card'}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {!inline && <div className="modal-header yt-search-modal-header">
-          <div className="search-modal-source-tabs">
-            <button
-              type="button"
-              className={`search-source-tab-btn ${mediaTab === 'movies' ? 'active' : ''}`}
-              onClick={() => setMediaTab('movies')}
-            >
-              <Film size={16} />
-              <span>Cinema · Movies, Series & Anime</span>
-            </button>
-            <button
-              type="button"
-              className={`search-source-tab-btn ${mediaTab === 'youtube' ? 'active' : ''}`}
-              onClick={() => setMediaTab('youtube')}
-            >
-              <Search size={16} />
-              <span>YouTube Videos</span>
+    <div className={inline ? 'sidebar-youtube-search' : 'modal-backdrop'} onClick={inline ? undefined : onClose}>
+      <div className={inline ? 'sidebar-youtube-search-body' : 'glass-panel modal-card yt-search-modal-card'} onClick={(e) => e.stopPropagation()}>
+        {!inline && (
+          <div className="modal-header yt-search-modal-header">
+            <div className="yt-search-modal-title">
+              <Search size={20} color="var(--accent)" />
+              <h2>Search YouTube Videos</h2>
+            </div>
+            <button type="button" className="btn-icon" onClick={onClose} title="Close">
+              <X size={18} />
             </button>
           </div>
-          <button type="button" className="btn-icon" onClick={onClose} title="Close">
-            <X size={18} />
-          </button>
-        </div>}
-
+        )}
         <div className={inline ? 'yt-search-modal-body sidebar-youtube-search-content' : 'modal-body yt-search-modal-body'}>
-          {!inline && mediaTab === 'movies' ? (
-            <MovieSearchTab
-              userRole={userRole}
-              onPlayStream={(streamUrl) => onPlayVideo(streamUrl)}
-              onAddToPlaylist={onAddToPlaylist}
-              onRequestAction={onRequestAction}
-              onNotify={onNotify}
-              onCloseModal={onClose}
-            />
-          ) : (
-            <>
-              {/* Search Bar */}
-              <form onSubmit={handleSearchSubmit} className="yt-search-form">
+          <form onSubmit={handleSearchSubmit} className="yt-search-form">
             <div className="yt-search-input-wrap">
               <Search size={18} className="yt-search-icon" />
               <input
@@ -349,7 +311,6 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
             </button>
           </form>
 
-          {/* Preset Quick Tags */}
           <div className="yt-search-presets">
             {PRESET_TAGS.map((tag) => (
               <button
@@ -367,7 +328,6 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
             ))}
           </div>
 
-          {/* Search Results List */}
           <div className="yt-search-results">
             {isLoading && (
               <div className="yt-search-loading">
@@ -452,10 +412,8 @@ const CLIENT_FALLBACK_CATALOGUE: SearchResultItem[] = [
                 </div>
               ))}
           </div>
-        </>
-      )}
+        </div>
+      </div>
     </div>
-  </div>
-</div>
   );
 };

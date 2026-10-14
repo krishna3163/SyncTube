@@ -41,13 +41,9 @@ export function detectMediaSource(input: string): DetectedMedia | null {
     const pathname = url.pathname.toLowerCase();
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
 
-    // 2a. Direct video stream file or MovieBox proxy stream
+    // 2a. Direct video stream file
     const isDirect =
-      DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`)) ||
-      pathname.includes('/api/movies/proxy') ||
-      pathname.includes('/movies/proxy') ||
-      pathname.includes('/api/movies/dash') ||
-      pathname.includes('/movies/dash');
+      DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`));
 
     if (isDirect) {
       const paramTitle = url.searchParams.get('title');

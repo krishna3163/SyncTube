@@ -61,15 +61,9 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
     const pathname = url.pathname.toLowerCase();
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
 
-    // Direct Video Stream (MP4 / WebM / HLS / DASH / MovieBox Proxy)
-    const isMovieProxy =
-      pathname.includes('/api/movies/proxy') ||
-      pathname.includes('/movies/proxy') ||
-      pathname.includes('/api/movies/dash') ||
-      pathname.includes('/movies/dash');
+    // Direct Video Stream (MP4 / WebM / HLS / DASH)
     const isDirect =
-      DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`)) ||
-      isMovieProxy;
+      DIRECT_VIDEO_EXTENSIONS.some((ext) => pathname.endsWith(ext) || pathname.includes(`${ext}?`));
 
     if (isDirect) {
       const paramTitle = url.searchParams.get('title');
@@ -83,14 +77,10 @@ export function detectClientMedia(input: string): DetectedClientMedia | null {
         isDirectStream: true,
         category: 'direct_stream',
         badge: {
-          label: isMovieProxy ? 'HD Cinema Stream (MovieBox)' : 'Direct Movie Stream (MP4/HLS)',
-          badgeClass: isMovieProxy
-            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-            : 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30',
-          icon: isMovieProxy ? '🎬' : '🎞️',
-          description: isMovieProxy
-            ? 'HD Movie/Show stream with synchronized timeline and real-time Ambient Mode'
-            : 'Plays directly in-room with synchronized timeline and ultra-low drift',
+          label: 'Direct Video Stream (MP4/HLS)',
+          badgeClass: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30',
+          icon: '🎥',
+          description: 'Plays directly in-room with synchronized timeline and ultra-low drift',
           category: 'direct_stream',
         },
       };

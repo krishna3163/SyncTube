@@ -6,7 +6,7 @@ import {
   VolumeX,
   Maximize2,
   Minimize2,
-    ShieldCheck,
+  ShieldCheck,
   Sparkles,
   Tv,
   Radio,
@@ -26,8 +26,8 @@ interface RoomTabPlayerProps {
 
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+    { urls: 'stun:global.stun.twilio.com:3478' },
   ],
 };
 
@@ -47,22 +47,27 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [streamTitle, setStreamTitle] = useState<string>('Host Shared Tab');
+  const [streamTitle, setStreamTitle] = useState<string>('Shared Screen');
+  const [streamerName, setStreamerName] = useState<string>('User');
+  const [streamerSocketId, setStreamerSocketId] = useState<string>('');
   const [viewerCount, setViewerCount] = useState<number>(0);
 
-  // Host WebRTC peer connections map: targetSocketId -> RTCPeerConnection
+  // Host/Streamer WebRTC peer connections map: targetSocketId -> RTCPeerConnection
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingStreamerCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+
   // Viewer WebRTC peer connection
   const viewerPcRef = useRef<RTCPeerConnection | null>(null);
+  const pendingViewerCandidates = useRef<RTCIceCandidateInit[]>([]);
 
-  const isHost = userRole === 'HOST' || userRole === 'MODERATOR';
+  // Anyone who holds localStreamRef is the streamer; otherwise they are a viewer!
+  const isStreamer = Boolean(localStreamRef.current) || (Boolean(streamerSocketId) && streamerSocketId === socket?.id);
 
   // Helper to create and negotiate WebRTC peer connection with a viewer
   const connectViewer = useCallback(async (viewerSocketId: string) => {
     if (!socket || !localStreamRef.current) return;
 
     try {
-      // Close any existing connection to this viewer
       const existing = peerConnectionsRef.current.get(viewerSocketId);
       if (existing) {
         existing.close();
@@ -71,7 +76,6 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       const pc = new RTCPeerConnection(RTC_CONFIG);
       peerConnectionsRef.current.set(viewerSocketId, pc);
 
-      // Add all tracks from the shared tab stream
       localStreamRef.current.getTracks().forEach((track) => {
         pc.addTrack(track, localStreamRef.current!);
       });
@@ -102,18 +106,17 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
         offer,
       });
     } catch (err) {
-      console.error('[WebRTC] Failed to connect viewer:', err);
+      console.error('[WebRTC ScreenShare] Failed to connect viewer:', err);
     }
   }, [socket]);
 
   const startScreenShare = async (customTitle?: string) => {
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
-        onNotify('Screen/Tab sharing is not supported in this browser.', 'error');
+        onNotify('Screen sharing is not supported in this browser.', 'error');
         return;
       }
 
-      // Request browser tab with audio
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: 'browser',
@@ -125,7 +128,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       setStream(mediaStream);
       localStreamRef.current = mediaStream;
       setIsSharing(true);
-      const title = customTitle || 'Host Shared Browser Tab (Netflix / Movies)';
+      setStreamerSocketId(socket?.id || '');
+      const title = customTitle || 'Live Shared Screen';
       setStreamTitle(title);
 
       if (videoRef.current) {
@@ -133,22 +137,21 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
         videoRef.current.play().catch(() => {});
       }
 
-      // Tell room server tab stream started
       emitStartTabStream(title, (res) => {
         if (!res?.success && res?.error) {
-          onNotify(`Stream notice: ${res.error}`, 'info');
+          onNotify(res.error, 'error');
+          stopScreenShare();
         }
       });
 
-      // Handle user stopping share from browser floating banner
       mediaStream.getVideoTracks()[0].onended = () => {
         stopScreenShare();
       };
 
-      onNotify('Browser Tab stream started with audio! WebRTC broadcasting to your watch party.', 'success');
+      onNotify('Your screen is now streaming live on the main stage!', 'success');
     } catch (err: any) {
       if (err.name !== 'NotAllowedError') {
-        onNotify(`Failed to share tab: ${err.message || 'Permission denied'}`, 'error');
+        onNotify(`Failed to share screen: ${err.message || 'Permission denied'}`, 'error');
       }
     }
   };
@@ -161,44 +164,49 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     setStream(null);
     setIsSharing(false);
 
-    // Close all viewer peer connections
     peerConnectionsRef.current.forEach((pc) => pc.close());
     peerConnectionsRef.current.clear();
+    pendingStreamerCandidates.current.clear();
     setViewerCount(0);
 
     emitStopTabStream();
-    onNotify('Tab stream stopped.', 'info');
+    onNotify('Screen share stopped.', 'info');
   };
 
-  // Socket WebRTC Signaling Listeners
+  // Socket Signaling Listeners
   useEffect(() => {
     if (!socket) return;
 
-    // 1. Host received request from a viewer wanting to watch the stream
+    // 1. Streamer received viewer request
     const onViewerJoined = (data: { viewerSocketId: string; viewerName?: string }) => {
-      if (isHost && localStreamRef.current && data.viewerSocketId) {
+      if (localStreamRef.current && data.viewerSocketId) {
         connectViewer(data.viewerSocketId);
-        onNotify(`${data.viewerName || 'A friend'} joined the tab stream`, 'info');
+        onNotify(`${data.viewerName || 'A friend'} is watching your screen`, 'info');
       }
     };
 
-    // 2. Host received answer from viewer
+    // 2. Streamer received answer from viewer
     const onAnswer = async (data: { fromSocketId: string; answer: any }) => {
-      if (isHost && data.fromSocketId && data.answer) {
+      if (localStreamRef.current && data.fromSocketId && data.answer) {
         const pc = peerConnectionsRef.current.get(data.fromSocketId);
         if (pc) {
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            const queued = pendingStreamerCandidates.current.get(data.fromSocketId) || [];
+            for (const cand of queued) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+            }
+            pendingStreamerCandidates.current.delete(data.fromSocketId);
           } catch (e) {
-            console.error('[WebRTC] Error setting remote description (answer):', e);
+            console.error('[WebRTC ScreenShare] Error setting answer:', e);
           }
         }
       }
     };
 
-    // 3. Viewer received offer from host
+    // 3. Viewer received offer from streamer
     const onOffer = async (data: { fromSocketId: string; offer: any }) => {
-      if (!isHost && data.offer && data.fromSocketId) {
+      if (!localStreamRef.current && data.offer && data.fromSocketId) {
         try {
           if (viewerPcRef.current) {
             viewerPcRef.current.close();
@@ -225,6 +233,12 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           };
 
           await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const queued = pendingViewerCandidates.current;
+          for (const cand of queued) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch {}
+          }
+          pendingViewerCandidates.current = [];
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
 
@@ -233,7 +247,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             answer,
           });
         } catch (e) {
-          console.error('[WebRTC] Error processing offer:', e);
+          console.error('[WebRTC ScreenShare] Error processing offer:', e);
         }
       }
     };
@@ -241,26 +255,36 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     // 4. ICE candidate received
     const onIceCandidate = async (data: { fromSocketId: string; candidate: any }) => {
       try {
-        if (data.candidate) {
-          if (isHost) {
-            const pc = peerConnectionsRef.current.get(data.fromSocketId);
-            if (pc && pc.remoteDescription) {
-              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        if (!data.candidate) return;
+        if (localStreamRef.current) {
+          const pc = peerConnectionsRef.current.get(data.fromSocketId);
+          if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } else {
+            if (!pendingStreamerCandidates.current.has(data.fromSocketId)) {
+              pendingStreamerCandidates.current.set(data.fromSocketId, []);
             }
-          } else if (viewerPcRef.current && viewerPcRef.current.remoteDescription) {
+            pendingStreamerCandidates.current.get(data.fromSocketId)!.push(data.candidate);
+          }
+        } else if (viewerPcRef.current) {
+          if (viewerPcRef.current.remoteDescription && viewerPcRef.current.remoteDescription.type) {
             await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } else {
+            pendingViewerCandidates.current.push(data.candidate);
           }
         }
       } catch (e) {
-        console.error('[WebRTC] Error adding ICE candidate:', e);
+        console.error('[WebRTC ScreenShare] Error adding ICE candidate:', e);
       }
     };
 
-    // 5. Tab stream lifecycle broadcast events
     const onStreamStarted = (data: { streamerSocketId?: string; streamerName?: string; title?: string }) => {
       if (data.title) setStreamTitle(data.title);
-      if (!isHost) {
-        onNotify(`${data.streamerName || 'Host'} started streaming tab! Connecting...`, 'info');
+      if (data.streamerName) setStreamerName(data.streamerName);
+      if (data.streamerSocketId) setStreamerSocketId(data.streamerSocketId);
+
+      if (data.streamerSocketId !== socket.id) {
+        onNotify(`${data.streamerName || 'A friend'} is sharing their screen!`, 'info');
         socket.emit('webrtc:request_stream', { streamerSocketId: data.streamerSocketId });
       }
     };
@@ -274,7 +298,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
-      onNotify('Host has stopped the tab stream.', 'info');
+      onNotify('Screen share ended.', 'info');
     };
 
     socket.on('webrtc:viewer_joined', onViewerJoined);
@@ -284,10 +308,17 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     socket.on('room:tab_stream_started', onStreamStarted);
     socket.on('room:tab_stream_stopped', onStreamStopped);
 
-    // If viewer just mounted while room is in tab stream, request stream
-    if (!isHost) {
+    // Initial stream request for viewer upon mount
+    if (!localStreamRef.current) {
       socket.emit('webrtc:request_stream', {});
     }
+
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'SYNCTUBE_START_TAB_SHARE') {
+        startScreenShare(event.data.tabTitle);
+      }
+    };
+    window.addEventListener('message', handleWindowMessage);
 
     return () => {
       socket.off('webrtc:viewer_joined', onViewerJoined);
@@ -296,38 +327,14 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       socket.off('webrtc:ice_candidate', onIceCandidate);
       socket.off('room:tab_stream_started', onStreamStarted);
       socket.off('room:tab_stream_stopped', onStreamStopped);
+      window.removeEventListener('message', handleWindowMessage);
     };
-  }, [socket, isHost, connectViewer, onNotify]);
-
-  // Extension communication bridge
-  useEffect(() => {
-    const handleExtensionMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type === 'SYNCTUBE_START_TAB_SHARE' && isHost) {
-        startScreenShare(event.data.tabTitle);
-      }
-    };
-    window.addEventListener('message', handleExtensionMessage);
-    return () => window.removeEventListener('message', handleExtensionMessage);
-  }, [isHost]);
-
-  // Clean up tracks when unmounting
-  useEffect(() => {
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      peerConnectionsRef.current.forEach((pc) => pc.close());
-      if (viewerPcRef.current) {
-        viewerPcRef.current.close();
-      }
-    };
-  }, []);
+  }, [socket, connectViewer, onNotify]);
 
   const toggleMute = () => {
     if (videoRef.current) {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
+      videoRef.current.muted = !videoRef.current.muted;
+      setIsMuted(videoRef.current.muted);
     }
   };
 
@@ -341,120 +348,128 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="room-tab-player-container">
-      {/* Top Banner */}
-      <div className="room-tab-player-nav">
-        <div className="tab-player-left">
-          <div className="tab-player-live-badge">
-            <span className="live-pulse-dot" />
-            <span>LIVE TAB STREAM</span>
-          </div>
-          <span className="tab-player-title">
-            {isSharing ? streamTitle : 'Netflix & Cinema Tab Watch Party'}
+    <div
+      ref={containerRef}
+      className={`room-tab-player-container ${isFullscreen ? 'is-fullscreen' : ''}`}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        minHeight: '440px',
+        background: '#090d16',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Top Header Bar */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 18px',
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '9999px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>
+            <Radio size={12} color="#ef4444" /> LIVE SCREEN SHARE
           </span>
-          {isHost && isSharing && (
-            <span className="tab-viewer-badge" title="Active viewers on WebRTC stream">
-              <Users size={12} />
-              <span>{viewerCount} peers</span>
-            </span>
-          )}
+          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+            {streamTitle}
+          </span>
         </div>
 
-        <div className="tab-player-actions">
-          {isSharing ? (
-            <>
-              <button
-                type="button"
-                className="btn-icon-subtle"
-                onClick={toggleMute}
-                title={isMuted ? 'Unmute Tab Audio' : 'Mute Tab Audio'}
-              >
-                {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-              </button>
-              <button
-                type="button"
-                className="btn-icon-subtle"
-                onClick={toggleFullscreen}
-                title="Fullscreen"
-              >
-                {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              </button>
-              {isHost && (
-                <button type="button" className="btn btn-danger btn-xs" onClick={stopScreenShare}>
-                  <StopCircle size={14} />
-                  <span>Stop Stream</span>
-                </button>
-              )}
-            </>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isStreamer ? (
+            <button
+              type="button"
+              onClick={stopScreenShare}
+              className="btn btn-sm"
+              style={{
+                background: '#ef4444',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '5px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+              }}
+            >
+              <StopCircle size={14} /> Stop Sharing
+            </button>
           ) : (
-            isHost && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => startScreenShare()}
-              >
-                <Share2 size={14} />
-                <span>Share Movie Tab with Audio</span>
-              </button>
-            )
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="btn-icon"
+              style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+            </button>
           )}
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="btn-icon"
+            style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
         </div>
       </div>
 
-      {/* Main Video Presentation Stage */}
-      <div className="room-tab-video-stage">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          className={`room-tab-video-element ${isSharing ? 'active' : 'hidden'}`}
-        />
+      {/* Main Video Stage */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isStreamer || isMuted}
+        style={{
+          width: '100%',
+          height: '100%',
+          flex: 1,
+          objectFit: 'contain',
+          background: '#000',
+        }}
+      />
 
-        {!isSharing && (
-          <div className="room-tab-idle-card">
-            <div className="idle-card-icon">
-              <Tv size={36} />
-            </div>
-            <h3>Share Any Tab With Your Watch Party</h3>
-            <p>
-              Have 1 Netflix, Prime Video, Disney+, Crunchyroll, or Anime account between friends?
-              The host can share any browser tab directly with crystal-clear video and synchronized audio.
-            </p>
-
-            <div className="tab-sharing-options">
-              {isHost ? (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-lg tab-start-btn"
-                  onClick={() => startScreenShare()}
-                >
-                  <Share2 size={18} />
-                  <span>Click to Select & Share Netflix / Movie Tab (With Audio)</span>
-                </button>
-              ) : (
-                <div className="tab-waiting-notice">
-                  <Radio size={20} className="pulse-icon" />
-                  <span>Waiting for the Host to start streaming their tab... (Will automatically appear here with sound!)</span>
-                </div>
-              )}
-            </div>
-
-
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Footer Info */}
-      <div className="room-tab-footer">
-        <div className="footer-left">
-          <ShieldCheck size={14} className="text-cyan" />
-          <span>WebRTC P2P Tab Stream: Zero server latency with real-time stereo audio synchronization.</span>
+      {/* Empty / Connecting Overlay */}
+      {!isSharing && !isStreamer && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            background: 'radial-gradient(circle, #0f172a 0%, #020617 100%)',
+            color: '#94a3b8',
+          }}
+        >
+          <Tv size={42} color="var(--accent)" />
+          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
+            Connecting to Screen Stream...
+          </h3>
+          <p style={{ margin: 0, fontSize: '13px' }}>
+            Streaming synchronized screen and tab audio directly to your room.
+          </p>
         </div>
-        <div className="footer-right">
-          <Sparkles size={13} className="text-yellow" />
-          <span>SyncTube Universal Watch Party</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

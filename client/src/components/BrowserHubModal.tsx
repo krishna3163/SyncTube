@@ -3,11 +3,9 @@ import {
   X,
   Globe,
   ExternalLink,
-  Film,
 } from 'lucide-react';
 import { detectClientMedia } from '../utils/media.js';
 import { Role } from '../types.js';
-import { MovieSearchTab } from './MovieSearchTab.js';
 
 interface BrowserHubModalProps {
   isOpen: boolean;
@@ -59,12 +57,11 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card browser-hub-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Header - without descriptions or removed platform tabs */}
         <div className="modal-header">
           <div className="browser-hub-header-title">
-            <Film size={20} color="var(--accent)" />
+            <Globe size={20} color="var(--accent)" />
             <div>
-              <h2>Cinema & Movies</h2>
+              <h2>Direct Stream & Web Media</h2>
             </div>
           </div>
           <button
@@ -77,9 +74,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
         <div className="modal-body browser-hub-modal-body">
-          {/* Quick URL / Direct Video Address Bar */}
           <form onSubmit={handleCustomSubmit} className="browser-hub-url-bar">
             <div className="browser-hub-input-wrap">
               <Globe size={16} className="browser-hub-input-icon" />
@@ -111,7 +106,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
             </button>
           </form>
 
-          {/* Real-time URL Detection Preview */}
           {detected && (
             <div className="browser-hub-detected-preview">
               <div className="detected-left">
@@ -130,23 +124,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
               </button>
             </div>
           )}
-
-          {/* Movies, Series & Anime Catalogue */}
-          <div style={{ marginTop: '0.5rem' }}>
-            <MovieSearchTab
-              userRole={userRole}
-              onPlayStream={(streamUrl, title) => {
-                onSelectMedia(streamUrl, title, 'direct');
-                onClose();
-              }}
-              onAddToPlaylist={(streamUrl, title) => {
-                onSelectMedia(streamUrl, title, 'direct');
-                onClose();
-              }}
-              onNotify={onNotify}
-              onCloseModal={onClose}
-            />
-          </div>
         </div>
       </div>
     </div>

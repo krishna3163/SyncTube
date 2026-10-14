@@ -13,6 +13,8 @@ import {
   Radio,
 } from 'lucide-react';
 import { webrtcCallManager, CallParticipantState } from '../services/webrtcCallManager.js';
+import { emitStartTabStream, emitStopTabStream } from '../services/socket.js';
+import { socket } from '../services/socket.js';
 
 interface CallOverlayProps {
   currentUserId: string;
@@ -55,14 +57,29 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     });
 
     const unsubForceMute = webrtcCallManager.subscribeForceMuted((mutedBy) => {
-      onNotify?.(`You were muted by ${mutedBy} 🤫`, 'info');
+      onNotify?.(`You were muted by ${mutedBy} 🔇`, 'info');
       setIsMuted(true);
     });
+
+    // Listen to tab stream lifecycle
+    const onStreamStarted = (data: { streamerSocketId?: string; streamerName?: string }) => {
+      if (data.streamerSocketId === socket?.id) {
+        setIsScreenSharing(true);
+      }
+    };
+    const onStreamStopped = () => {
+      setIsScreenSharing(false);
+    };
+
+    socket?.on('room:tab_stream_started', onStreamStarted);
+    socket?.on('room:tab_stream_stopped', onStreamStopped);
 
     return () => {
       unsubPeers();
       unsubCount();
       unsubForceMute();
+      socket?.off('room:tab_stream_started', onStreamStarted);
+      socket?.off('room:tab_stream_stopped', onStreamStopped);
     };
   }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
@@ -102,20 +119,34 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     setIsCameraOff(off);
   };
 
+  // Screen share triggers main theater stage stream
   const handleToggleScreenShare = async () => {
-    const sharing = await webrtcCallManager.toggleScreenShare();
-    setIsScreenSharing(sharing);
+    if (isScreenSharing) {
+      emitStopTabStream();
+      webrtcCallManager.stopScreenShare();
+      setIsScreenSharing(false);
+      onNotify?.('Stopped screen sharing.', 'info');
+    } else {
+      const title = `${currentUsername}'s Screen`;
+      emitStartTabStream(title, (res) => {
+        if (!res?.success) {
+          onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
+        } else {
+          // Trigger local capture
+          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
+          setIsScreenSharing(true);
+          onNotify?.('Sharing your screen on the main stage!', 'success');
+        }
+      });
+    }
   };
 
-  // If user is not in call, show a sleek floating call banner or button
+  // If user is not in call, show clean launcher on the left
   if (!inCall) {
     return (
       <div
         className="call-launcher-pill"
         style={{
-          position: 'fixed',
-          bottom: '24px',
-          left: '24px',
           zIndex: 100,
           display: 'flex',
           alignItems: 'center',
@@ -191,37 +222,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     );
   }
 
+  // When IN CALL: Floating dock placed on LEFT SIDE on desktop view
   return (
-    <div
-      className={`call-floating-dock ${isMinimized ? 'minimized' : ''}`}
-      style={{
-        position: 'fixed',
-        bottom: '20px',
-        right: '20px',
-        zIndex: 90,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        gap: '10px',
-        pointerEvents: 'none',
-      }}
-    >
+    <div className={`call-floating-dock ${isMinimized ? 'minimized' : ''}`}>
       {/* 1. Grid of Participant Video/Voice Tiles */}
       {!isMinimized && (
-        <div
-          className="call-video-grid-container"
-          style={{
-            pointerEvents: 'auto',
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-end',
-            gap: '10px',
-            maxWidth: '650px',
-            maxHeight: '380px',
-            overflowY: 'auto',
-            padding: '4px',
-          }}
-        >
+        <div className="call-video-grid-container">
           {participants.map((p) => (
             <ParticipantTile
               key={p.socketId}
@@ -229,29 +235,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               isHostOrMod={userRole === 'HOST' || userRole === 'MODERATOR'}
               onMuteParticipant={(sId, uId, name) => {
                 webrtcCallManager.hostMuteUser(sId, uId);
-                onNotify?.(`Muted ${name} 🤫`, 'info');
+                onNotify?.(`Muted ${name} 🔇`, 'info');
               }}
             />
           ))}
         </div>
       )}
 
-      {/* 2. Floating Action Controls Bar */}
-      <div
-        className="call-control-bar"
-        style={{
-          pointerEvents: 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '8px 16px',
-          background: 'rgba(15, 23, 42, 0.92)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '9999px',
-          backdropFilter: 'blur(16px)',
-          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.55)',
-        }}
-      >
+      {/* 2. Floating Action Controls Bar (left side on desktop) */}
+      <div className="call-control-bar">
         <div
           style={{
             display: 'flex',
@@ -273,19 +265,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           type="button"
           onClick={handleToggleMute}
           title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            border: 'none',
-            background: isMuted ? '#ef4444' : 'rgba(255, 255, 255, 0.12)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
+          className={`call-control-btn ${isMuted ? 'muted-red' : 'inactive'}`}
         >
           {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
         </button>
@@ -295,19 +275,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           type="button"
           onClick={handleToggleCamera}
           title={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            border: 'none',
-            background: isCameraOff ? 'rgba(255, 255, 255, 0.12)' : '#10b981',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
+          className={`call-control-btn ${isCameraOff ? 'inactive' : 'active-green'}`}
         >
           {isCameraOff ? <VideoOff size={16} /> : <Video size={16} />}
         </button>
@@ -316,20 +284,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         <button
           type="button"
           onClick={handleToggleScreenShare}
-          title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            border: 'none',
-            background: isScreenSharing ? '#8b5cf6' : 'rgba(255, 255, 255, 0.12)',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
+          title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen on Main Stage'}
+          className={`call-control-btn ${isScreenSharing ? 'active-purple' : 'inactive'}`}
         >
           <Monitor size={16} />
         </button>
@@ -338,94 +294,60 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         <button
           type="button"
           onClick={() => setIsMinimized(!isMinimized)}
-          title={isMinimized ? 'Expand Video Tiles' : 'Minimize Video Tiles'}
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            border: 'none',
-            background: 'transparent',
-            color: '#94a3b8',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-          }}
+          title={isMinimized ? 'Expand Call Tiles' : 'Minimize Call Tiles'}
+          className="call-control-btn inactive"
         >
           {isMinimized ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
-        {/* Leave Call Button */}
+        {/* Leave Call */}
         <button
           type="button"
           onClick={handleLeaveCall}
-          title="Disconnect from Call"
-          style={{
-            height: '34px',
-            borderRadius: '9999px',
-            border: 'none',
-            background: 'rgba(239, 68, 68, 0.2)',
-            color: '#f87171',
-            padding: '0 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
+          title="Leave Call"
+          className="call-control-btn leave"
         >
-          <PhoneOff size={15} /> Leave
+          <PhoneOff size={16} />
         </button>
       </div>
     </div>
   );
 };
 
-// ── Participant Video / Voice Tile ─────────────────────────────
-interface ParticipantTileProps {
+const ParticipantTile: React.FC<{
   participant: CallParticipantState;
-  isHostOrMod?: boolean;
-  onMuteParticipant?: (socketId?: string, userId?: string, name?: string) => void;
-}
-
-const ParticipantTile: React.FC<ParticipantTileProps> = ({ participant, isHostOrMod, onMuteParticipant }) => {
+  isHostOrMod: boolean;
+  onMuteParticipant: (socketId: string, userId: string, name: string) => void;
+}> = ({ participant, isHostOrMod, onMuteParticipant }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (videoRef.current && participant.stream) {
       videoRef.current.srcObject = participant.stream;
+      videoRef.current.play().catch(() => {});
     }
-  }, [participant.stream]);
+  }, [participant.stream, participant.isCameraOff]);
 
-  const hasVideoTrack =
+  const hasVideo = Boolean(
     participant.stream &&
     participant.stream.getVideoTracks().length > 0 &&
-    !participant.isCameraOff;
+    !participant.isCameraOff
+  );
 
   return (
     <div
-      className={`call-participant-tile ${participant.isSpeaking ? 'speaking' : ''}`}
       style={{
         position: 'relative',
-        width: '180px',
-        height: '115px',
+        width: '120px',
+        height: '90px',
         borderRadius: '12px',
         overflow: 'hidden',
-        background: '#090d16',
-        border: participant.isSpeaking
-          ? '2px solid #10b981'
-          : '1px solid rgba(255, 255, 255, 0.12)',
-        boxShadow: participant.isSpeaking
-          ? '0 0 16px rgba(16, 185, 129, 0.45)'
-          : '0 8px 24px rgba(0, 0, 0, 0.5)',
-        transition: 'all 0.25s ease',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        background: '#0f172a',
+        border: participant.isSpeaking ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.12)',
+        boxShadow: participant.isSpeaking ? '0 0 12px rgba(16, 185, 129, 0.45)' : 'none',
+        transition: 'all 0.2s ease',
       }}
     >
-      {/* Video stream element (audio autoPlays for remote participants) */}
       <video
         ref={videoRef}
         autoPlay
@@ -435,132 +357,83 @@ const ParticipantTile: React.FC<ParticipantTileProps> = ({ participant, isHostOr
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          display: hasVideoTrack ? 'block' : 'none',
+          display: hasVideo ? 'block' : 'none',
           transform: participant.isLocal && !participant.isScreenSharing ? 'scaleX(-1)' : 'none',
         }}
       />
 
-      {/* Host remote mute button */}
-      {isHostOrMod && !participant.isLocal && !participant.isMuted && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onMuteParticipant?.(participant.socketId, participant.userId, participant.username);
-          }}
-          title={`Host: Mute ${participant.username}`}
-          style={{
-            position: 'absolute',
-            top: '6px',
-            left: '6px',
-            zIndex: 15,
-            padding: '3px 7px',
-            borderRadius: '6px',
-            background: 'rgba(239, 68, 68, 0.9)',
-            color: '#fff',
-            border: 'none',
-            fontSize: '10px',
-            fontWeight: 600,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '3px',
-            cursor: 'pointer',
-          }}
-        >
-          <MicOff size={10} /> Mute
-        </button>
-      )}
-
-      {/* Avatar Display when camera is OFF */}
-      {!hasVideoTrack && (
+      {!hasVideo && (
         <div
           style={{
+            width: '100%',
+            height: '100%',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
+            background: 'radial-gradient(circle, #1e293b 0%, #0f172a 100%)',
           }}
         >
           <div
             style={{
-              width: '46px',
-              height: '46px',
+              width: '36px',
+              height: '36px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              background: '#334155',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '18px',
               fontWeight: 700,
-              color: '#fff',
-              boxShadow: participant.isSpeaking ? '0 0 14px rgba(16, 185, 129, 0.6)' : 'none',
+              fontSize: '14px',
+              color: '#f8fafc',
             }}
           >
-            {participant.avatarId ? (
-              <img
-                src={`/avatars/${participant.avatarId}.png`}
-                alt=""
-                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              participant.username.charAt(0).toUpperCase()
-            )}
+            {participant.username.charAt(0).toUpperCase()}
           </div>
         </div>
       )}
 
-      {/* Name and State Tag */}
+      {isHostOrMod && !participant.isLocal && !participant.isMuted && (
+        <button
+          type="button"
+          onClick={() => onMuteParticipant(participant.socketId, participant.userId, participant.username)}
+          title={`Mute ${participant.username}`}
+          style={{
+            position: 'absolute',
+            top: '4px',
+            right: '4px',
+            background: 'rgba(239, 68, 68, 0.85)',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '2px 4px',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: '9px',
+          }}
+        >
+          <MicOff size={10} />
+        </button>
+      )}
+
       <div
         style={{
           position: 'absolute',
-          bottom: '6px',
-          left: '8px',
-          right: '8px',
+          bottom: '2px',
+          left: '4px',
+          right: '4px',
           display: 'flex',
-          alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(6px)',
-          padding: '2px 8px',
-          borderRadius: '9999px',
-          fontSize: '11px',
+          alignItems: 'center',
+          fontSize: '10px',
+          fontWeight: 600,
           color: '#f8fafc',
-          pointerEvents: 'none',
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
         }}
       >
-        <span
-          style={{
-            maxWidth: '110px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {participant.username} {participant.isLocal ? '(You)' : ''}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80px' }}>
+          {participant.username}
         </span>
-
-        {participant.isMuted && <MicOff size={11} color="#f87171" />}
+        {participant.isMuted ? <MicOff size={11} color="#ef4444" /> : <Mic size={11} color="#10b981" />}
       </div>
-
-      {/* Speaking Glow Tag */}
-      {participant.isSpeaking && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '6px',
-            right: '6px',
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: '#10b981',
-            boxShadow: '0 0 8px #10b981',
-          }}
-        />
-      )}
     </div>
   );
 };

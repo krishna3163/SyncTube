@@ -14393,6 +14393,14 @@ body.is-dragging-reaction iframe {
   }
 }
 
+.call-launcher-pill {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  right: auto;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .call-launcher-pill:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6) !important;
@@ -14809,3 +14817,131 @@ body.is-dragging-reaction iframe {
   color: #34d399;
 }
 
+
+
+/* =========================================================================
+   SYNCTUBE CALL FLOATING DOCK & CONTROLS (DESKTOP: LEFT SIDE, MOBILE: RIGHT)
+   ========================================================================= */
+.call-floating-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  right: auto;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.call-floating-dock.minimized {
+  gap: 0;
+}
+
+.call-floating-dock .call-video-grid-container {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px;
+  max-width: 650px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.call-control-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
+.call-control-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #fff;
+}
+
+.call-control-btn:hover {
+  transform: translateY(-1px);
+}
+
+.call-control-btn.active-green {
+  background: #10b981;
+}
+
+.call-control-btn.active-purple {
+  background: #8b5cf6;
+}
+
+.call-control-btn.muted-red {
+  background: #ef4444;
+}
+
+.call-control-btn.inactive {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.call-control-btn.leave {
+  background: #ef4444;
+}
+
+.call-control-btn.leave:hover {
+  background: #dc2626;
+}
+
+/* Sidebar Call Stage Header & Empty Prompt */
+.sidebar-call-empty-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  margin: 0.4rem 0.5rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.call-live-indicator-dot.idle {
+  background: #64748b;
+  box-shadow: none;
+}
+
+/* Phone / Mobile layout: keep on right side ("phone ma aacha hai") */
+@media (max-width: 768px) {
+  .call-floating-dock {
+    left: auto !important;
+    right: 16px !important;
+    bottom: 84px !important;
+    align-items: flex-end !important;
+  }
+  .call-launcher-pill {
+    left: auto !important;
+    right: 16px !important;
+    bottom: 84px !important;
+  }
+  .call-floating-dock .call-video-grid-container {
+    justify-content: flex-end !important;
+    max-width: 320px;
+    max-height: 240px;
+  }
+}
