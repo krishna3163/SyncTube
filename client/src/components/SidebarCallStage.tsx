@@ -294,13 +294,29 @@ const SidebarParticipantTile: React.FC<{
         ref={videoRef}
         autoPlay
         playsInline
-        muted={Boolean(participant.isLocal)}
+        muted={true}
         className="sidebar-meet-video"
         style={{
           display: hasVideoTrack ? 'block' : 'none',
           transform: participant.isLocal && !participant.isScreenSharing ? 'scaleX(-1)' : 'none',
         }}
       />
+
+      {/* Clean single-source remote audio playback without dual-element comb filtering */}
+      {!participant.isLocal && participant.stream && (
+        <audio
+          ref={(el) => {
+            if (el && participant.stream) {
+              if (el.srcObject !== participant.stream) {
+                el.srcObject = participant.stream;
+                el.play().catch(() => {});
+              }
+            }
+          }}
+          autoPlay
+          playsInline
+        />
+      )}
 
       {!hasVideoTrack && (
         <div className="sidebar-meet-avatar-wrap">

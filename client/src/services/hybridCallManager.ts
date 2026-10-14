@@ -745,7 +745,19 @@ export class HybridCallManager {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          // @ts-ignore
+          googEchoCancellation: { ideal: true },
+          // @ts-ignore
+          googAutoGainControl: { ideal: true },
+          // @ts-ignore
+          googNoiseSuppression: { ideal: true },
+          // @ts-ignore
+          googHighpassFilter: { ideal: true },
+        },
         video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
       });
 

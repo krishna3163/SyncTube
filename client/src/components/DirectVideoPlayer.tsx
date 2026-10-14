@@ -208,7 +208,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
           const hasNativeHevc = checkBrowserHevcSupport(false);
           // Never force WASM software transcoding on mobile (causes CPU choke and stutter)
           // or if the browser natively supports hardware HEVC decode (Edge, Safari)
-          const shouldForceTranscode = !isSafari && !hasNativeHevc && !isMobileDevice;
+          // Only transcode when necessary to prevent CPU starvation and audio buffer distortion
+          const shouldForceTranscode = false;
 
           try {
             console.log(`[SyncTube] Initializing attachHevcSupport (forceTranscode=${shouldForceTranscode})...`);

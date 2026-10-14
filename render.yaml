@@ -3,7 +3,7 @@ services:
     name: synctube-server
     runtime: node
     branch: main
-    buildCommand: npm ci --include=dev && npm run build:server && npm run build:client
+    buildCommand: MEDIASOUP_WORKER_BIN=false npm ci --include=dev && npm run build:server && npm run build:client
     startCommand: npm start -w server
     healthCheckPath: /health
     envVars:
@@ -13,6 +13,8 @@ services:
         value: production
       - key: PORT
         value: "10000"
+      - key: MEDIASOUP_WORKER_BIN
+        value: "false"
       # Room state is process-local; keep one process per instance unless shared room storage is configured.
       - key: CLUSTER
         value: "0"

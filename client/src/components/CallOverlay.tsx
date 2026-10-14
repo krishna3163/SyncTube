@@ -398,7 +398,7 @@ const ParticipantTile: React.FC<{
         ref={videoRef}
         autoPlay
         playsInline
-        muted={Boolean(participant.isLocal)}
+        muted={true}
         style={{
           width: '100%',
           height: '100%',
