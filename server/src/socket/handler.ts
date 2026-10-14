@@ -1,3 +1,19 @@
+import { callTopologyPolicyManager } from '../media/callTopologyPolicy.js';
+import { mediasoupManager } from '../media/mediasoupManager.js';
+import {
+  SfuGetCapabilitiesSchema,
+  SfuCreateTransportSchema,
+  SfuConnectTransportSchema,
+  SfuProduceSchema,
+  SfuConsumeSchema,
+  SfuConsumerResumeSchema,
+  SfuPreferredLayersSchema,
+  SfuCloseProducerSchema,
+  CallSfuReadySchema,
+  CallP2POfferSchema,
+  CallP2PAnswerSchema,
+  CallP2PIceCandidateSchema,
+} from './schemas.js';
 import { Server, Socket } from 'socket.io';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { RoomManager } from '../models/RoomManager.js';
@@ -1458,7 +1474,7 @@ export function setupSocketHandlers(
       } catch {}
     });
 
-    // 29. VOICE & VIDEO ADAPTIVE CALL SIGNALING (P2P 1-to-1 / Mesh 2-6 / Adaptive Audio+Video >6)
+    // 29. VOICE & VIDEO ADAPTIVE CALL SIGNALING (Hybrid WebRTC P2P + Mediasoup SFU)
     socket.on('call:join', (rawPayload: unknown) => {
       try {
         const { room, participant } = getContext();
@@ -1484,12 +1500,27 @@ export function setupSocketHandlers(
           isScreenSharing: false,
         };
 
+        // Evaluate topology with CallTopologyPolicyManager
+        const decision = callTopologyPolicyManager.evaluateOnJoin(roomId, socket.id);
+
+        if (decision.targetMode === 'sfu') {
+          mediasoupManager.getOrCreateCallRouter(roomId).catch((err: any) => {
+            console.error('Failed to pre-warm Mediasoup router:', err);
+          });
+        }
+
         // Existing participants in the call
         const existingCallers = Array.from(roomCalls.values());
 
-        // Send existing participants to the joining caller
+        // Send existing participants & initial topology state to the joining caller
         socket.emit('call:existing_participants', {
           participants: existingCallers,
+          topology: {
+            mode: decision.targetMode,
+            version: decision.version,
+            activeCallers: decision.callers,
+            isTransitioning: decision.targetMode === 'sfu' && decision.previousMode === 'p2p',
+          },
         });
 
         // Add to room's active call map
@@ -1503,9 +1534,35 @@ export function setupSocketHandlers(
           count: roomCalls.size,
           participants: Array.from(roomCalls.values()),
         });
+
+        // Notify room if topology shifted (e.g. 2nd caller enables P2P or 3rd caller triggers SFU)
+        if (decision.shouldTransition) {
+          io.to(roomId).emit('call:topology_transition', {
+            previousMode: decision.previousMode,
+            mode: decision.targetMode,
+            version: decision.version,
+            activeCallers: decision.callers,
+          });
+        }
       } catch (err: any) {
         sendError('INTERNAL_ERROR', err?.message || 'Failed to join voice/video call');
       }
+    });
+
+    socket.on('call:sfu_ready', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+        const parsed = CallSfuReadySchema.safeParse(rawPayload);
+        const version = parsed.success && parsed.data?.version ? parsed.data.version : 1;
+        const confirmed = callTopologyPolicyManager.confirmTransition(room.id, version);
+        if (confirmed) {
+          io.to(room.id).emit('call:topology_confirmed', {
+            mode: 'sfu',
+            version,
+          });
+        }
+      } catch {}
     });
 
     socket.on('call:media_state', (rawPayload: unknown) => {
@@ -1562,6 +1619,23 @@ export function setupSocketHandlers(
           if (roomCalls.size === 0) {
             activeRoomCalls.delete(roomId);
           }
+
+          // Topology evaluation & SFU participant cleanup
+          const decision = callTopologyPolicyManager.evaluateOnLeave(roomId, socket.id);
+          mediasoupManager.handleParticipantLeave(roomId, socket.id);
+
+          if (decision.activeCallerCount <= 1) {
+            mediasoupManager.disposeCallRouter(roomId);
+          }
+
+          if (decision.shouldTransition) {
+            io.to(roomId).emit('call:topology_transition', {
+              previousMode: decision.previousMode,
+              mode: decision.targetMode,
+              version: decision.version,
+              activeCallers: decision.callers,
+            });
+          }
         }
       } catch {}
     });
@@ -1595,6 +1669,255 @@ export function setupSocketHandlers(
       } catch {}
     });
 
+    // ==========================================
+    // 30. WEBRTC P2P 1-TO-1 CALL SIGNALING (Strict Room-Scope & Caller Verification)
+    // ==========================================
+    socket.on('call:p2p:offer', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+        const parsed = CallP2POfferSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, parsed.data.targetSocketId)) {
+          return sendError('FORBIDDEN', 'Signaling target is not an active caller in this room.');
+        }
+
+        io.to(parsed.data.targetSocketId).emit('call:p2p:offer', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          offer: parsed.data.offer,
+        });
+      } catch {}
+    });
+
+    socket.on('call:p2p:answer', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+        const parsed = CallP2PAnswerSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, parsed.data.targetSocketId)) {
+          return sendError('FORBIDDEN', 'Signaling target is not an active caller in this room.');
+        }
+
+        io.to(parsed.data.targetSocketId).emit('call:p2p:answer', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          answer: parsed.data.answer,
+        });
+      } catch {}
+    });
+
+    socket.on('call:p2p:ice_candidate', (rawPayload: unknown) => {
+      try {
+        const { room } = getContext();
+        if (!room) return;
+        const parsed = CallP2PIceCandidateSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, parsed.data.targetSocketId)) {
+          return sendError('FORBIDDEN', 'Signaling target is not an active caller in this room.');
+        }
+
+        io.to(parsed.data.targetSocketId).emit('call:p2p:ice_candidate', {
+          fromSocketId: socket.id,
+          fromUserId: socket.data.userId,
+          candidate: parsed.data.candidate,
+        });
+      } catch {}
+    });
+
+    // ==========================================
+    // 31. MEDIASOUP SFU SIGNALING (Group Calls >= 3)
+    // ==========================================
+    socket.on('sfu:get_router_capabilities', async (_payload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
+
+        const rtpCapabilities = await mediasoupManager.getRouterCapabilities(room.id);
+        callback?.({ success: true, rtpCapabilities });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to get router capabilities.' });
+      }
+    });
+
+    socket.on('sfu:create_transport', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
+
+        const parsed = SfuCreateTransportSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid transport creation payload.' });
+        }
+
+        const transportDto = await mediasoupManager.createWebRtcTransport(room.id, socket.id, parsed.data.direction);
+        callback?.({ success: true, transport: transportDto });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to create transport.' });
+      }
+    });
+
+    socket.on('sfu:connect_transport', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const parsed = SfuConnectTransportSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid transport connect payload.' });
+        }
+
+        await mediasoupManager.connectWebRtcTransport(room.id, socket.id, parsed.data.transportId, parsed.data.dtlsParameters as any);
+        callback?.({ success: true });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to connect transport.' });
+      }
+    });
+
+    socket.on('sfu:produce', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        const parsed = SfuProduceSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid produce payload.' });
+        }
+
+        const producerId = await mediasoupManager.createProducer(
+          room.id,
+          socket.id,
+          participant.userId,
+          parsed.data.transportId,
+          parsed.data.kind,
+          parsed.data.rtpParameters as any,
+          parsed.data.appData
+        );
+
+        socket.to(room.id).emit('call:producer_added', {
+          producerId,
+          producerSocketId: socket.id,
+          producerUserId: participant.userId,
+          producerUsername: participant.username,
+          kind: parsed.data.kind,
+        });
+
+        callback?.({ success: true, producerId });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to produce media.' });
+      }
+    });
+
+    socket.on('sfu:consume', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const parsed = SfuConsumeSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid consume payload.' });
+        }
+
+        const consumerDto = await mediasoupManager.createConsumer(
+          room.id,
+          socket.id,
+          parsed.data.transportId,
+          parsed.data.producerId,
+          parsed.data.rtpCapabilities as any
+        );
+
+        callback?.({ success: true, consumer: consumerDto });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to consume producer.' });
+      }
+    });
+
+    socket.on('sfu:consumer_resume', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const parsed = SfuConsumerResumeSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid consumer resume payload.' });
+        }
+
+        await mediasoupManager.resumeConsumer(room.id, socket.id, parsed.data.consumerId);
+        callback?.({ success: true });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to resume consumer.' });
+      }
+    });
+
+    socket.on('sfu:consumer_preferred_layers', async (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const parsed = SfuPreferredLayersSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid preferred layers payload.' });
+        }
+
+        await mediasoupManager.setPreferredLayers(
+          room.id,
+          socket.id,
+          parsed.data.consumerId,
+          parsed.data.spatialLayer,
+          parsed.data.temporalLayer
+        );
+        callback?.({ success: true });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to set preferred layers.' });
+      }
+    });
+
+    socket.on('sfu:close_producer', (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const parsed = SfuCloseProducerSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return callback?.({ success: false, error: 'Invalid close producer payload.' });
+        }
+
+        mediasoupManager.closeProducer(room.id, socket.id, parsed.data.producerId);
+        socket.to(room.id).emit('call:producer_removed', {
+          producerId: parsed.data.producerId,
+          producerSocketId: socket.id,
+        });
+
+        callback?.({ success: true });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to close producer.' });
+      }
+    });
+
+    socket.on('sfu:get_active_producers', (_payload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room } = getContext();
+        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+
+        const producers = mediasoupManager.getActiveProducers(room.id, socket.id);
+        callback?.({ success: true, producers });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message || 'Failed to get active producers.' });
+      }
+    });
+
     // DISCONNECT
     socket.on('disconnect', () => {
       const roomId = socket.data.roomId;
@@ -1614,6 +1937,22 @@ export function setupSocketHandlers(
         });
         if (roomCalls.size === 0) {
           activeRoomCalls.delete(roomId);
+        }
+
+        const decision = callTopologyPolicyManager.evaluateOnLeave(roomId, socket.id);
+        mediasoupManager.handleParticipantLeave(roomId, socket.id);
+
+        if (decision.activeCallerCount <= 1) {
+          mediasoupManager.disposeCallRouter(roomId);
+        }
+
+        if (decision.shouldTransition) {
+          io.to(roomId).emit('call:topology_transition', {
+            previousMode: decision.previousMode,
+            mode: decision.targetMode,
+            version: decision.version,
+            activeCallers: decision.callers,
+          });
         }
 
         const roomShare = activeRoomScreenShares.get(roomId);

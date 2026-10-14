@@ -11,6 +11,7 @@ import {
   Volume2,
   Users,
   Radio,
+  Wifi,
 } from 'lucide-react';
 import { webrtcCallManager, CallParticipantState } from '../services/webrtcCallManager.js';
 import { emitStartTabStream, emitStopTabStream } from '../services/socket.js';
@@ -38,6 +39,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [topologyMode, setTopologyMode] = useState<'idle' | 'p2p' | 'sfu'>('idle');
+  const [networkQuality, setNetworkQuality] = useState<{ state: 'good' | 'unstable' | 'poor'; rtt: number; packetLoss: number }>({
+    state: 'good',
+    rtt: 0,
+    packetLoss: 0,
+  });
   const [joining, setJoining] = useState(false);
 
   useEffect(() => {
@@ -74,7 +81,12 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     socket?.on('room:tab_stream_started', onStreamStarted);
     socket?.on('room:tab_stream_stopped', onStreamStopped);
 
+    const unsubTopo = webrtcCallManager.subscribeTopology((m) => setTopologyMode(m));
+    const unsubNet = webrtcCallManager.subscribeNetworkQuality((q) => setNetworkQuality(q));
+
     return () => {
+      unsubTopo();
+      unsubNet();
       unsubPeers();
       unsubCount();
       unsubForceMute();
@@ -257,6 +269,40 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           <Radio size={14} color="#10b981" />
           <span style={{ fontSize: '12px', fontWeight: 600, color: '#f8fafc' }}>
             {participants.length} in call
+          </span>
+          {topologyMode !== 'idle' && (
+            <span
+              style={{
+                fontSize: '9px',
+                fontWeight: 800,
+                padding: '1px 5px',
+                borderRadius: '4px',
+                background: topologyMode === 'p2p' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(168, 85, 247, 0.25)',
+                color: topologyMode === 'p2p' ? '#60a5fa' : '#c084fc',
+                border: topologyMode === 'p2p' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(168, 85, 247, 0.5)',
+                textTransform: 'uppercase',
+              }}
+              title={topologyMode === 'p2p' ? 'Direct 1-to-1 WebRTC P2P' : 'Mediasoup SFU Media Router'}
+            >
+              {topologyMode}
+            </span>
+          )}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              fontSize: '9px',
+              padding: '1px 5px',
+              borderRadius: '4px',
+              background: networkQuality.state === 'good' ? 'rgba(16, 185, 129, 0.15)' : networkQuality.state === 'unstable' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+              color: networkQuality.state === 'good' ? '#34d399' : networkQuality.state === 'unstable' ? '#fde047' : '#f87171',
+              border: '1px solid currentColor',
+            }}
+            title={`Network: ${networkQuality.state.toUpperCase()} | RTT: ${networkQuality.rtt}ms | Loss: ${networkQuality.packetLoss}%`}
+          >
+            <Wifi size={10} />
+            <span>{networkQuality.rtt > 0 ? `${networkQuality.rtt}ms` : 'OK'}</span>
           </span>
         </div>
 

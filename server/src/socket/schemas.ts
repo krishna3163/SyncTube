@@ -222,3 +222,67 @@ export const CallMediaStateSchema = z.object({
   isSpeaking: z.boolean().optional(),
 });
 
+
+
+// ==========================================
+// HYBRID WEBRTC P2P & MEDIASOUP SFU SCHEMAS
+// ==========================================
+
+export const SfuGetCapabilitiesSchema = z.object({
+  roomId: z.string().trim().max(100).optional(),
+}).optional();
+
+export const SfuCreateTransportSchema = z.object({
+  direction: z.enum(['send', 'recv']),
+});
+
+export const SfuConnectTransportSchema = z.object({
+  transportId: z.string().trim().min(1).max(200),
+  dtlsParameters: z.record(z.any()),
+});
+
+export const SfuProduceSchema = z.object({
+  transportId: z.string().trim().min(1).max(200),
+  kind: z.enum(['audio', 'video']),
+  rtpParameters: z.record(z.any()),
+  appData: z.record(z.any()).optional(),
+});
+
+export const SfuConsumeSchema = z.object({
+  transportId: z.string().trim().min(1).max(200),
+  producerId: z.string().trim().min(1).max(200),
+  rtpCapabilities: z.record(z.any()),
+});
+
+export const SfuConsumerResumeSchema = z.object({
+  consumerId: z.string().trim().min(1).max(200),
+});
+
+export const SfuPreferredLayersSchema = z.object({
+  consumerId: z.string().trim().min(1).max(200),
+  spatialLayer: z.number().int().min(0).max(3),
+  temporalLayer: z.number().int().min(0).max(3).optional(),
+});
+
+export const SfuCloseProducerSchema = z.object({
+  producerId: z.string().trim().min(1).max(200),
+});
+
+export const CallSfuReadySchema = z.object({
+  version: z.number().int().positive().optional(),
+}).optional();
+
+export const CallP2POfferSchema = z.object({
+  targetSocketId: z.string().trim().min(1).max(200),
+  offer: z.any(),
+});
+
+export const CallP2PAnswerSchema = z.object({
+  targetSocketId: z.string().trim().min(1).max(200),
+  answer: z.any(),
+});
+
+export const CallP2PIceCandidateSchema = z.object({
+  targetSocketId: z.string().trim().min(1).max(200),
+  candidate: z.any(),
+});
