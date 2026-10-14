@@ -10,6 +10,9 @@ import {
   ChevronUp,
   Volume2,
   Users,
+  Pin,
+  Wifi,
+  Activity,
 } from 'lucide-react';
 import { webrtcCallManager, CallParticipantState } from '../services/webrtcCallManager.js';
 
@@ -35,6 +38,12 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   const [isCameraOff, setIsCameraOff] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [topologyMode, setTopologyMode] = useState<'idle' | 'p2p' | 'sfu'>('idle');
+  const [networkQuality, setNetworkQuality] = useState<{ state: 'good' | 'unstable' | 'poor'; rtt: number; packetLoss: number }>({
+    state: 'good',
+    rtt: 0,
+    packetLoss: 0,
+  });
 
   useEffect(() => {
     webrtcCallManager.setLocalUser(currentUserId, currentUsername, currentUserAvatarId);
@@ -56,10 +65,15 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
       setIsMuted(true);
     });
 
+    const unsubTopology = webrtcCallManager.subscribeTopology((mode) => setTopologyMode(mode));
+    const unsubNet = webrtcCallManager.subscribeNetworkQuality((q) => setNetworkQuality(q));
+
     return () => {
       unsubPeers();
       unsubCount();
       unsubForceMute();
+      unsubTopology();
+      unsubNet();
     };
   }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
@@ -108,6 +122,44 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
           <span className={`call-live-indicator-dot ${callCount > 0 ? 'active' : 'idle'}`} />
           <span className="sidebar-call-header-title">
             Meet Call <span className="call-count-pill">{callCount}</span>
+            {inCall && topologyMode !== 'idle' && (
+              <span
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  background: topologyMode === 'p2p' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(168, 85, 247, 0.25)',
+                  color: topologyMode === 'p2p' ? '#60a5fa' : '#c084fc',
+                  border: topologyMode === 'p2p' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(168, 85, 247, 0.5)',
+                  textTransform: 'uppercase',
+                  marginLeft: '4px',
+                }}
+                title={topologyMode === 'p2p' ? 'Direct 1-to-1 WebRTC P2P' : 'Mediasoup SFU Media Router'}
+              >
+                {topologyMode}
+              </span>
+            )}
+            {inCall && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  fontSize: '9px',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  background: networkQuality.state === 'good' ? 'rgba(16, 185, 129, 0.15)' : networkQuality.state === 'unstable' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  color: networkQuality.state === 'good' ? '#34d399' : networkQuality.state === 'unstable' ? '#fde047' : '#f87171',
+                  border: '1px solid currentColor',
+                  marginLeft: '4px',
+                }}
+                title={`Network: ${networkQuality.state.toUpperCase()} | RTT: ${networkQuality.rtt}ms | Loss: ${networkQuality.packetLoss}%`}
+              >
+                <Wifi size={10} />
+                <span>{networkQuality.rtt > 0 ? `${networkQuality.rtt}ms` : 'OK'}</span>
+              </span>
+            )}
           </span>
           {participants.some((p) => p.isSpeaking) && (
             <span className="active-speaker-wave-badge">
@@ -189,6 +241,7 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                 key={p.socketId}
                 participant={p}
                 isHostOrMod={Boolean(isHostOrMod)}
+                onPin={(targetSocketId) => webrtcCallManager.pinParticipant(targetSocketId)}
                 onMuteParticipant={(targetSocketId, targetUserId, targetName) => {
                   webrtcCallManager.hostMuteUser(targetSocketId, targetUserId);
                   onNotify?.(`Muted @${targetName} 🔇`, 'info');
@@ -210,10 +263,12 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
 const SidebarParticipantTile: React.FC<{
   participant: CallParticipantState;
   isHostOrMod: boolean;
+  onPin: (socketId: string | null) => void;
   onMuteParticipant: (socketId: string, userId: string, name: string) => void;
 }> = ({
   participant,
   isHostOrMod,
+  onPin,
   onMuteParticipant,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -290,6 +345,34 @@ const SidebarParticipantTile: React.FC<{
         </button>
       )}
 
+      {!participant.isLocal && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPin(participant.isPinned ? null : participant.socketId);
+          }}
+          title={participant.isPinned ? 'Unpin Spotlight' : 'Pin Spotlight Feed (High Resolution)'}
+          style={{
+            position: 'absolute',
+            top: '5px',
+            right: '5px',
+            zIndex: 10,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            background: participant.isPinned ? '#a855f7' : 'rgba(15, 23, 42, 0.75)',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            cursor: 'pointer',
+          }}
+        >
+          <Pin size={10} />
+        </button>
+      )}
       <div className="sidebar-meet-footer">
         <span className="sidebar-meet-name">
           {participant.username} {participant.isLocal ? '(You)' : ''}

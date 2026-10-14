@@ -77,16 +77,22 @@ The invite image contains a temporary room code and a local development link. Cr
 
 YouTube itself controls the embedded player, including video availability, ads, autoplay restrictions, captions, and supported quality levels.
 
-### Cinema section: movies, web series & anime (MovieBox backend)
+### Adaptive Hybrid Voice & Video Calling (WebRTC P2P + Mediasoup SFU)
 
-- Browse the in-room **Cinema** tab in the search dialog with four catalogue categories: **🔥 Trending**, **🎬 Movies**, **📺 Web Series**, and **🍥 Anime**, plus genre quick-search chips.
-- The server resolves live stream links through the MovieBox API (the provider used by [MovieBox-Tui](https://github.com/mesamirh/MovieBox-Tui)): search, details, seasons/episodes, and play-info/resources endpoints.
-- Pick a **video quality like YouTube** before you press play: a quality menu lists **Auto (adaptive)**, **4K**, **1080p**, **720p**, **480p**, … with format, codec, and size chips for each option.
-- Quality rungs come from MovieBox `collectionResolutions` and per-resolution resource pages; adaptive titles stream through a proxied DASH manifest whose ladder can also be locked from the player's quality gear during playback.
-- Series open a season/episode picker first; each episode resolves its own quality ladder before playback or queueing.
-- Streams play through the synchronized HTML5/DASH player, so hosts, moderators, and participant requests all share the same room timeline; multi-language subtitles returned by the provider are available on the resolved streams.
-- All media is proxied server-side with SSRF guards and an allow-list of media hosts; SyncTube does not host or distribute video files.
-- Offline demo: run the server with `MOVIEBOX_FIXTURE=1` to browse a sample catalogue (movies, series, and anime) backed by local demo streams in `server/fixture-media` instead of the live MovieBox API.
+- **Adaptive Topology Management**:
+  - **1-to-1 Calls (2 Callers)**: Direct WebRTC peer-to-peer (P2P) mode with STUN and configurable TURN relay. Eliminates media server CPU and bandwidth overhead.
+  - **Group Calls (3+ Callers)**: High-performance [Mediasoup v3](https://mediasoup.org) Selective Forwarding Unit (SFU) pipeline with dedicated native C++ worker processes and room-scoped media routers. Strictly avoids full-mesh P2P group degradation.
+- **Atomic Coordinated Migration**:
+  - When a 3rd caller joins an active 1-to-1 P2P call, the server coordinates an atomic migration to the Mediasoup SFU. Existing P2P streams remain active until SFU transports and producers are confirmed ready, preventing sudden audio/video drops.
+- **Anti-Flapping Hysteresis**:
+  - When an SFU call drops from 3 to 2 callers, the call remains on the SFU until all participants leave or the call ends.
+- **Simulcast & Spotlight Pinning**:
+  - High-efficiency multi-layer video simulcast encoding (low, medium, high).
+  - Pinning a participant feed elevates their stream to maximum resolution while throttling background tiles to save receiver bandwidth.
+- **Network Telemetry & Resilience**:
+  - Throttled real-time telemetry tracks RTT, packet loss, and jitter, presenting an adaptive network quality indicator (`Good` / `Unstable` / `Poor`).
+- **Complete Architecture Documentation**:
+  - Detailed diagrams, state transitions, security controls, and deployment requirements are documented in [docs/HYBRID_WEBRTC_SFU_ARCHITECTURE.md](docs/HYBRID_WEBRTC_SFU_ARCHITECTURE.md).
 
 ### Shared playlist and video search
 
