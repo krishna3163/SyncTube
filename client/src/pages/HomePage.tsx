@@ -25,6 +25,7 @@ import {
   Film,
   Globe,
   Shield,
+  Bot,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { detectClientMedia } from '../utils/media.js';
@@ -81,6 +82,10 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [isAiRunning, setIsAiRunning] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   // Form inline validation states (form-design & error-handling-ux)
@@ -412,6 +417,66 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
 
   const currentAvatar = getAvatarById(selectedAvatarId) || ANIME_AVATARS[0];
 
+  const aiAssistantEnabled = Boolean(
+    import.meta.env.VITE_AI_ASSISTANT_MODE === 'enabled' ||
+    import.meta.env.VITE_OPENAI_API_KEY ||
+    import.meta.env.VITE_AI_PROVIDER
+  );
+
+  const quickAiPrompts = [
+    'Create a private movie-night room.',
+    'Find educational videos and prep a study playlist.',
+    'Add a cozy date-night vibe to this room.',
+    'Explain why the playback feels out of sync.',
+  ];
+
+  const handleAiAssistantSubmit = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    const trimmed = aiPrompt.trim();
+    if (!trimmed) {
+      setAiStatus('Please enter a request so the assistant can help.');
+      return;
+    }
+
+    if (!aiAssistantEnabled) {
+      setAiStatus('AI assistant is currently disabled until a provider and API key are configured in the environment.');
+      return;
+    }
+
+    setIsAiRunning(true);
+    setAiStatus('Preparing request…');
+
+    try {
+      const apiUrl = getApiUrl();
+      const res = await fetch(`${apiUrl}/api/ai/assistant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmed,
+          roomId: null,
+          userId: userId,
+          context: {
+            page: 'home',
+            username: createUsername || joinUsername || 'Guest',
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || 'The AI assistant request failed.');
+      }
+
+      const data = await res.json().catch(() => ({}));
+      setAiStatus(data.message || 'Your request has been queued for the AI assistant.');
+      setAiPrompt('');
+    } catch (error) {
+      setAiStatus((error as Error).message || 'The AI assistant is currently unavailable.');
+    } finally {
+      setIsAiRunning(false);
+    }
+  };
+
   const featureCards = [
     {
       emoji: '⚡',
@@ -480,7 +545,17 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               <Sparkles size={14} />
               <span>Features</span>
             </button>
-            
+            <button
+              type="button"
+              className="home-nav-pill"
+              onClick={() => {
+                setIsAiAssistantOpen(true);
+                setAiStatus(null);
+              }}
+            >
+              <Bot size={14} />
+              <span>AI Assistant</span>
+            </button>
           </div>
         </nav>
 
@@ -1010,6 +1085,110 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
                 <div>
                   <h4 style={{ margin: '0 0 0.2rem 0', color: 'var(--text-main)' }}>Enjoy Perfectly Synced Streams</h4>
                   <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' }}>Watch videos in real-time sync with floating reactions, live chat, and party sound effects!</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Assistant Modal */}
+      {isAiAssistantOpen && (
+        <div className="modal-backdrop" onClick={() => setIsAiAssistantOpen(false)}>
+          <div
+            className="glass-panel modal-card ai-assistant-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-assistant-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Bot size={20} color="var(--accent)" />
+                <h2 id="ai-assistant-title" className="modal-title">AI Watch Party Assistant</h2>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsAiAssistantOpen(false)}
+                title="Close"
+                aria-label="Close AI assistant modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body ai-assistant-body">
+              <div className="ai-assistant-banner">
+                <strong>{aiAssistantEnabled ? 'Provider configured' : 'Safe-disabled mode'}</strong>
+                <span>
+                  {aiAssistantEnabled
+                    ? 'The assistant can use an enabled provider. Configure backend credentials to activate live execution.'
+                    : 'No AI provider is configured yet. The UI is ready, but live model requests stay disabled until credentials are added.'}
+                </span>
+              </div>
+
+              <div className="ai-assistant-prompt-row">
+                {quickAiPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    className="ai-assistant-prompt-chip"
+                    onClick={() => setAiPrompt(prompt)}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleAiAssistantSubmit} className="ai-assistant-form">
+                <label htmlFor="ai-assistant-input" className="input-label">What should the assistant do?</label>
+                <textarea
+                  id="ai-assistant-input"
+                  className="input-field ai-assistant-input"
+                  rows={5}
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                  placeholder="Try: Create a private movie-night room or find two educational videos for a study session."
+                />
+
+                <div className="ai-assistant-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => setAiPrompt('')}>
+                    Clear
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={isAiRunning || !aiPrompt.trim()}>
+                    {isAiRunning ? 'Working…' : 'Run assistant'}
+                  </button>
+                </div>
+              </form>
+
+              {aiStatus && (
+                <div className="ai-assistant-status" role="status" aria-live="polite">
+                  {aiStatus}
+                </div>
+              )}
+
+              <div className="ai-assistant-structured-actions">
+                <div className="ai-structured-action">
+                  <span>1</span>
+                  <div>
+                    <strong>Create Room</strong>
+                    <small>Host a private watch party with the right vibe and permissions.</small>
+                  </div>
+                </div>
+                <div className="ai-structured-action">
+                  <span>2</span>
+                  <div>
+                    <strong>Open Room</strong>
+                    <small>Resume party context and restore the previous room state.</small>
+                  </div>
+                </div>
+                <div className="ai-structured-action">
+                  <span>3</span>
+                  <div>
+                    <strong>Add to Queue</strong>
+                    <small>Queue recommended videos or curated mood-based picks.</small>
+                  </div>
                 </div>
               </div>
             </div>

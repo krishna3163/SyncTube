@@ -56,6 +56,13 @@ The invite image contains a temporary room code and a local development link. Cr
 
 ## Features
 
+### AI watch-party assistant (provider-gated)
+
+- **Assistant entry point**: an AI assistant button is available from the homepage and room context to collect natural-language requests.
+- **Structured action model**: the assistant presents request-driven actions such as Create Room, Open Room, and Add to Queue via typed, UI-safe cards instead of raw generated HTML.
+- **Safe-disabled mode**: if no provider is configured, the interface remains available but clearly reports that live model access is disabled until credentials are added to the environment.
+- **Clear integration boundary**: future provider-backed execution should use backend API keys and server-side validation; the frontend never bypasses permissions or pretends a model is active without configuration.
+
 ### Create, join, and return to rooms
 
 - **Create a room** with an optional YouTube video URL or 11-character video ID. The creator becomes the host.

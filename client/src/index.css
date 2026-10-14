@@ -6279,6 +6279,136 @@ body {
   font-size: 1.4rem;
 }
 
+.ai-assistant-modal {
+  max-width: 640px;
+}
+
+.ai-assistant-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ai-assistant-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 210, 31, 0.08);
+  border: 1px solid rgba(255, 210, 31, 0.22);
+  color: var(--text-main);
+}
+
+.ai-assistant-banner strong {
+  color: var(--accent);
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-assistant-banner span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.ai-assistant-prompt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ai-assistant-prompt-chip {
+  padding: 0.45rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.ai-assistant-prompt-chip:hover {
+  border-color: rgba(255, 210, 31, 0.35);
+  background: rgba(255, 210, 31, 0.08);
+  color: var(--accent);
+}
+
+.ai-assistant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ai-assistant-input {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ai-assistant-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.ai-assistant-status {
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  color: #dbeafe;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.ai-assistant-structured-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ai-structured-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ai-structured-action span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 210, 31, 0.15);
+  border: 1px solid rgba(255, 210, 31, 0.28);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+
+.ai-structured-action div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.ai-structured-action strong {
+  color: var(--text-main);
+  font-size: 0.88rem;
+}
+
+.ai-structured-action small {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 @media (max-width: 860px) {
   .home-top-navbar {
     padding: 0.75rem 1.2rem;
