@@ -5723,6 +5723,97 @@ body {
   padding: 0 1.5rem;
 }
 
+.feature-showcase {
+  margin: 1.25rem auto 2.5rem;
+  padding: 1.5rem;
+  background: rgba(18, 14, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 10px 42px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(14px);
+}
+
+.feature-showcase-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+
+.feature-showcase-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.8rem;
+  border-radius: 9999px;
+  background: rgba(255, 210, 31, 0.1);
+  border: 1px solid rgba(255, 210, 31, 0.2);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feature-showcase-header h2 {
+  margin: 0;
+  font-size: clamp(1.55rem, 3vw, 2.3rem);
+  font-weight: 800;
+  color: #fff;
+}
+
+.feature-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.feature-showcase-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.15rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.feature-showcase-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 210, 31, 0.32);
+  box-shadow: 0 8px 24px rgba(255, 210, 31, 0.1);
+}
+
+.feature-showcase-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 12px;
+  background: rgba(255, 210, 31, 0.1);
+  border: 1px solid rgba(255, 210, 31, 0.2);
+  font-size: 1.3rem;
+}
+
+.feature-showcase-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.feature-showcase-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
 /* Two Main Action Cards Grid */
 .home-grid {
   display: grid;
@@ -6195,6 +6286,9 @@ body {
   .home-nav-pills {
     display: none;
   }
+  .feature-showcase-grid {
+    grid-template-columns: 1fr 1fr;
+  }
   .home-grid {
     grid-template-columns: 1fr !important;
   }
@@ -6206,6 +6300,16 @@ body {
   }
   .hero-decor-right {
     display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .feature-showcase {
+    padding: 1.1rem;
+  }
+
+  .feature-showcase-grid {
+    grid-template-columns: 1fr;
   }
 }
 
