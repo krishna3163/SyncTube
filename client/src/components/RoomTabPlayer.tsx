@@ -11,6 +11,8 @@ import {
   Tv,
   Radio,
   Users,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { emitStopTabStream, emitStartTabStream, emitAdminForceStopScreenShare } from '../services/socket.js';
 import type { Role } from '../types.js';
@@ -47,6 +49,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const [isSharing, setIsSharing] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
   const [streamTitle, setStreamTitle] = useState<string>('Shared Screen');
   const [streamerName, setStreamerName] = useState<string>('User');
   const [streamerSocketId, setStreamerSocketId] = useState<string>('');
@@ -218,8 +221,20 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           pc.ontrack = (event) => {
             if (videoRef.current && event.streams[0]) {
               videoRef.current.srcObject = event.streams[0];
-              videoRef.current.play().catch(() => {});
               setIsSharing(true);
+              const playPromise = videoRef.current.play();
+              if (playPromise !== undefined) {
+                playPromise.catch((err) => {
+                  console.warn('[WebRTC ScreenShare] Unmuted autoplay restricted on mobile:', err);
+                  if (videoRef.current) {
+                    videoRef.current.muted = true;
+                    setIsMuted(true);
+                    videoRef.current.play()
+                      .then(() => setAutoplayBlocked(true))
+                      .catch(() => setAutoplayBlocked(true));
+                  }
+                });
+              }
             }
           };
 
@@ -344,6 +359,18 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     if (videoRef.current) {
       videoRef.current.muted = !videoRef.current.muted;
       setIsMuted(videoRef.current.muted);
+      if (!videoRef.current.muted) {
+        setAutoplayBlocked(false);
+      }
+    }
+  };
+
+  const handleUserInteractPlay = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+      videoRef.current.play().catch(() => {});
+      setAutoplayBlocked(false);
     }
   };
 
@@ -361,10 +388,11 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       ref={containerRef}
       className={`room-tab-player-container ${isFullscreen ? 'is-fullscreen' : ''}`}
       style={{
-        position: 'relative',
+        position: 'absolute',
+        inset: 0,
         width: '100%',
         height: '100%',
-        minHeight: '440px',
+        minHeight: 0,
         background: '#090d16',
         borderRadius: '16px',
         overflow: 'hidden',
@@ -383,20 +411,20 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '12px 18px',
+          padding: '8px 12px',
           background: 'linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '9999px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>
-            <Radio size={12} color="#ef4444" /> LIVE SCREEN SHARE
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, overflow: 'hidden' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '9999px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5', fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }}>
+            <Radio size={11} color="#ef4444" /> LIVE
           </span>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {streamTitle}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {isStreamer ? (
             <button
               type="button"
@@ -407,16 +435,16 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                padding: '5px 12px',
-                fontSize: '12px',
+                padding: '4px 10px',
+                fontSize: '11px',
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px',
+                gap: '4px',
                 cursor: 'pointer',
               }}
             >
-              <StopCircle size={14} /> Stop Sharing
+              <StopCircle size={13} /> Stop Sharing
             </button>
           ) : (
             <>
@@ -433,26 +461,27 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
-                    padding: '5px 12px',
-                    fontSize: '12px',
+                    padding: '4px 10px',
+                    fontSize: '11px',
                     fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '5px',
+                    gap: '4px',
                     cursor: 'pointer',
                   }}
                   title="Host: Force stop active screen share"
                 >
-                  <StopCircle size={14} /> Stop User's Share
+                  <StopCircle size={13} /> Stop Share
                 </button>
               )}
               <button
                 type="button"
                 onClick={toggleMute}
                 className="btn-icon"
-                style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title={isMuted ? 'Unmute Stream' : 'Mute Stream'}
               >
-                {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
               </button>
             </>
           )}
@@ -461,9 +490,10 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             type="button"
             onClick={toggleFullscreen}
             className="btn-icon"
-            style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
           >
-            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
         </div>
       </div>
@@ -478,10 +508,44 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           width: '100%',
           height: '100%',
           flex: 1,
+          minHeight: 0,
           objectFit: 'contain',
           background: '#000',
         }}
+        onClick={autoplayBlocked ? handleUserInteractPlay : undefined}
       />
+
+      {/* Floating Tap to Unmute Overlay for Mobile Autoplay Restrictions */}
+      {autoplayBlocked && (
+        <button
+          type="button"
+          onClick={handleUserInteractPlay}
+          className="room-tab-unmute-overlay-btn"
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 15,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '7px 15px',
+            background: 'rgba(15, 23, 42, 0.92)',
+            border: '1px solid rgba(139, 92, 246, 0.6)',
+            borderRadius: '9999px',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <Volume2 size={15} color="var(--accent)" />
+          <span>Tap to unmute screen audio 🔊</span>
+        </button>
+      )}
 
       {/* Empty / Connecting / Share Prompt Overlay */}
       {!isSharing && (
@@ -493,30 +557,55 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '12px',
+            gap: '10px',
             background: 'radial-gradient(circle, #0f172a 0%, #020617 100%)',
             color: '#94a3b8',
-            padding: '24px',
+            padding: '16px',
             textAlign: 'center',
+            zIndex: 5,
           }}
         >
-          <Tv size={42} color="var(--accent)" />
-          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
-            Share Your Browser Tab Directly
-          </h3>
-          <p style={{ margin: 0, fontSize: '13px', maxWidth: '440px', lineHeight: 1.5 }}>
-            Stream synchronized video and crystal-clear tab audio directly to all friends in this room.
-          </p>
-          {(userRole === 'HOST' || userRole === 'MODERATOR') && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => startScreenShare(streamTitle)}
-              style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Share2 size={16} />
-              <span>Start Screen Share</span>
-            </button>
+          {isStreamer ? (
+            <>
+              <Tv size={36} color="var(--accent)" />
+              <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>
+                Share Your Screen
+              </h3>
+              <p style={{ margin: 0, fontSize: '12px', maxWidth: '360px', lineHeight: 1.4 }}>
+                Stream your device screen, browser tab, or window directly to everyone in this room.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => startScreenShare(streamTitle)}
+                style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', padding: '7px 16px' }}
+              >
+                <Share2 size={15} />
+                <span>Start Screen Share</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <Loader2 size={30} className="spin-icon" color="var(--accent)" />
+              <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '15px' }}>
+                Connecting to Live Screen Share…
+              </h3>
+              <p style={{ margin: 0, fontSize: '12px', maxWidth: '320px', lineHeight: 1.4 }}>
+                {streamerName ? `${streamerName} is sharing their screen.` : 'Waiting for host stream connection…'}
+              </p>
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => {
+                  socket?.emit('webrtc:request_stream', { streamerSocketId });
+                  onNotify('Re-requesting live screen stream…', 'info');
+                }}
+                style={{ marginTop: '4px', fontSize: '12px', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <RefreshCw size={12} />
+                <span>Retry Stream</span>
+              </button>
+            </>
           )}
         </div>
       )}

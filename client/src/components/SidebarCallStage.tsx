@@ -14,8 +14,10 @@ import {
   Wifi,
   Activity,
   MonitorOff,
+  Monitor,
 } from 'lucide-react';
 import { webrtcCallManager, CallParticipantState } from '../services/webrtcCallManager.js';
+import { socket, emitStartTabStream, emitStopTabStream } from '../services/socket.js';
 
 interface SidebarCallStageProps {
   currentUserId: string;
@@ -41,6 +43,7 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   const [callCount, setCallCount] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [joining, setJoining] = useState(false);
   const [topologyMode, setTopologyMode] = useState<'idle' | 'p2p' | 'sfu'>('idle');
@@ -82,12 +85,26 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
     const unsubTopology = webrtcCallManager.subscribeTopology((mode) => setTopologyMode(mode));
     const unsubNet = webrtcCallManager.subscribeNetworkQuality((q) => setNetworkQuality(q));
 
+    const handleStopShare = () => setIsScreenSharing(false);
+    const handleWindowMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'SYNCTUBE_START_TAB_SHARE') {
+        setIsScreenSharing(true);
+      }
+    };
+
+    window.addEventListener('message', handleWindowMsg);
+    socket.on('room:tab_stream_stopped', handleStopShare);
+    socket.on('call:force_stop_screenshare', handleStopShare);
+
     return () => {
       unsubPeers();
       unsubCount();
       unsubForceMute();
       unsubTopology();
       unsubNet();
+      window.removeEventListener('message', handleWindowMsg);
+      socket.off('room:tab_stream_stopped', handleStopShare);
+      socket.off('call:force_stop_screenshare', handleStopShare);
     };
   }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
@@ -114,6 +131,11 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   };
 
   const handleLeaveCall = () => {
+    if (isScreenSharing) {
+      emitStopTabStream();
+      webrtcCallManager.stopScreenShare();
+      setIsScreenSharing(false);
+    }
     webrtcCallManager.leaveCall();
     setInCall(false);
     onNotify?.('Left voice & video call', 'info');
@@ -127,6 +149,30 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   const handleToggleCamera = async () => {
     const off = await webrtcCallManager.toggleCamera();
     setIsCameraOff(off);
+  };
+
+  const handleToggleScreenShare = async () => {
+    if (isScreenSharing) {
+      emitStopTabStream();
+      webrtcCallManager.stopScreenShare();
+      setIsScreenSharing(false);
+      onNotify?.('Stopped screen sharing.', 'info');
+    } else {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        onNotify?.('Screen sharing is not supported on this browser or mobile device.', 'error');
+        return;
+      }
+      const title = `${currentUsername}'s Screen`;
+      emitStartTabStream(title, (res) => {
+        if (!res?.success) {
+          onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
+        } else {
+          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
+          setIsScreenSharing(true);
+          onNotify?.('Sharing your screen on the main stage!', 'success');
+        }
+      });
+    }
   };
 
   const isHostOrMod = userRole === 'HOST' || userRole === 'MODERATOR';
@@ -205,6 +251,14 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                 title={isCameraOff ? 'Turn camera on' : 'Turn camera off'}
               >
                 {isCameraOff ? <VideoOff size={13} /> : <Video size={13} />}
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleScreenShare}
+                className={`sidebar-call-ctrl-btn ${isScreenSharing ? 'screen-on' : 'screen-off'}`}
+                title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen on Main Stage'}
+              >
+                <Monitor size={13} />
               </button>
               <button
                 type="button"

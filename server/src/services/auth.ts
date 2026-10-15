@@ -8,6 +8,7 @@ export interface UserRecord {
   passwordHash: string;
   avatarId?: string;
   bio?: string;
+  gender?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -26,6 +27,7 @@ export interface UserProfile {
   username: string;
   avatarId?: string;
   bio?: string;
+  gender?: string;
   createdAt: number;
 }
 
@@ -206,7 +208,17 @@ export class AuthService {
     }
   }
 
-  public async updateProfile(userId: string, updates: { username?: string; avatarId?: string; bio?: string }): Promise<UserProfile> {
+  public async updateProfile(
+    userId: string,
+    updates: {
+      username?: string;
+      avatarId?: string;
+      bio?: string;
+      gender?: string;
+      currentPassword?: string;
+      newPassword?: string;
+    }
+  ): Promise<UserProfile> {
     let user = this.users.get(userId);
     if (!user && this.dbService && this.dbService.isConnectedToDb()) {
       user = (await this.dbService.findUserById(userId)) || undefined;
@@ -214,6 +226,20 @@ export class AuthService {
 
     if (!user) {
       throw new Error('User not found');
+    }
+
+    if (updates.newPassword) {
+      if (!updates.currentPassword) {
+        throw new Error('Current password is required to set a new password');
+      }
+      const isValid = verifyPassword(updates.currentPassword, user.passwordHash);
+      if (!isValid) {
+        throw new Error('Current password is incorrect');
+      }
+      if (updates.newPassword.length < 6) {
+        throw new Error('New password must be at least 6 characters long');
+      }
+      user.passwordHash = hashPassword(updates.newPassword);
     }
 
     if (updates.username && updates.username.trim()) {
@@ -224,6 +250,9 @@ export class AuthService {
     }
     if (updates.bio !== undefined) {
       user.bio = updates.bio.trim();
+    }
+    if (updates.gender !== undefined) {
+      user.gender = updates.gender.trim();
     }
     user.updatedAt = Date.now();
 
@@ -252,6 +281,7 @@ export class AuthService {
       username: user.username,
       avatarId: user.avatarId,
       bio: user.bio,
+      gender: user.gender,
       createdAt: user.createdAt,
     };
   }

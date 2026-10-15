@@ -218,22 +218,124 @@ server/
     __tests__/     API, room, socket, permission, and utility tests
 ```
 
-## Architecture
+## System Design Architecture
+
+SyncTube is engineered as an ultra-low latency, real-time multimedia platform combining authoritative state synchronization, adaptive hybrid WebRTC media routing, and ephemeral Chromium sandboxing.
+
+### High-Level System Architecture
 
 ```mermaid
-flowchart LR
-  BrowserA[Host browser] <-->|REST + Socket.IO| Server[Express + Socket.IO]
-  BrowserB[Guest browser] <-->|REST + Socket.IO| Server
-  Server --> RoomState[In-memory room state]
-  Server -. optional room playback metadata .-> Postgres[(PostgreSQL)]
-  BrowserA --> YouTube[YouTube embedded player]
-  BrowserB --> YouTube
+flowchart TB
+  subgraph CLIENT_TIER["🖥️ Client Tier (React 18 + TypeScript + Vite)"]
+    direction TB
+    UI["Modern Responsive UI\n(Vanilla CSS + Glassmorphism)"]
+    YT_SYNC["YouTube Sync Engine\n(IFrame API + Drift Guard)"]
+    DIRECT_PLAYER["Universal Media Player\n(MP4 / HLS .m3u8 Streams)"]
+    WEBRTC_CLIENT["WebRTC Call Manager\n(P2P PeerConnection / Mediasoup Device)"]
+    SCREEN_SHARE["Screen Share Subsystem\n(getDisplayMedia + Tap-To-Unmute Overlay)"]
+    TB_CLIENT["Ephemeral Browser Canvas\n(CDP Frame Decoder + Mouse/Key Dispatcher)"]
+    
+    UI --> YT_SYNC
+    UI --> DIRECT_PLAYER
+    UI --> WEBRTC_CLIENT
+    UI --> SCREEN_SHARE
+    UI --> TB_CLIENT
+  end
+
+  subgraph NETWORK_TIER["🌐 Network & Edge Tier"]
+    direction LR
+    EDGE_ROUTER["Edge Reverse Proxy & SSL\n(Vercel CDN / Render / Cloudflare)"]
+    WSS_RELAY["WebSocket Secure (WSS)\n(Socket.IO Real-Time Stream)"]
+    REST_HTTPS["REST HTTPS API\n(JSON Payloads + CORS / Helmet)"]
+  end
+
+  subgraph APP_TIER["⚙️ Node.js Real-Time Application Tier"]
+    direction TB
+    EXPRESS_APP["Express REST Server\n(/api/rooms, /api/auth, /api/sessions)"]
+    SOCKET_DISPATCH["Socket.IO Event Dispatcher\n(Zod Schema Validated Payloads)"]
+    
+    subgraph ENGINE_CORE["Engine Core Modules"]
+      SYNC_ENGINE["Authoritative Clock & Playback Engine\n(Heartbeat NTP, Drift Correction ±100ms)"]
+      ROOM_MANAGER["Room & Participant Session Manager\n(Host Roles, Moderation, Playlists, Polls)"]
+      SIGNALING["WebRTC Signaling & Migration Coordinator\n(P2P <--> Mediasoup SFU Handshake)"]
+      TB_SANDBOX["Remote Chromium Sandbox Manager\n(Playwright, CDP Screencast, SSRF Protection)"]
+    end
+    
+    EXPRESS_APP --> ENGINE_CORE
+    SOCKET_DISPATCH --> ENGINE_CORE
+  end
+
+  subgraph MEDIA_TIER["📡 Real-Time Media Layer"]
+    direction TB
+    subgraph P2P_MODE["1-to-1 Calls (2 Participants)"]
+      P2P_MESH["Direct Peer-to-Peer WebRTC\n(STUN / TURN Google ICE Candidates)"]
+    end
+    subgraph SFU_MODE["Group Calls (3+ Participants)"]
+      MEDIASOUP_SFU["Mediasoup v3 C++ SFU Worker\n(Room Routers, WebRtcTransports, Producers & Consumers)"]
+    end
+  end
+
+  subgraph STORAGE_TIER["💾 Storage & Persistence Tier"]
+    direction TB
+    MEMORY_STORE["In-Memory State Store\n(Active Rooms, Chat History, Activity Log)"]
+    AUTH_DB["Persistent Database (PostgreSQL / SQLite)\n(User Profiles, Gender, Hashed Passwords)"]
+    SANDBOX_FS["Ephemeral Sandbox Filesystem\n(/tmp/synctube-tb-* Isolated User Dirs)"]
+  end
+
+  %% Client to Network
+  CLIENT_TIER <-->|WSS Events| WSS_RELAY
+  CLIENT_TIER <-->|HTTPS API| REST_HTTPS
+  WSS_RELAY <--> SOCKET_DISPATCH
+  REST_HTTPS <--> EXPRESS_APP
+
+  %% Media Flows
+  WEBRTC_CLIENT <-->|Direct Media Stream| P2P_MESH
+  WEBRTC_CLIENT <-->|RTP Video/Audio Forwarding| MEDIASOUP_SFU
+  SCREEN_SHARE -.->|Screen Stream Track| WEBRTC_CLIENT
+
+  %% Application to Media / Storage
+  SIGNALING <--> P2P_MODE
+  SIGNALING <--> SFU_MODE
+  ENGINE_CORE --> MEMORY_STORE
+  EXPRESS_APP --> AUTH_DB
+  TB_SANDBOX --> SANDBOX_FS
 ```
 
-- **Client:** React, TypeScript, and Vite.
-- **Realtime server:** Express and Socket.IO, with Zod schemas for socket event payloads.
-- **Database:** PostgreSQL is optional and stores room playback metadata. Browser-local settings and room history use local storage.
-- **Tests:** Vitest for unit/API/socket tests and Playwright for browser end-to-end checks.
+---
+
+### Core Architectural Subsystems
+
+#### 1. Authoritative Clock Synchronization (NTP-like)
+- **Time Offset Calculation**: Clients ping the server with monotonic timestamps ($T_0, T_{server}, T_1$). The round-trip time ($RTT = T_1 - T_0$) and one-way network latency ($RTT / 2$) determine the server clock offset:
+  $$\Delta = T_{server} - \left(T_0 + \frac{RTT}{2}\right)$$
+- **Playback Drift Correction**: The room host broadcasts authoritative playback state: `{ isPlaying, currentTime, lastUpdated }`. Each viewer calculates current target position:
+  $$Position_{target} = Position_{base} + (T_{current} - lastUpdated)$$
+  - **Drift < 100ms**: Playback continues seamlessly without intervention.
+  - **Drift 100ms–1500ms**: Fine-tuned dynamic playback rate skew ($0.95\times - 1.05\times$) brings client gently into sync without audible stutter.
+  - **Drift > 1500ms**: Hard seek command issued directly to the embedded video player to restore alignment.
+
+#### 2. Adaptive Hybrid WebRTC Topology (P2P + Mediasoup SFU)
+- **Automatic Scalability**:
+  - **2 Callers (1-to-1)**: Operates in zero-server-overhead direct WebRTC P2P mode.
+  - **3+ Callers (Group)**: Coordinates seamless migration to [Mediasoup v3](https://mediasoup.org) C++ SFU with worker processes, room routers, and simulcast encoding layers.
+- **Atomic Migration & Hysteresis**: Existing P2P streams remain active until SFU transports and producers are confirmed ready. Once on SFU, calls stay on SFU to avoid flapping if a 3rd member leaves temporarily.
+- **Mobile Autoplay Handling**: Mobile browsers restrict unmuted autoplay for incoming WebRTC streams. SyncTube initiates muted fallback with a persistent, non-intrusive floating "Tap to unmute screen/call audio 🔊" action to satisfy iOS Safari and Android Chrome security policies.
+
+#### 3. Live Screen & Browser Tab Sharing Pipeline
+- **Host / Broadcaster**: Captures high-definition screen, window, or tab via `navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true })`.
+- **Signaling & Rendering**: Stream is signaled via Socket.IO room broadcast. Remote viewers receive the media stream track and dynamically mount it onto the main cinema stage with aspect-ratio preservation and custom fullscreen/theater controls.
+
+#### 4. Ephemeral Remote Chromium Sandbox (Temporary Browser)
+- **Headless Chromium Worker**: Spawns isolated headless Chromium instances on demand using Playwright.
+- **CDP Screencast Stream**: Uses Chrome DevTools Protocol (`Page.startScreencast`) to encode JPEG frames at 30 FPS, relayed via WebSocket to the client HTML5 canvas.
+- **Full Interactive Input**: Translates mouse movements, wheel scrolling, clicks, and keystrokes into CDP synthetic input events.
+- **Zero-Trace Ephemeral Storage**: Creates unique isolated directories in `/tmp/synctube-tb-<id>`. Upon session termination or 8-minute inactivity timeout, the process is SIGKILLed and the filesystem directory is securely removed.
+- **SSRF & DNS Rebinding Hardening**: Explicitly blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.0.0/16`) and resolves hostnames before navigation.
+
+#### 5. User Profiles & Authentication
+- **Profile Customization**: Users can customize their display name, gender, and choose from 16 curated anime character avatars with cross-session localStorage and backend persistence.
+- **Password Strength Analyzer**: Real-time password scoring evaluates entropy across length, mixed casing, digits, and special symbols, presenting visual feedback (Weak / Fair / Good / Strong).
+- **Password Security**: Passwords are cryptographically salted and hashed using `bcrypt` (10 rounds) before storage. Authenticated requests use signed JSON Web Tokens (JWT).
 
 ## Temporary Browser (Ephemeral Isolated Remote Browser)
 

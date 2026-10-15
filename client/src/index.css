@@ -11949,9 +11949,11 @@ body.is-dragging-reaction iframe {
    ========================================================================== */
 
 .room-tab-player-container {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  min-height: 480px;
+  min-height: 0;
   background: #020617;
   border-radius: var(--r-md, 12px);
   display: flex;
@@ -11959,6 +11961,15 @@ body.is-dragging-reaction iframe {
   overflow: hidden;
   border: 1px solid rgba(168, 85, 247, 0.25);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+
+.room-tab-player-container video {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  object-fit: contain;
+  background: #000;
 }
 
 .room-tab-player-nav {
@@ -14742,6 +14753,16 @@ body.is-dragging-reaction iframe {
   color: #cbd5e1;
 }
 
+.sidebar-call-ctrl-btn.screen-on {
+  background: #8b5cf6;
+  color: #ffffff;
+}
+
+.sidebar-call-ctrl-btn.screen-off {
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
 .sidebar-call-ctrl-btn.leave {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
@@ -15028,18 +15049,96 @@ body.is-dragging-reaction iframe {
 @media (max-width: 768px) {
   .call-floating-dock {
     left: auto !important;
-    right: 16px !important;
+    right: 12px !important;
     bottom: 84px !important;
     align-items: flex-end !important;
+    max-width: calc(100vw - 24px) !important;
   }
   .call-launcher-pill {
     left: auto !important;
-    right: 16px !important;
+    right: 12px !important;
     bottom: 84px !important;
+    padding: 6px 12px !important;
+    font-size: 11px !important;
   }
   .call-floating-dock .call-video-grid-container {
     justify-content: flex-end !important;
-    max-width: 320px;
-    max-height: 240px;
+    max-width: calc(100vw - 24px) !important;
+    max-height: 180px;
+  }
+  .call-control-bar {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    max-width: calc(100vw - 24px) !important;
+    box-sizing: border-box !important;
+    overflow-x: auto !important;
+  }
+  .call-control-bar .call-badges-group span:not(:first-child) {
+    display: none !important;
+  }
+  .call-control-btn {
+    width: 32px !important;
+    height: 32px !important;
+    flex-shrink: 0 !important;
+  }
+  .sidebar-call-join-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+  .sidebar-call-join-video-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
   }
 }
+
+/* Dynamic Live Viewers Badge & Pulse Dot */
+.hero-pill-live-viewers {
+  background: rgba(34, 197, 94, 0.12) !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+  color: #86efac !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.hero-pill-live-viewers strong {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.live-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  animation: pulseGreen 2s infinite ease-in-out;
+  display: inline-block;
+  margin-left: 2px;
+}
+
+@keyframes pulseGreen {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 7px rgba(34, 197, 94, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+/* GitHub repo links and badges */
+.github-repo-link-btn:hover,
+.home-nav-github-btn:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+

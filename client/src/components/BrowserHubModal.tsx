@@ -172,6 +172,14 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                   color: 'rgba(145, 70, 255, 0.2)',
                 },
                 {
+                  name: 'Live Screen & Tab Share',
+                  url: 'tab:share',
+                  category: 'Device Screen / Browser Tab',
+                  desc: 'Share your device screen or browser tab directly to the room in real time.',
+                  icon: '🖥️',
+                  color: 'rgba(139, 92, 246, 0.25)',
+                },
+                {
                   name: 'Direct MP4 Stream',
                   url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
                   category: 'Direct Video URL',
@@ -184,7 +192,12 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                   key={p.name}
                   className="browser-platform-card"
                   onClick={() => {
-                    onSelectMedia(p.url, p.name, 'netflix');
+                    if (p.url === 'tab:share') {
+                      window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: "Live Screen" }, '*');
+                      onSelectMedia('tab:share', 'Live Screen Share', 'tab_share');
+                    } else {
+                      onSelectMedia(p.url, p.name, 'netflix');
+                    }
                     onClose();
                   }}
                   style={{ cursor: 'pointer' }}
@@ -204,7 +217,12 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                     className="btn btn-secondary browser-platform-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onSelectMedia(p.url, p.name, 'netflix');
+                      if (p.url === 'tab:share') {
+                        window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: "Live Screen" }, '*');
+                        onSelectMedia('tab:share', 'Live Screen Share', 'tab_share');
+                      } else {
+                        onSelectMedia(p.url, p.name, 'netflix');
+                      }
                       onClose();
                     }}
                   >

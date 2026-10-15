@@ -448,10 +448,20 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
         return res.status(401).json({ error: 'Unauthorized: Please login.' });
       }
 
-      const { username, avatarId, bio } = req.body || {};
-      const updated = await auth.updateProfile(user.id, { username, avatarId, bio });
+      const { username, avatarId, bio, gender, currentPassword, newPassword } = req.body || {};
+      const updated = await auth.updateProfile(user.id, {
+        username,
+        avatarId,
+        bio,
+        gender,
+        currentPassword,
+        newPassword,
+      });
       res.status(200).json({ user: updated });
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message?.includes('password') || err.message?.includes('User not found')) {
+        return res.status(400).json({ error: err.message });
+      }
       next(err);
     }
   });

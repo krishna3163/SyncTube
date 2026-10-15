@@ -35,6 +35,7 @@ import {
   emitToggleRoomLike,
   emitSetRoomCategory,
   emitGoLive,
+  emitStartTabStream,
 } from '../services/socket.js';
 import {
   Role,
@@ -81,7 +82,7 @@ import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.j
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor } from 'lucide-react';
 import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
@@ -1088,6 +1089,21 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     emitAdminToggleBlockScreenShare(targetUserId);
   }, []);
 
+  const handleStartScreenShare = useCallback(() => {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      onNotify('Screen sharing is not supported on this browser or mobile device.', 'error');
+      return;
+    }
+    emitStartTabStream(`${username}'s Screen`, (res) => {
+      if (!res?.success) {
+        onNotify(res?.error || 'Could not start screen share.', 'error');
+      } else {
+        window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: `${username}'s Screen` }, '*');
+        onNotify('Screen share started on main stage!', 'success');
+      }
+    });
+  }, [username, onNotify]);
+
   const handleTimeChange = useCallback((time: number, dur: number) => {
     currentTimeRef.current = time;
     setCurrentTime(time);
@@ -1708,6 +1724,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           >
                             <Search size={15} />
                             <span>YouTube Search 🔍</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={handleStartScreenShare}
+                            title="Share your device screen or browser tab to the room"
+                          >
+                            <Monitor size={15} />
+                            <span>Share Screen 🖥️</span>
                           </button>
                         </div>
                       )}

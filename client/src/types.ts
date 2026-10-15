@@ -197,13 +197,14 @@ export interface RoomSettingsData {
   allowEmbeddedLinks: boolean;
 }
 
-// ── V2 Types ──────────────────────────────────────────────
+// ── User Profile & State Types ──────────────────────────────
 export interface UserProfile {
   id: string;
   email: string;
   username: string;
   avatarId?: string;
   bio?: string;
+  gender?: string;
   createdAt: number;
   followersCount?: number;
 }

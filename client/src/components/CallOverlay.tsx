@@ -257,6 +257,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       {/* 2. Floating Action Controls Bar (left side on desktop) */}
       <div className="call-control-bar">
         <div
+          className="call-badges-group"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -264,6 +265,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             marginRight: '6px',
             paddingRight: '10px',
             borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+            flexShrink: 0,
           }}
         >
           <Radio size={14} color="#10b981" />
