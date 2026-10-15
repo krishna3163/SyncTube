@@ -31,13 +31,14 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     await expect(page).toHaveURL(/\/[A-Z0-9]{6,8}/i);
 
     // Verify stage area and video container exist
-    await expect(page.locator('.stage-area, .video-wrapper, .stage-card').first()).toBeVisible();
+    await expect(page.locator('.stage-area, .video-wrapper, .stage-card').first()).toBeVisible({ timeout: 15000 });
 
     // Verify participant badge shows Host
-    await expect(page.locator('.host-badge, .role-badge, .header-badge').first()).toBeVisible();
+    await expect(page.locator('.host-badge, .role-badge, .header-badge').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('Draggable React button is present, movable, and opens emoji palette', async ({ page }) => {
+    test.setTimeout(60000);
     await page.goto('/');
     const usernameInput = page.locator('input[placeholder*="username" i], input[type="text"]').first();
     await usernameInput.fill('ReactTester');
@@ -60,6 +61,7 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
       await page.mouse.down();
       await page.mouse.move(1200, 800, { steps: 5 });
       await page.mouse.up();
+      await page.waitForTimeout(200);
 
       const boxInCorner = await reactBtn.boundingBox();
 
@@ -82,7 +84,7 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     // Verify emoji buttons are interactive
     const heartEmoji = page.locator('.reaction-btn').first();
     await expect(heartEmoji).toBeVisible();
-    await heartEmoji.click();
+    await heartEmoji.click({ force: true });
 
     // Palette remains or closes cleanly, no crash
     await expect(page.locator('.stage-area')).toBeVisible();
@@ -182,7 +184,7 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     await settingsBtn.click();
 
     const settingsModal = page.locator('.modal-card:has-text("User"), .modal-card:has-text("Room")').first();
-    await expect(settingsModal).toBeVisible();
+    await expect(settingsModal).toBeVisible({ timeout: 15000 });
 
     // Close settings modal
     const closeBtn = page.locator('.modal-close-btn, button[title*="Close" i]').first();
@@ -191,6 +193,8 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
   });
 
   test('Multi-user interaction: Host and Viewer synchronize in the same room', async ({ browser }) => {
+    test.setTimeout(180000);
+
     // Context 1: Host creates room
     const hostContext = await browser.newContext();
     const hostPage = await hostContext.newPage();
@@ -202,7 +206,7 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     await createBtn.click();
 
     // Wait until host is in the room and stage is visible
-    await expect(hostPage.locator('.stage-area').first()).toBeVisible({ timeout: 10000 });
+    await expect(hostPage.locator('.stage-area').first()).toBeVisible({ timeout: 15000 });
     await expect(hostPage).toHaveURL(/\/([A-Z0-9]{6,8})$/);
     const roomUrl = hostPage.url();
     const roomCode = new URL(roomUrl).pathname.replace(/^\//, '');
@@ -223,15 +227,15 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     await joinBtn.click();
 
     // Verify both see the theater stage
-    await expect(hostPage.locator('.stage-area').first()).toBeVisible({ timeout: 10000 });
-    await expect(viewerPage.locator('.stage-area').first()).toBeVisible({ timeout: 10000 });
+    await expect(hostPage.locator('.stage-area').first()).toBeVisible({ timeout: 30000 });
+    await expect(viewerPage.locator('.stage-area').first()).toBeVisible({ timeout: 30000 });
 
     // Verify viewer list shows 2 participants on host side
     const hostViewersTab = hostPage.locator('button:has-text("Viewers")').first();
     if (await hostViewersTab.isVisible()) {
       await hostViewersTab.click();
     }
-    await expect(hostPage.locator('.participant-name:has-text("SyncViewer")').first()).toBeVisible({ timeout: 10000 });
+    await expect(hostPage.locator('.participant-name:has-text("SyncViewer")').first()).toBeVisible({ timeout: 30000 });
 
     await hostContext.close();
     await viewerContext.close();

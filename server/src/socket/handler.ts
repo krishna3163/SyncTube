@@ -22,6 +22,8 @@ import { canPerformAction } from '../services/permissions.js';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { detectMediaSource } from '../utils/media.js';
 import { serverSentry } from '../services/sentry.js';
+import { roomBrowserStreamService } from '../services/roomBrowserStreamService.js';
+import { tempBrowserManager } from '../services/tempBrowserManager.js';
 import {
   ExtensionStatusSchema,
   AssignRoleSchema,
@@ -32,6 +34,9 @@ import {
   RemoveParticipantSchema,
   SeekSchema,
   PlaylistAddSchema,
+  PlaylistAddBatchSchema,
+  AdminToggleBlockSchema,
+  AdminStopScreenShareSchema,
   PlaylistRemoveSchema,
   PlaylistReorderSchema,
   PlaylistMoveTopSchema,
@@ -54,7 +59,10 @@ import {
   SyncDriftCheckSchema,
   MediaChangedSchema,
   ChatTypingSchema,
-    RoomStartTabStreamSchema,
+  RoomStartBrowserStreamSchema,
+  RoomBrowserGuestControlSchema,
+  RoomBrowserInputSchema,
+  RoomStartTabStreamSchema,
   ToggleLikeSchema,
   SetCategorySchema,
   WebRtcOfferSchema,
@@ -213,6 +221,20 @@ export function setupSocketHandlers(
             streamerName: existingScreen.username,
             title: existingScreen.title,
           });
+        }
+
+        // Send active browser stream if one is currently in progress
+        if (room.browserSessionId) {
+          const tbSession = tempBrowserManager.getSession(room.browserSessionId);
+          socket.emit('room:browser_stream_started', {
+            sessionId: room.browserSessionId,
+            currentUrl: tbSession?.currentUrl || '',
+            currentTitle: tbSession?.currentTitle || 'Temporary Browser Cinema Stream',
+            guestControl: room.browserGuestControl,
+          });
+          if (tbSession?.lastFrame) {
+            socket.emit('room:browser_frame', tbSession.lastFrame);
+          }
         }
 
         // Broadcast to everyone in the room that a user joined
@@ -548,6 +570,50 @@ export function setupSocketHandlers(
       }
     });
 
+    // 11-batch. PLAYLIST — ADD BATCH (Import whole YouTube playlist)
+    socket.on('playlist_add_batch', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR')
+          return sendError('FORBIDDEN', 'Only Host/Mod can modify playlist.');
+
+        const parsed = PlaylistAddBatchSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid playlist_add_batch payload.');
+
+        let addedCount = 0;
+        for (const itemData of parsed.data.items) {
+          const { videoId, title, duration, channel, thumbnail, platform } = itemData;
+          const media = detectMediaSource(videoId);
+          if (!media) continue;
+          if (room.playlist.some((playlistItem) => playlistItem.videoId === media.mediaId)) {
+            continue;
+          }
+
+          const item = {
+            id: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            videoId: media.mediaId,
+            title: title || media.title,
+            duration: duration || '',
+            channel: channel || (media.platform === 'youtube' ? '' : media.platform.toUpperCase()),
+            thumbnail: thumbnail || (media.platform === 'youtube' ? `https://img.youtube.com/vi/${media.mediaId}/hqdefault.jpg` : ''),
+            addedBy: participant.username,
+            addedByAvatarId: participant.avatarId,
+            votes: [],
+            platform: platform || media.platform,
+          };
+          room.addToPlaylist(item);
+          addedCount++;
+        }
+
+        if (addedCount > 0) {
+          io.to(room.id).emit('playlist_update', { playlist: room.playlist });
+        }
+      } catch (err) {
+        sendError('INTERNAL_ERROR', (err as Error).message);
+      }
+    });
+
     // 11b. PLAYLIST — VOTE (Any room participant can vote/upvote)
     socket.on('playlist_vote', (rawPayload: unknown) => {
       try {
@@ -800,6 +866,16 @@ export function setupSocketHandlers(
           } else if (request.type === 'change_video' && request.data?.videoId) {
             room.changeVideo(request.data.videoId);
             io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+          } else if (request.type === 'join_call') {
+            const targetPart = room.getParticipant(request.requesterId);
+            if (targetPart?.socketId) {
+              io.to(targetPart.socketId).emit('call:join_approved', { approvedBy: participant.username });
+            }
+          } else if (request.type === 'share_screen') {
+            const targetPart = room.getParticipant(request.requesterId);
+            if (targetPart?.socketId) {
+              io.to(targetPart.socketId).emit('call:share_screen_approved', { approvedBy: participant.username });
+            }
           }
 
           if (dbService && (request.type === 'play' || request.type === 'pause' || request.type === 'seek' || (request.type === 'change_video' && mode !== 'next'))) {
@@ -812,6 +888,18 @@ export function setupSocketHandlers(
                 updated_at: room.updatedAt,
               })
               .catch(() => {});
+          }
+        } else {
+          if (request.type === 'join_call') {
+            const targetPart = room.getParticipant(request.requesterId);
+            if (targetPart?.socketId) {
+              io.to(targetPart.socketId).emit('call:join_denied', { deniedBy: participant.username });
+            }
+          } else if (request.type === 'share_screen') {
+            const targetPart = room.getParticipant(request.requesterId);
+            if (targetPart?.socketId) {
+              io.to(targetPart.socketId).emit('call:share_screen_denied', { deniedBy: participant.username });
+            }
           }
         }
 
@@ -831,6 +919,10 @@ export function setupSocketHandlers(
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        if (room.isBlockedFromChat(participant.userId)) {
+          return sendError('FORBIDDEN', 'You have been muted in chat by the host.');
+        }
 
         const parsed = ChatMessageSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -1262,6 +1354,95 @@ export function setupSocketHandlers(
       }
     });
 
+    // 25. ROOM BROWSER STREAMING (Temporary Browser Remote Sandbox)
+    socket.on('room:start_browser_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) {
+          const err = 'You must join a room first.';
+          callback?.({ success: false, error: err });
+          return sendError('NOT_FOUND', err);
+        }
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          const err = 'Only Host or Moderator can stream a temporary browser to the room.';
+          callback?.({ success: false, error: err });
+          return sendError('FORBIDDEN', err);
+        }
+
+        const parsed = RoomStartBrowserStreamSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err = 'Invalid start browser stream payload.';
+          callback?.({ success: false, error: err });
+          return sendError('BAD_REQUEST', err);
+        }
+
+        const { sessionId, sessionToken, guestControl } = parsed.data;
+        const res = roomBrowserStreamService.startStreaming(io, room, sessionId, sessionToken, guestControl);
+        if (!res.success) {
+          callback?.({ success: false, error: res.error });
+          return sendError('FORBIDDEN', res.error || 'Failed to start browser stream.');
+        }
+
+        callback?.({ success: true, sessionId, roomId: room.id });
+      } catch (err: any) {
+        callback?.({ success: false, error: err?.message });
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to start temporary browser stream.');
+      }
+    });
+
+    socket.on('room:stop_browser_stream', () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host or Moderator can stop the browser stream.');
+        }
+
+        roomBrowserStreamService.stopStreaming(io, room, 'stopped_by_host');
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to stop temporary browser stream.');
+      }
+    });
+
+    socket.on('room:browser_set_guest_control', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host or Moderator can toggle guest control.');
+        }
+
+        const parsed = RoomBrowserGuestControlSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        roomBrowserStreamService.setGuestControl(io, room, parsed.data.guestControl);
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to update guest control.');
+      }
+    });
+
+    socket.on('room:browser_input', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant || !room.browserSessionId) return;
+
+        const isPrivileged = canPerformAction(participant.role, 'change_video');
+        if (!isPrivileged && !room.browserGuestControl) {
+          return sendError('FORBIDDEN', 'Guest control is currently disabled by the Host.');
+        }
+
+        const parsed = RoomBrowserInputSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+
+        roomBrowserStreamService.dispatchInput(room, parsed.data);
+      } catch {
+        // non-fatal input error
+      }
+    });
+
     // 26. ROOM TAB / SCREEN SHARING (SINGLE STREAMER ENFORCEMENT)
     socket.on('room:start_tab_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
@@ -1270,6 +1451,12 @@ export function setupSocketHandlers(
           const err = 'You must join a room first.';
           callback?.({ success: false, error: err });
           return sendError('NOT_FOUND', err);
+        }
+
+        if (room.isBlockedFromScreenShare(participant.userId)) {
+          const err = 'You have been restricted from sharing your screen by the host.';
+          callback?.({ success: false, error: err });
+          return sendError('FORBIDDEN', err);
         }
 
         // ONE SCREEN SHARE AT A TIME ENFORCEMENT
@@ -1479,6 +1666,11 @@ export function setupSocketHandlers(
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return;
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return sendError('FORBIDDEN', 'You have been restricted from joining voice & video calls by the host.');
+        }
+
         const roomId = room.id;
         const parsed = CallJoinSchema.safeParse(rawPayload);
         const options = parsed.success ? parsed.data : { hasAudio: true, hasVideo: false, isMuted: false, isCameraOff: true };
@@ -1666,6 +1858,156 @@ export function setupSocketHandlers(
             });
           }
         }
+      } catch {}
+    });
+
+    // Host stop participant screen share (WebRTC or Tab/Stage stream)
+    socket.on('call:host_stop_screenshare', (rawPayload: { targetSocketId?: string; targetUserId?: string }) => {
+      try {
+        const roomId = socket.data.roomId;
+        if (!roomId) return;
+        const room = roomManager.getRoom(roomId);
+        if (!room) return;
+        const caller = room.getParticipant(socket.data.userId || '');
+        if (caller?.role !== 'HOST' && caller?.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only the Host or Moderators can stop screen shares.');
+        }
+
+        // 1. Revert active room tab/stage screen share if active
+        const currentShare = activeRoomScreenShares.get(roomId);
+        if (currentShare && (!rawPayload?.targetUserId || currentShare.userId === rawPayload.targetUserId || currentShare.socketId === rawPayload.targetSocketId)) {
+          activeRoomScreenShares.delete(roomId);
+          const fallbackVideo = room.playlist[0]?.videoId ?? '';
+          const fallbackTitle = room.playlist[0]?.title ?? '';
+          room.changeVideo(fallbackVideo, fallbackTitle, fallbackVideo ? 'youtube' : 'generic');
+          io.to(roomId).emit('sync_state', room.toSyncStatePayload());
+          io.to(roomId).emit('room:tab_stream_stopped', { stoppedBy: caller.username });
+        }
+
+        // 2. Broadcast call:force_stop_screenshare to target caller or all room callers
+        if (rawPayload?.targetSocketId) {
+          io.to(rawPayload.targetSocketId).emit('call:force_stop_screenshare');
+        } else if (rawPayload?.targetUserId) {
+          const targetPart = room.getParticipant(rawPayload.targetUserId);
+          if (targetPart?.socketId) {
+            io.to(targetPart.socketId).emit('call:force_stop_screenshare');
+          }
+        } else {
+          io.to(roomId).emit('call:force_stop_screenshare');
+        }
+      } catch {}
+    });
+
+    // Admin toggle block from voice & video call
+    socket.on('admin:toggle_block_call', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only Host and Moderators can manage call permissions.');
+        }
+        const parsed = AdminToggleBlockSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        const targetUserId = parsed.data.targetUserId;
+        const isBlocked = room.toggleBlockCall(targetUserId);
+        const targetPart = room.getParticipant(targetUserId);
+
+        if (isBlocked && targetPart?.socketId) {
+          io.to(targetPart.socketId).emit('call:force_left');
+          const roomCalls = activeRoomCalls.get(room.id);
+          if (roomCalls && roomCalls.has(targetPart.socketId)) {
+            roomCalls.delete(targetPart.socketId);
+            callTopologyPolicyManager.evaluateOnLeave(room.id, targetPart.socketId);
+            io.to(room.id).emit('call:user_left', { socketId: targetPart.socketId });
+            io.to(room.id).emit('call:participants_updated', {
+              count: roomCalls.size,
+              callers: Array.from(roomCalls.values()),
+            });
+          }
+        }
+
+        io.to(room.id).emit('user_joined', {
+          username: targetPart?.username || '',
+          userId: targetUserId,
+          role: targetPart?.role || 'PARTICIPANT',
+          avatarId: targetPart?.avatarId,
+          participants: room.getAllParticipants(),
+        });
+      } catch {}
+    });
+
+    // Admin toggle block from chat
+    socket.on('admin:toggle_block_chat', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only Host and Moderators can manage chat permissions.');
+        }
+        const parsed = AdminToggleBlockSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        const targetUserId = parsed.data.targetUserId;
+        room.toggleBlockChat(targetUserId);
+        const targetPart = room.getParticipant(targetUserId);
+
+        io.to(room.id).emit('user_joined', {
+          username: targetPart?.username || '',
+          userId: targetUserId,
+          role: targetPart?.role || 'PARTICIPANT',
+          avatarId: targetPart?.avatarId,
+          participants: room.getAllParticipants(),
+        });
+      } catch {}
+    });
+
+    // Admin toggle block from screen sharing
+    socket.on('admin:toggle_block_screenshare', (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only Host and Moderators can manage screen share permissions.');
+        }
+        const parsed = AdminToggleBlockSchema.safeParse(rawPayload);
+        if (!parsed.success) return;
+        const targetUserId = parsed.data.targetUserId;
+        const isBlocked = room.toggleBlockScreenShare(targetUserId);
+        const targetPart = room.getParticipant(targetUserId);
+
+        if (isBlocked && targetPart?.socketId) {
+          io.to(targetPart.socketId).emit('call:force_stop_screenshare');
+        }
+
+        io.to(room.id).emit('user_joined', {
+          username: targetPart?.username || '',
+          userId: targetUserId,
+          role: targetPart?.role || 'PARTICIPANT',
+          avatarId: targetPart?.avatarId,
+          participants: room.getAllParticipants(),
+        });
+      } catch {}
+    });
+
+    // Admin emergency stop all screen shares
+    socket.on('admin:force_stop_screenshare', () => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (participant.role !== 'HOST' && participant.role !== 'MODERATOR') {
+          return sendError('FORBIDDEN', 'Only Host and Moderators can stop screen shares.');
+        }
+
+        const currentShare = activeRoomScreenShares.get(room.id);
+        if (currentShare) {
+          activeRoomScreenShares.delete(room.id);
+          const fallbackVideo = room.playlist[0]?.videoId ?? '';
+          const fallbackTitle = room.playlist[0]?.title ?? '';
+          room.changeVideo(fallbackVideo, fallbackTitle, fallbackVideo ? 'youtube' : 'generic');
+          io.to(room.id).emit('sync_state', room.toSyncStatePayload());
+          io.to(room.id).emit('room:tab_stream_stopped', { stoppedBy: participant.username });
+        }
+
+        io.to(room.id).emit('call:force_stop_screenshare');
       } catch {}
     });
 

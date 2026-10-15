@@ -8,6 +8,7 @@ import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
 import { AuthService } from './services/auth.js';
 import { setupSocketHandlers } from './socket/handler.js';
+import { setupTempBrowserSocketHandlers } from './socket/tempBrowserHandler.js';
 import { serverSentry } from './services/sentry.js';
 import { isAllowedOrigin } from './utils/cors.js';
 import { isClusterEnabled } from './utils/cluster.js';
@@ -105,6 +106,7 @@ async function startWorker() {
   }
 
   setupSocketHandlers(io, roomManager, dbService);
+  setupTempBrowserSocketHandlers(io, roomManager);
 
   // Global uncaught crash handlers reporting to Sentry
   process.on('unhandledRejection', (reason) => {

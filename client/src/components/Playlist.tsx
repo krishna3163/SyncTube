@@ -13,6 +13,7 @@ import {
   MoreVertical,
   Copy,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { PlaylistItem, Role } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
@@ -30,6 +31,7 @@ interface PlaylistProps {
     channel?: string,
     thumbnail?: string
   ) => void;
+  onImportPlaylist?: (url: string) => Promise<void> | void;
   onPlayItem: (videoId: string, itemId: string) => void;
   onNextVideo?: () => void;
   onRemoveItem: (itemId: string) => void;
@@ -46,6 +48,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
   currentVideoId,
   userRole,
   currentUserId,
+  onImportPlaylist,
   onPlayItem,
   onNextVideo,
   onRemoveItem,
@@ -56,6 +59,8 @@ export const Playlist: React.FC<PlaylistProps> = ({
   onClear,
   onOpenSearch,
 }) => {
+  const [importInput, setImportInput] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuAnchor, setMenuAnchor] = useState<{
     id: string;
@@ -249,6 +254,50 @@ export const Playlist: React.FC<PlaylistProps> = ({
           </div>
         </div>
       </div>
+
+      {/* YouTube Playlist Quick Import Bar */}
+      {canControl && onImportPlaylist && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!importInput.trim()) return;
+            setIsImporting(true);
+            try {
+              await onImportPlaylist(importInput.trim());
+              setImportInput('');
+            } finally {
+              setIsImporting(false);
+            }
+          }}
+          className="playlist-import-bar"
+          style={{
+            display: 'flex',
+            gap: '6px',
+            padding: '8px 12px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <input
+            type="text"
+            className="upnext-search-input"
+            style={{ flex: 1, fontSize: '0.78rem' }}
+            placeholder="Paste YouTube Playlist link (list=PL...)"
+            value={importInput}
+            onChange={(e) => setImportInput(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!importInput.trim() || isImporting}
+            className="btn btn-primary btn-sm"
+            style={{ padding: '0 10px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+            title="Import all songs/videos from YouTube playlist"
+          >
+            <Sparkles size={12} />
+            <span>{isImporting ? 'Importing...' : 'Import Playlist'}</span>
+          </button>
+        </form>
+      )}
 
       {/* Playlist Items List */}
       <div className="upnext-items-list">

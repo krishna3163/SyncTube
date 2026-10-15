@@ -13,6 +13,7 @@ import {
   Pin,
   Wifi,
   Activity,
+  MonitorOff,
 } from 'lucide-react';
 import { webrtcCallManager, CallParticipantState } from '../services/webrtcCallManager.js';
 
@@ -21,6 +22,8 @@ interface SidebarCallStageProps {
   currentUsername: string;
   currentUserAvatarId?: string;
   userRole?: string;
+  isBlockedFromCall?: boolean;
+  onRequestAction?: (type: 'join_call' | 'share_screen') => void;
   onNotify?: (message: string, type: 'info' | 'success' | 'error') => void;
 }
 
@@ -29,6 +32,8 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   currentUsername,
   currentUserAvatarId,
   userRole,
+  isBlockedFromCall = false,
+  onRequestAction,
   onNotify,
 }) => {
   const [inCall, setInCall] = useState(false);
@@ -36,7 +41,7 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   const [callCount, setCallCount] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(true);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [joining, setJoining] = useState(false);
   const [topologyMode, setTopologyMode] = useState<'idle' | 'p2p' | 'sfu'>('idle');
   const [networkQuality, setNetworkQuality] = useState<{ state: 'good' | 'unstable' | 'poor'; rtt: number; packetLoss: number }>({
@@ -44,6 +49,15 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
     rtt: 0,
     packetLoss: 0,
   });
+
+  // Always keep collapsed if and only if nobody is joined in the call
+  useEffect(() => {
+    if (callCount === 0 && !inCall && participants.length === 0) {
+      setIsCollapsed(true);
+    } else if (callCount > 0 || inCall) {
+      setIsCollapsed(false);
+    }
+  }, [callCount, inCall, participants.length]);
 
   useEffect(() => {
     webrtcCallManager.setLocalUser(currentUserId, currentUsername, currentUserAvatarId);
@@ -78,6 +92,10 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
   const handleJoinCall = async (withVideo = false) => {
+    if (isBlockedFromCall) {
+      onNotify?.('You have been restricted from joining voice & video calls by the room host.', 'error');
+      return;
+    }
     setJoining(true);
     const res = await webrtcCallManager.joinCall({ audio: true, video: withVideo });
     setJoining(false);
@@ -197,6 +215,19 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                 <PhoneOff size={13} />
               </button>
             </div>
+          ) : isBlockedFromCall ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <button
+                type="button"
+                disabled
+                className="sidebar-call-join-btn"
+                style={{ opacity: 0.7, cursor: 'not-allowed', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#fca5a5' }}
+                title="Host has restricted your call access in this room"
+              >
+                <PhoneOff size={12} />
+                <span>Call Blocked</span>
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <button
@@ -218,6 +249,20 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
               >
                 <Video size={12} />
               </button>
+              {userRole === 'PARTICIPANT' && onRequestAction && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRequestAction('join_call');
+                    onNotify?.('Request to join call sent to Host for approval! 🎟️', 'info');
+                  }}
+                  className="sidebar-call-join-btn"
+                  style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.35)', color: '#a5b4fc' }}
+                  title="Ask Host for permission to join call"
+                >
+                  Request Call
+                </button>
+              )}
             </div>
           )}
 
@@ -246,6 +291,10 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                   webrtcCallManager.hostMuteUser(targetSocketId, targetUserId);
                   onNotify?.(`Muted @${targetName} 🔇`, 'info');
                 }}
+                onStopScreenShare={(targetSocketId, targetUserId, targetName) => {
+                  webrtcCallManager.hostStopScreenShare(targetSocketId, targetUserId);
+                  onNotify?.(`Stopped screen share for @${targetName} 🛑`, 'info');
+                }}
               />
             ))
           ) : (
@@ -265,11 +314,13 @@ const SidebarParticipantTile: React.FC<{
   isHostOrMod: boolean;
   onPin: (socketId: string | null) => void;
   onMuteParticipant: (socketId: string, userId: string, name: string) => void;
+  onStopScreenShare?: (socketId: string, userId: string, name: string) => void;
 }> = ({
   participant,
   isHostOrMod,
   onPin,
   onMuteParticipant,
+  onStopScreenShare,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -358,6 +409,39 @@ const SidebarParticipantTile: React.FC<{
         >
           <MicOff size={10} />
           <span>Mute</span>
+        </button>
+      )}
+
+      {isHostOrMod && !participant.isLocal && participant.isScreenSharing && onStopScreenShare && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStopScreenShare(participant.socketId, participant.userId, participant.username);
+          }}
+          title={`Host: Stop ${participant.username}'s Screen Share`}
+          className="host-remote-stop-share-badge"
+          style={{
+            position: 'absolute',
+            bottom: '26px',
+            right: '6px',
+            zIndex: 10,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            padding: '2px 6px',
+            borderRadius: '9999px',
+            background: 'rgba(239, 68, 68, 0.9)',
+            color: '#fff',
+            fontSize: '9px',
+            fontWeight: 700,
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+          }}
+        >
+          <MonitorOff size={10} />
+          <span>Stop Share</span>
         </button>
       )}
 

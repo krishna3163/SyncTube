@@ -83,6 +83,35 @@ export const emitPlaylistAdd = (
   socket.emit('playlist_add', { videoId, title, duration, channel, thumbnail });
 };
 
+export const emitPlaylistAddBatch = (
+  items: Array<{
+    videoId: string;
+    title?: string;
+    duration?: string;
+    channel?: string;
+    thumbnail?: string;
+    platform?: string;
+  }>
+) => {
+  socket.emit('playlist_add_batch', { items });
+};
+
+export const emitAdminToggleBlockCall = (targetUserId: string) => {
+  socket.emit('admin:toggle_block_call', { targetUserId });
+};
+
+export const emitAdminToggleBlockChat = (targetUserId: string) => {
+  socket.emit('admin:toggle_block_chat', { targetUserId });
+};
+
+export const emitAdminToggleBlockScreenShare = (targetUserId: string) => {
+  socket.emit('admin:toggle_block_screenshare', { targetUserId });
+};
+
+export const emitAdminForceStopScreenShare = () => {
+  socket.emit('admin:force_stop_screenshare');
+};
+
 export const emitPlaylistVote = (itemId: string) => {
   socket.emit('playlist_vote', { itemId });
 };
@@ -108,7 +137,7 @@ export const emitPlaylistMoveTop = (itemId: string) => {
 };
 
 export const emitRequestAction = (
-  type: 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video',
+  type: 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video' | 'join_call' | 'share_screen',
   data?: { time?: number; videoId?: string; title?: string; duration?: string; channel?: string }
 ) => {
   socket.emit('request_action', { type, data });
@@ -244,6 +273,23 @@ export const emitChatTyping = (isTyping: boolean) => {
 };
 
 // ── Room Browser Streaming Emitters ─────────────────────────
+export const emitStartBrowserStream = (
+  sessionId: string,
+  sessionToken: string,
+  guestControl = false,
+  callback?: (res: { success: boolean; sessionId?: string; roomId?: string; error?: string }) => void
+) => {
+  socket.emit('room:start_browser_stream', { sessionId, sessionToken, guestControl }, callback);
+};
+
+export const emitBrowserInput = (input: any) => {
+  socket.emit('room:browser_input', input);
+};
+
+export const emitStopBrowserStream = () => {
+  socket.emit('room:browser_stop_stream', {});
+};
+
 export const emitBrowserSetGuestControl = (guestControl: boolean) => {
   socket.emit('room:browser_set_guest_control', { guestControl });
 };

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward } from 'lucide-react';
+import { Search, Play, Plus, X, Loader2, Sparkles, SkipForward, ListMusic } from 'lucide-react';
 import { Role } from '../types.js';
 import { getApiUrl } from '../utils/api.js';
 import { getSafeYouTubeThumbnailUrl } from '../utils/identity.js';
-import { extractYouTubeId } from '../utils/youtube.js';
+import { extractYouTubeId, extractYouTubePlaylistId } from '../utils/youtube.js';
 
 interface SearchResultItem {
   videoId: string;
@@ -25,6 +25,15 @@ interface YouTubeSearchModalProps {
     duration?: string,
     channel?: string,
     thumbnail?: string
+  ) => void;
+  onAddPlaylistBatch?: (
+    items: {
+      videoId: string;
+      title?: string;
+      duration?: string;
+      channel?: string;
+      thumbnail?: string;
+    }[]
   ) => void;
   onRequestAction?: (
     type: 'change_video' | 'request_next_video',
@@ -52,12 +61,18 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   userRole,
   onPlayVideo,
   onAddToPlaylist,
+  onAddPlaylistBatch,
   onRequestAction,
   onNotify,
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [playlistInfo, setPlaylistInfo] = useState<{
+    title: string;
+    count: number;
+    items: SearchResultItem[];
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -152,6 +167,45 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
   const performSearch = async (searchTerm: string) => {
     const q = searchTerm.trim();
     if (!q) return;
+
+    // 1. Check if user entered a playlist link or ID
+    const playlistId = extractYouTubePlaylistId(q);
+    if (playlistId) {
+      setIsLoading(true);
+      setPlaylistInfo(null);
+      const playlistEndpoints: string[] = [];
+      const primaryApiUrl = getApiUrl();
+      if (primaryApiUrl) {
+        playlistEndpoints.push(`${primaryApiUrl}/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+      } else {
+        playlistEndpoints.push(`/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+      }
+      playlistEndpoints.push(`https://synctube-2ar4.onrender.com/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+
+      for (const pUrl of playlistEndpoints) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          const resp = await fetch(pUrl, { signal: controller.signal });
+          clearTimeout(timer);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (Array.isArray(data.videos) && data.videos.length > 0) {
+              setPlaylistInfo({
+                title: data.title || 'YouTube Playlist',
+                count: data.videos.length,
+                items: data.videos,
+              });
+              setResults(data.videos);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch {}
+      }
+    } else {
+      setPlaylistInfo(null);
+    }
 
     const directId = extractYouTubeId(q);
     if (directId) {
@@ -329,6 +383,71 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
           </div>
 
           <div className="yt-search-results">
+            {playlistInfo && (
+              <div
+                className="yt-search-playlist-banner"
+                style={{
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '12px',
+                  padding: '12px 16px',
+                  marginBottom: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      background: 'rgba(99, 102, 241, 0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#818cf8',
+                    }}
+                  >
+                    <ListMusic size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px' }}>
+                      {playlistInfo.title}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      YouTube Playlist • {playlistInfo.items.length} tracks
+                    </div>
+                  </div>
+                </div>
+                {userRole !== 'PARTICIPANT' && onAddPlaylistBatch && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 14px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                    }}
+                    onClick={() => {
+                      onAddPlaylistBatch(playlistInfo.items);
+                      onNotify(`Added ${playlistInfo.items.length} videos from playlist!`, 'success');
+                      onClose();
+                    }}
+                  >
+                    <Plus size={15} />
+                    <span>Add All ({playlistInfo.items.length}) to Queue</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {isLoading && (
               <div className="yt-search-loading">
                 <Loader2 size={28} className="spin-icon" color="var(--accent)" />

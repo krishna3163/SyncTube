@@ -12,7 +12,7 @@ import {
   Radio,
   Users,
 } from 'lucide-react';
-import { emitStopTabStream, emitStartTabStream } from '../services/socket.js';
+import { emitStopTabStream, emitStartTabStream, emitAdminForceStopScreenShare } from '../services/socket.js';
 import type { Role } from '../types.js';
 
 interface RoomTabPlayerProps {
@@ -301,12 +301,20 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       onNotify('Screen share ended.', 'info');
     };
 
+    const onForceStop = () => {
+      if (localStreamRef.current) {
+        stopScreenShare();
+        onNotify('Your screen share was stopped by the room host.', 'info');
+      }
+    };
+
     socket.on('webrtc:viewer_joined', onViewerJoined);
     socket.on('webrtc:answer', onAnswer);
     socket.on('webrtc:offer', onOffer);
     socket.on('webrtc:ice_candidate', onIceCandidate);
     socket.on('room:tab_stream_started', onStreamStarted);
     socket.on('room:tab_stream_stopped', onStreamStopped);
+    socket.on('call:force_stop_screenshare', onForceStop);
 
     // Initial stream request for viewer upon mount
     if (!localStreamRef.current) {
@@ -327,6 +335,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       socket.off('webrtc:ice_candidate', onIceCandidate);
       socket.off('room:tab_stream_started', onStreamStarted);
       socket.off('room:tab_stream_stopped', onStreamStopped);
+      socket.off('call:force_stop_screenshare', onForceStop);
       window.removeEventListener('message', handleWindowMessage);
     };
   }, [socket, connectViewer, onNotify]);
@@ -410,14 +419,42 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
               <StopCircle size={14} /> Stop Sharing
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="btn-icon"
-              style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-            </button>
+            <>
+              {(userRole === 'HOST' || userRole === 'MODERATOR') && isSharing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    emitAdminForceStopScreenShare();
+                    onNotify('Host requested screen share to stop.', 'info');
+                  }}
+                  className="btn btn-sm"
+                  style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '5px 12px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    cursor: 'pointer',
+                  }}
+                  title="Host: Force stop active screen share"
+                >
+                  <StopCircle size={14} /> Stop User's Share
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="btn-icon"
+                style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              </button>
+            </>
           )}
 
           <button
@@ -446,8 +483,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
         }}
       />
 
-      {/* Empty / Connecting Overlay */}
-      {!isSharing && !isStreamer && (
+      {/* Empty / Connecting / Share Prompt Overlay */}
+      {!isSharing && (
         <div
           style={{
             position: 'absolute',
@@ -459,17 +496,32 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             gap: '12px',
             background: 'radial-gradient(circle, #0f172a 0%, #020617 100%)',
             color: '#94a3b8',
+            padding: '24px',
+            textAlign: 'center',
           }}
         >
           <Tv size={42} color="var(--accent)" />
           <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>
-            Connecting to Screen Stream...
+            Share Your Browser Tab Directly
           </h3>
-          <p style={{ margin: 0, fontSize: '13px' }}>
-            Streaming synchronized screen and tab audio directly to your room.
+          <p style={{ margin: 0, fontSize: '13px', maxWidth: '440px', lineHeight: 1.5 }}>
+            Stream synchronized video and crystal-clear tab audio directly to all friends in this room.
           </p>
+          {(userRole === 'HOST' || userRole === 'MODERATOR') && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => startScreenShare(streamTitle)}
+              style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Share2 size={16} />
+              <span>Start Screen Share</span>
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 };
+
+export default RoomTabPlayer;

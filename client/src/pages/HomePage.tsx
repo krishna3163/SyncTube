@@ -41,16 +41,18 @@ import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
 import { authStorage } from '../utils/authStorage.js';
 import { getApiUrl } from '../utils/api.js';
+export { getApiUrl } from '../utils/api.js';
 
 const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthModal }) => ({ default: AuthModal })));
 
 interface HomePageProps {
   userId: string;
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
+  onOpenBrowser?: () => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
+export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenBrowser, onNotify }) => {
   // Saved user profile from localStorage
   const savedSettings = (() => {
     try {
@@ -67,7 +69,18 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const [isCreating, setIsCreating] = useState(false);
 
   const [joinUsername, setJoinUsername] = useState(initialName);
-  const [joinRoomCode, setJoinRoomCode] = useState('');
+  const [joinRoomCode, setJoinRoomCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
+      if (pathMatch && pathMatch[1].toLowerCase() !== 'browser') {
+        return pathMatch[1].toUpperCase();
+      }
+      const params = new URLSearchParams(window.location.search);
+      const qRoom = params.get('room');
+      if (qRoom) return qRoom.toUpperCase();
+    }
+    return '';
+  });
 
   // Current active user to filter history
   const activeUsername = (createUsername || joinUsername || initialName || '').trim();
@@ -83,6 +96,33 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const [activeTbSession, setActiveTbSession] = useState<{ session: any; token: string } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('synctube_active_tb_session');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const checkActiveSession = () => {
+      try {
+        const raw = sessionStorage.getItem('synctube_active_tb_session');
+        setActiveTbSession(raw ? JSON.parse(raw) : null);
+      } catch {
+        setActiveTbSession(null);
+      }
+    };
+    checkActiveSession();
+    window.addEventListener('focus', checkActiveSession);
+    window.addEventListener('storage', checkActiveSession);
+    return () => {
+      window.removeEventListener('focus', checkActiveSession);
+      window.removeEventListener('storage', checkActiveSession);
+    };
+  }, []);
   // Form inline validation states (form-design & error-handling-ux)
   const [createNameError, setCreateNameError] = useState<string | null>(null);
   const [joinNameError, setJoinNameError] = useState<string | null>(null);
@@ -480,7 +520,21 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
               <Sparkles size={14} />
               <span>Features</span>
             </button>
-            
+            <button
+              type="button"
+              className="home-nav-pill"
+              onClick={() => {
+                if (onOpenBrowser) {
+                  onOpenBrowser();
+                } else {
+                  window.history.pushState({ path: '/browser' }, '', '/browser');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }
+              }}
+            >
+              <Globe size={14} />
+              <span>Temporary Browser</span>
+            </button>
           </div>
         </nav>
 
@@ -559,6 +613,94 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
           </h1>
 
         </div>
+
+        {/* ACTIVE TEMPORARY BROWSER WORKSPACES BANNER */}
+        {activeTbSession && (
+          <div
+            className="active-tb-session-banner"
+            style={{
+              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(129, 140, 248, 0.15))',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              borderRadius: '12px',
+              padding: '14px 20px',
+              marginBottom: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: 'rgba(56, 189, 248, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#38bdf8',
+                }}
+              >
+                <Globe size={20} />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#f8fafc',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <span>Temporary Browser Session Active</span>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      color: '#34d399',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Running
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                  {activeTbSession.session?.currentTitle || activeTbSession.session?.currentUrl || 'Isolated Chromium Sandbox'}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  sessionStorage.removeItem('synctube_active_tb_session');
+                  setActiveTbSession(null);
+                }}
+                style={{ fontSize: '0.8rem' }}
+              >
+                Discard
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  onOpenBrowser?.();
+                }}
+                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Play size={14} /> Resume Session
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* YOUR PROFILE CHARACTER Banner (temporarily hidden per user request) */}
         {false && (

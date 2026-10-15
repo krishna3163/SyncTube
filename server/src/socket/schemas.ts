@@ -52,6 +52,19 @@ export const PlaylistAddSchema = z.object({
   platform: z.string().trim().max(50).optional(),
 });
 
+export const PlaylistAddBatchSchema = z.object({
+  items: z.array(PlaylistAddSchema).min(1).max(200),
+});
+
+export const AdminToggleBlockSchema = z.object({
+  targetUserId: z.string().trim().min(1),
+});
+
+export const AdminStopScreenShareSchema = z.object({
+  targetSocketId: z.string().trim().optional(),
+  targetUserId: z.string().trim().optional(),
+});
+
 export const PlaylistRemoveSchema = z.object({
   itemId: z.string().trim().min(1).max(100),
 });
@@ -286,3 +299,41 @@ export const CallP2PIceCandidateSchema = z.object({
   targetSocketId: z.string().trim().min(1).max(200),
   candidate: z.any(),
 });
+
+export const RoomStartBrowserStreamSchema = z.object({
+  sessionId: z.string().trim().min(1).max(100),
+  sessionToken: z.string().trim().min(1).max(200),
+  guestControl: z.boolean().optional().default(false),
+});
+
+export const RoomStopBrowserStreamSchema = z.object({}).optional();
+
+export const RoomBrowserGuestControlSchema = z.object({
+  guestControl: z.boolean(),
+});
+
+export const RoomBrowserInputSchema = z.object({
+  action: z.enum([
+    'click',
+    'mouse_move',
+    'mouse_down',
+    'mouse_up',
+    'wheel',
+    'key_down',
+    'key_up',
+    'key_press',
+    'navigate',
+    'back',
+    'forward',
+    'reload',
+  ]),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  button: z.enum(['left', 'right', 'middle']).optional(),
+  clickCount: z.number().int().positive().max(3).optional(),
+  deltaX: z.number().optional(),
+  deltaY: z.number().optional(),
+  key: z.string().max(100).optional(),
+  url: z.string().max(2048).optional(),
+});
+

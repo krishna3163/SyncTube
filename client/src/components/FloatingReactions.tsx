@@ -429,54 +429,64 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
         </div>
       )}
 
-      {/* Draggable React Button Dock (only rendered when inline, floating button hidden) */}
-      {inline && (
-        <div
-          ref={launcherRef}
-          className={`inline-reactions-launcher ${isOpen || alwaysExpanded ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
-          style={{ alignItems: 'stretch' }}
-        >
-          {Object.keys(recentCounts).length > 0 && (
-            <div className="reaction-live-counters" aria-live="polite">
-              {Object.entries(recentCounts).map(([emoji, count]) => (
-                <span key={emoji}>{emoji} {count}</span>
-              ))}
-            </div>
-          )}
+      {/* Draggable React Button Dock (supports floating dock and inline embed) */}
+      <div
+        ref={launcherRef}
+        className={`${inline ? 'inline-reactions-launcher' : 'floating-reactions-launcher'} ${isOpen || alwaysExpanded ? 'open' : ''} ${isDragging ? 'is-dragging' : ''}`}
+        style={inline ? { alignItems: 'stretch' } : {
+          left: pos ? `${pos.x}px` : undefined,
+          top: pos ? `${pos.y}px` : undefined,
+          bottom: pos ? 'auto' : '1.5rem',
+          right: pos ? 'auto' : '1.5rem',
+          alignItems: isRightSide ? 'flex-end' : 'flex-start',
+        }}
+      >
+        {Object.keys(recentCounts).length > 0 && (
+          <div className="reaction-live-counters" aria-live="polite">
+            {Object.entries(recentCounts).map(([emoji, count]) => (
+              <span key={emoji}>{emoji} {count}</span>
+            ))}
+          </div>
+        )}
 
-          {/* Draggable React Pill Button */}
-          {!alwaysExpanded && (
-            <button
-              type="button"
-              className="reaction-toggle-btn"
-              ref={buttonRef}
-              onClick={() => {
-                if (ignoreNextClickRef.current) {
-                  ignoreNextClickRef.current = false;
-                  return;
-                }
-                if (!isDraggingRef.current) {
-                  setIsOpen((open) => !open);
-                }
-              }}
-              title={isOpen ? 'Close live reactions' : 'Send live reactions'}
-              aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
-              aria-expanded={isOpen}
-            >
-              <span className="reaction-drag-handle" title="Drag to move">
-                <GripVertical size={14} />
-              </span>
-              <span className="reaction-toggle-emoji">{characterEmoji}</span>
-              <span className="reaction-toggle-label">React</span>
-            </button>
-          )}
+        {/* If placed near bottom of screen in floating mode, show emoji palette ABOVE the button */}
+        {!inline && (isOpen || alwaysExpanded) && isNearBottom && (
+          renderPalette({ marginBottom: '0.4rem' })
+        )}
 
-          {/* If placed in upper/middle of screen, show emoji palette BELOW the button */}
-          {(isOpen || alwaysExpanded) && (
-            renderPalette({ marginTop: '0.4rem' })
-          )}
-        </div>
-      )}
+        {/* Draggable React Pill Button */}
+        {!alwaysExpanded && (
+          <button
+            type="button"
+            className="reaction-toggle-btn"
+            ref={buttonRef}
+            onPointerDown={inline ? undefined : handlePointerDown}
+            onClick={() => {
+              if (ignoreNextClickRef.current) {
+                ignoreNextClickRef.current = false;
+                return;
+              }
+              if (!isDraggingRef.current) {
+                setIsOpen((open) => !open);
+              }
+            }}
+            title={isOpen ? 'Close live reactions' : 'Send live reactions'}
+            aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
+            aria-expanded={isOpen}
+          >
+            <span className="reaction-drag-handle" title="Drag to move">
+              <GripVertical size={14} />
+            </span>
+            <span className="reaction-toggle-emoji">{characterEmoji}</span>
+            <span className="reaction-toggle-label">React</span>
+          </button>
+        )}
+
+        {/* If placed in upper/middle of screen, or inline, show emoji palette BELOW the button */}
+        {(isOpen || alwaysExpanded) && (inline || !isNearBottom) && (
+          renderPalette({ marginTop: '0.4rem' })
+        )}
+      </div>
     </>
   );
 };

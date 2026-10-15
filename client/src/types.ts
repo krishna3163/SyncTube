@@ -7,6 +7,9 @@ export interface ParticipantPublic {
   username: string;
   role: Role;
   avatarId?: string;
+  isBlockedFromCall?: boolean;
+  isBlockedFromChat?: boolean;
+  isBlockedFromScreenShare?: boolean;
 }
 
 export interface SyncStatePayload {
@@ -89,7 +92,7 @@ export interface PlaylistItem {
   votes?: string[];
 }
 
-export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video';
+export type ActionRequestType = 'play' | 'pause' | 'seek' | 'change_video' | 'request_next_video' | 'join_call' | 'share_screen';
 
 export interface PendingActionRequest {
   id: string;

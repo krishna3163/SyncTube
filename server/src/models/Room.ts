@@ -59,6 +59,25 @@ export class Room {
   public category: string = 'cinema';
   public likedUserIds: Set<string> = new Set();
   public isLive: boolean = false;
+  public browserSessionId: string | null = null;
+  public browserSessionToken: string | null = null;
+  public browserGuestControl: boolean = false;
+
+  public attachBrowserSession(sessionId: string, sessionToken?: string, guestControl: boolean = false): void {
+    this.browserSessionId = sessionId;
+    this.browserSessionToken = sessionToken || null;
+    this.browserGuestControl = guestControl;
+    this.videoId = `tb:${sessionId}`;
+  }
+
+  public detachBrowserSession(): void {
+    this.browserSessionId = null;
+    this.browserSessionToken = null;
+    this.browserGuestControl = false;
+    if (this.videoId.startsWith('tb:')) {
+      this.videoId = '';
+    }
+  }
 
   public setIsLive(live: boolean): void {
     this.isLive = live;
@@ -85,6 +104,9 @@ export class Room {
   private identityCredentialHashes: Map<string, string> = new Map();
   private socketToUserId: Map<string, string> = new Map();
   private removedUserIds: Set<string> = new Set();
+  private blockedCallUserIds: Set<string> = new Set();
+  private blockedChatUserIds: Set<string> = new Set();
+  private blockedScreenShareUserIds: Set<string> = new Set();
   private pendingRequests: Map<string, PendingActionRequest> = new Map();
   private chatMessages: ChatMessage[] = [];
 
@@ -430,7 +452,52 @@ export class Room {
       username: p.username,
       role: p.role,
       avatarId: p.avatarId,
+      isBlockedFromCall: this.isBlockedFromCall(p.userId),
+      isBlockedFromChat: this.isBlockedFromChat(p.userId),
+      isBlockedFromScreenShare: this.isBlockedFromScreenShare(p.userId),
     }));
+  }
+
+  public toggleBlockCall(userId: string): boolean {
+    if (this.blockedCallUserIds.has(userId)) {
+      this.blockedCallUserIds.delete(userId);
+      return false;
+    } else {
+      this.blockedCallUserIds.add(userId);
+      return true;
+    }
+  }
+
+  public isBlockedFromCall(userId: string): boolean {
+    return this.blockedCallUserIds.has(userId);
+  }
+
+  public toggleBlockChat(userId: string): boolean {
+    if (this.blockedChatUserIds.has(userId)) {
+      this.blockedChatUserIds.delete(userId);
+      return false;
+    } else {
+      this.blockedChatUserIds.add(userId);
+      return true;
+    }
+  }
+
+  public isBlockedFromChat(userId: string): boolean {
+    return this.blockedChatUserIds.has(userId);
+  }
+
+  public toggleBlockScreenShare(userId: string): boolean {
+    if (this.blockedScreenShareUserIds.has(userId)) {
+      this.blockedScreenShareUserIds.delete(userId);
+      return false;
+    } else {
+      this.blockedScreenShareUserIds.add(userId);
+      return true;
+    }
+  }
+
+  public isBlockedFromScreenShare(userId: string): boolean {
+    return this.blockedScreenShareUserIds.has(userId);
   }
 
   public getParticipantCount(): number {
@@ -452,6 +519,12 @@ export class Room {
       likes: this.likes,
       category: this.category,
       isLive: this.isLive,
+      browserSession: this.browserSessionId
+        ? {
+            sessionId: this.browserSessionId,
+            guestControl: this.browserGuestControl,
+          }
+        : undefined,
       mediaIdentity: media
         ? {
             platform: media.platform,

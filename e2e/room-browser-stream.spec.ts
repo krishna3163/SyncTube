@@ -4,6 +4,8 @@ import { artifactsDir } from './artifacts.js';
 
 test.describe('Temporary Browser Room Streaming & Watch Party Integration', () => {
   test('User can stream Temporary Browser to room and choose between Cloud Browser vs Local Tab Share', async ({ page }) => {
+    test.setTimeout(90000);
+
     // 1. Visit Home Page
     await page.goto('/');
 

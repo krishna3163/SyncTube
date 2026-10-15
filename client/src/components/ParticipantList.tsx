@@ -1,5 +1,18 @@
 import React from 'react';
-import { Crown, Shield, ShieldCheck, ShieldAlert, UserMinus, Users } from 'lucide-react';
+import {
+  Crown,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  UserMinus,
+  Users,
+  Phone,
+  PhoneOff,
+  MessageSquare,
+  MessageSquareOff,
+  Monitor,
+  MonitorOff,
+} from 'lucide-react';
 import { ParticipantPublic, Role, ParticipantReadiness } from '../types.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { getParticipantCharacterId } from '../utils/characterMemory.js';
@@ -12,6 +25,9 @@ interface ParticipantListProps {
   readinessList?: ParticipantReadiness[];
   onAssignRole: (userId: string, role: Role) => void;
   onRemoveParticipant: (userId: string) => void;
+  onToggleBlockCall?: (userId: string) => void;
+  onToggleBlockChat?: (userId: string) => void;
+  onToggleBlockScreenShare?: (userId: string) => void;
 }
 
 const ROLE_GLOW: Record<Role, string> = {
@@ -28,7 +44,11 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
   readinessList,
   onAssignRole,
   onRemoveParticipant,
+  onToggleBlockCall,
+  onToggleBlockChat,
+  onToggleBlockScreenShare,
 }) => {
+  const isHostOrMod = currentUserRole === 'HOST' || currentUserRole === 'MODERATOR';
   const isHost = currentUserRole === 'HOST';
 
   const renderRoleBadge = (role: Role) => {
@@ -108,8 +128,23 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       </span>
                     )}
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
                     {renderRoleBadge(p.role)}
+                    {p.isBlockedFromCall && (
+                      <span style={{ fontSize: '0.62rem', padding: '0.5px 5px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.35)', fontWeight: 600 }}>
+                        Call Blocked
+                      </span>
+                    )}
+                    {p.isBlockedFromChat && (
+                      <span style={{ fontSize: '0.62rem', padding: '0.5px 5px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)', fontWeight: 600 }}>
+                        Chat Muted
+                      </span>
+                    )}
+                    {p.isBlockedFromScreenShare && (
+                      <span style={{ fontSize: '0.62rem', padding: '0.5px 5px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.35)', fontWeight: 600 }}>
+                        No Screen Share
+                      </span>
+                    )}
                     {readiness && (
                       <span
                         style={{
@@ -139,9 +174,57 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                 </div>
               </div>
 
-              {isHost && !isCurrentUser && (
+              {isHostOrMod && !isCurrentUser && (
                 <div className="participant-actions">
-                  {p.role === 'PARTICIPANT' && (
+                  {onToggleBlockCall && (
+                    <button
+                      type="button"
+                      className="btn-icon action-call-block"
+                      onClick={() => onToggleBlockCall(p.userId)}
+                      title={p.isBlockedFromCall ? `Unblock @${p.username} from Call` : `Block @${p.username} from Voice/Video Call`}
+                      aria-label="Toggle Call Permission"
+                    >
+                      {p.isBlockedFromCall ? (
+                        <PhoneOff size={16} color="#f87171" strokeWidth={2.2} />
+                      ) : (
+                        <Phone size={16} color="#34d399" strokeWidth={2.2} />
+                      )}
+                    </button>
+                  )}
+
+                  {onToggleBlockChat && (
+                    <button
+                      type="button"
+                      className="btn-icon action-chat-block"
+                      onClick={() => onToggleBlockChat(p.userId)}
+                      title={p.isBlockedFromChat ? `Unmute @${p.username} in Chat` : `Mute @${p.username} in Chat`}
+                      aria-label="Toggle Chat Permission"
+                    >
+                      {p.isBlockedFromChat ? (
+                        <MessageSquareOff size={16} color="#f87171" strokeWidth={2.2} />
+                      ) : (
+                        <MessageSquare size={16} color="#94a3b8" strokeWidth={2.2} />
+                      )}
+                    </button>
+                  )}
+
+                  {onToggleBlockScreenShare && (
+                    <button
+                      type="button"
+                      className="btn-icon action-screenshare-block"
+                      onClick={() => onToggleBlockScreenShare(p.userId)}
+                      title={p.isBlockedFromScreenShare ? `Allow @${p.username} to Share Screen` : `Block @${p.username} from Sharing Screen`}
+                      aria-label="Toggle Screen Share Permission"
+                    >
+                      {p.isBlockedFromScreenShare ? (
+                        <MonitorOff size={16} color="#f87171" strokeWidth={2.2} />
+                      ) : (
+                        <Monitor size={16} color="#38bdf8" strokeWidth={2.2} />
+                      )}
+                    </button>
+                  )}
+
+                  {isHost && p.role === 'PARTICIPANT' && (
                     <button
                       type="button"
                       className="btn-icon action-promote"
@@ -153,7 +236,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     </button>
                   )}
 
-                  {p.role === 'MODERATOR' && (
+                  {isHost && p.role === 'MODERATOR' && (
                     <button
                       type="button"
                       className="btn-icon action-demote"
@@ -165,29 +248,33 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    className="btn-icon action-host"
-                    onClick={() => {
-                      if (window.confirm(`Transfer Host ownership to ${p.username}? You will become a Moderator.`)) {
-                        onAssignRole(p.userId, 'HOST');
-                      }
-                    }}
-                    title="Transfer Host Ownership"
-                    aria-label="Transfer Host Ownership"
-                  >
-                    <Crown size={18} color="#ffd21f" strokeWidth={2.2} />
-                  </button>
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="btn-icon action-host"
+                      onClick={() => {
+                        if (window.confirm(`Transfer Host ownership to ${p.username}? You will become a Moderator.`)) {
+                          onAssignRole(p.userId, 'HOST');
+                        }
+                      }}
+                      title="Transfer Host Ownership"
+                      aria-label="Transfer Host Ownership"
+                    >
+                      <Crown size={18} color="#ffd21f" strokeWidth={2.2} />
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="btn-icon action-remove"
-                    onClick={() => onRemoveParticipant(p.userId)}
-                    title="Remove user from room"
-                    aria-label="Remove user from room"
-                  >
-                    <UserMinus size={18} color="#f25f5c" strokeWidth={2.2} />
-                  </button>
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="btn-icon action-remove"
+                      onClick={() => onRemoveParticipant(p.userId)}
+                      title="Remove user from room"
+                      aria-label="Remove user from room"
+                    >
+                      <UserMinus size={18} color="#f25f5c" strokeWidth={2.2} />
+                    </button>
+                  )}
                 </div>
               )}
             </div>

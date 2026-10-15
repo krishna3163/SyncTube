@@ -10,12 +10,13 @@ import { Readable } from 'node:stream';
 import os from 'node:os';
 import { RoomManager } from './models/RoomManager.js';
 import { DatabaseService } from './services/db.js';
-import { extractYouTubeId } from './utils/youtube.js';
+import { extractYouTubeId, extractYouTubePlaylistId } from './utils/youtube.js';
 import { detectMediaSource } from './utils/media.js';
 import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
 import { isAllowedOrigin } from './utils/cors.js';
 import { isClusterEnabled } from './utils/cluster.js';
+import { tempBrowserManager } from './services/tempBrowserManager.js';
 
 
 
@@ -718,6 +719,260 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     } catch (err) {
       next(err);
     }
+  });
+
+  // Fetch YouTube Playlist videos endpoint
+  app.get('/api/youtube/playlist', apiRateLimiter(45, 60000), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = String(req.query.url || req.query.list || req.query.q || '').trim();
+      if (!input) {
+        return res.status(400).json({ error: 'Query parameter url or list is required.' });
+      }
+
+      const playlistId = extractYouTubePlaylistId(input) || (input.startsWith('PL') || input.startsWith('UU') || input.startsWith('RD') || input.startsWith('OLAK') ? input : null);
+      if (!playlistId) {
+        return res.status(400).json({ error: 'Invalid YouTube playlist URL or ID.' });
+      }
+
+      let playlistTitle = `YouTube Playlist (${playlistId})`;
+      const videos: Array<{ videoId: string; title: string; channel: string; duration: string; thumbnail: string }> = [];
+
+      try {
+        const playlistUrl = `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+        const response = await fetch(playlistUrl, {
+          signal: AbortSignal.timeout(6000),
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cookie': 'SOCS=CAESEwgDEgk2MTU3NTc2NTYaAmVuIAEaBgiA_LyaBg; CONSENT=PENDING+999;',
+          },
+        });
+
+        if (response.ok) {
+          const html = await response.text();
+
+          const titleMatch = html.match(/<title>(.*?)<\/title>/);
+          if (titleMatch && titleMatch[1]) {
+            playlistTitle = titleMatch[1].replace(/ - YouTube$/, '').trim();
+          }
+
+          const match = html.match(/var ytInitialData = ({.*?});<\/script>/);
+          if (match) {
+            try {
+              const data = JSON.parse(match[1]);
+              const searchVideos = (node: any) => {
+                if (!node || typeof node !== 'object' || videos.length >= 200) return;
+
+                if (node.lockupViewModel) {
+                  const lm = node.lockupViewModel;
+                  const contentId = lm.contentId;
+                  const title = lm.metadata?.lockupMetadataViewModel?.title?.content || '';
+                  const channel = lm.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.parts?.[0]?.text?.content || '';
+                  const overlays = lm.contentImage?.thumbnailViewModel?.overlays;
+                  let duration = '';
+                  if (Array.isArray(overlays)) {
+                    for (const ov of overlays) {
+                      const badges = ov?.thumbnailOverlayBadgeViewModel?.thumbnailBadges;
+                      if (Array.isArray(badges) && badges[0]?.thumbnailBadgeViewModel?.text) {
+                        duration = badges[0].thumbnailBadgeViewModel.text;
+                        break;
+                      }
+                      if (ov?.thumbnailOverlayTimeStatusRenderer?.text?.simpleText) {
+                        duration = ov.thumbnailOverlayTimeStatusRenderer.text.simpleText;
+                        break;
+                      }
+                    }
+                  }
+                  const thumb = `https://img.youtube.com/vi/${contentId}/hqdefault.jpg`;
+                  if (contentId && !videos.some((v) => v.videoId === contentId)) {
+                    videos.push({
+                      videoId: contentId,
+                      title: title || `Video ${contentId}`,
+                      channel: channel || 'YouTube',
+                      duration,
+                      thumbnail: thumb,
+                    });
+                  }
+                }
+
+                if (node.playlistVideoRenderer) {
+                  const vr = node.playlistVideoRenderer;
+                  const vid = vr.videoId;
+                  const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
+                  const duration = vr.lengthText?.simpleText || '';
+                  const channel = vr.shortBylineText?.runs?.[0]?.text || '';
+                  const thumbs = vr.thumbnail?.thumbnails || [];
+                  const thumb = thumbs[thumbs.length - 1]?.url || `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
+                  if (vid && !videos.some((v) => v.videoId === vid)) {
+                    videos.push({ videoId: vid, title: title || `Video ${vid}`, channel: channel || 'YouTube', duration, thumbnail: thumb });
+                  }
+                }
+
+                if (node.videoRenderer) {
+                  const vr = node.videoRenderer;
+                  const vid = vr.videoId;
+                  const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || '';
+                  const duration = vr.lengthText?.simpleText || '';
+                  const channel = vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || '';
+                  const thumbs = vr.thumbnail?.thumbnails || [];
+                  const thumb = thumbs[thumbs.length - 1]?.url || `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
+                  if (vid && !videos.some((v) => v.videoId === vid)) {
+                    videos.push({ videoId: vid, title: title || `Video ${vid}`, channel: channel || 'YouTube', duration, thumbnail: thumb });
+                  }
+                }
+
+                if (Array.isArray(node)) {
+                  for (const item of node) searchVideos(item);
+                } else {
+                  for (const key of Object.keys(node)) {
+                    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+                    searchVideos(node[key]);
+                  }
+                }
+              };
+              searchVideos(data);
+            } catch {}
+          }
+
+          if (videos.length === 0) {
+            const vidMatches = [...html.matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
+            const seen = new Set<string>();
+            for (const m of vidMatches) {
+              const vid = m[1];
+              if (!seen.has(vid) && videos.length < 100) {
+                seen.add(vid);
+                videos.push({
+                  videoId: vid,
+                  title: `YouTube Video (${vid})`,
+                  channel: 'YouTube',
+                  duration: '',
+                  thumbnail: `https://img.youtube.com/vi/${vid}/hqdefault.jpg`,
+                });
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[YouTube Playlist Fetch Error]: ${err?.message}`);
+      }
+
+      return res.status(200).json({
+        playlistId,
+        title: playlistTitle,
+        count: videos.length,
+        videos,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ── Temporary Browser Sandbox Endpoints ──────────────────────────────
+  // POST /api/sessions — Create isolated browser session
+  app.post('/api/sessions', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { initialUrl, viewport } = req.body || {};
+      const result = await tempBrowserManager.createSession(initialUrl, viewport);
+      return res.status(201).json({ success: true, ...result });
+    } catch (err: any) {
+      const isClientError = err?.message && (err.message.includes('not allowed') || err.message.includes('blocked') || err.message.includes('SSRF') || err.message.includes('limit reached'));
+      return res.status(isClientError ? 400 : 500).json({ success: false, error: err?.message || 'Failed to initialize browser session.' });
+    }
+  });
+
+  // GET /api/sessions/:id — Get session status and navigation metadata
+  app.get('/api/sessions/:id', (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    const session = tempBrowserManager.getSessionPublicInfo(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found or already closed' });
+    }
+
+    return res.json({ success: true, session });
+  });
+
+  // POST /api/sessions/:id/navigate — Navigate to URL
+  app.post('/api/sessions/:id/navigate', async (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    const { url } = req.body || {};
+    if (!url) {
+      return res.status(400).json({ success: false, error: 'URL is required' });
+    }
+
+    try {
+      const session = await tempBrowserManager.navigate(sessionId, url);
+      return res.json({ success: true, session });
+    } catch (err: any) {
+      const isClientError = err?.message && (err.message.includes('not allowed') || err.message.includes('blocked') || err.message.includes('policy') || err.message.includes('SSRF') || err.message.includes('Invalid'));
+      return res.status(isClientError ? 400 : 500).json({ success: false, error: err?.message || 'Navigation failed' });
+    }
+  });
+
+  // DELETE /api/sessions/:id — Delete and wipe session
+  app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    await tempBrowserManager.closeSession(sessionId);
+    return res.json({ success: true });
+  });
+
+  // POST /api/sessions/:id/print — Print current page to PDF
+  app.post('/api/sessions/:id/print', async (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    try {
+      const result = await tempBrowserManager.printToPdf(sessionId);
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Print to PDF failed' });
+    }
+  });
+
+  // GET /api/sessions/:id/downloads — Get downloaded files
+  app.get('/api/sessions/:id/downloads', (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    const files = tempBrowserManager.getDownloadedFiles(sessionId);
+    return res.json({ success: true, files });
+  });
+
+  // GET /api/sessions/:id/downloads/:filename — Download file
+  app.get('/api/sessions/:id/downloads/:filename', (req: Request, res: Response) => {
+    const sessionId = req.params.id;
+    const token = (req.query.token as string) || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
+    }
+
+    const filePath = tempBrowserManager.getDownloadedFilePath(sessionId, req.params.filename);
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+    return res.download(filePath, req.params.filename);
   });
 
   // Serve static client build if it exists (e.g. monolithic or Render deployment)

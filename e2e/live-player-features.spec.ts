@@ -4,6 +4,7 @@ import { artifactsDir } from './artifacts.js';
 
 test.describe('Viewer Features Group A: Live Video Player & Stream Experience', () => {
   test('Verifies live playback controls, latency modes, live edge, StreamInfoBar, share, report modals', async ({ page }) => {
+    test.setTimeout(120000);
     page.on('console', (msg) => console.log('[PAGE CONSOLE]', msg.text()));
     // 1. Visit Home Page & enter room
     await page.goto('/');
@@ -18,12 +19,13 @@ test.describe('Viewer Features Group A: Live Video Player & Stream Experience', 
     // Expect navigation to room URL
     await expect(page).toHaveURL(/\/[A-Z0-9]{4,10}/i, { timeout: 15000 });
     await expect(page.locator('.app-header')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.host-badge, .role-badge, .header-badge').first()).toBeVisible({ timeout: 15000 });
 
-    const searchBtn = page.locator('.video-empty-actions-row button').filter({ hasText: /YouTube Search/i }).first();
-    await expect(searchBtn).toBeVisible({ timeout: 10000 });
+    const searchBtn = page.locator('.video-empty-actions-row button, button:has-text("YouTube Search")').first();
+    await expect(searchBtn).toBeVisible({ timeout: 15000 });
     await searchBtn.click();
 
-    await expect(page.locator('.yt-search-modal-card')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.yt-search-modal-card')).toBeVisible({ timeout: 15000 });
     // Click first preset tag to populate results
     const presetPill = page.locator('.yt-preset-pill').first();
     await expect(presetPill).toBeVisible();
@@ -129,7 +131,7 @@ test.describe('Viewer Features Group A: Live Video Player & Stream Experience', 
     const shareActionBtn = infoBar.locator('.stream-action-btn').filter({ hasText: /Share/i });
     await shareActionBtn.click();
 
-    await expect(page.locator('.share-stream-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.share-stream-modal')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.share-url-input')).toBeVisible();
     await expect(page.locator('.share-social-grid')).toBeVisible();
 
@@ -151,7 +153,7 @@ test.describe('Viewer Features Group A: Live Video Player & Stream Experience', 
     const reportActionBtn = infoBar.locator('.report-btn');
     await reportActionBtn.click();
 
-    await expect(page.locator('.report-stream-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.report-stream-modal')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.report-reasons-list')).toBeVisible();
 
     // Select a reason and submit

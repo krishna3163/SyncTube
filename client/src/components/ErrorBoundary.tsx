@@ -8,6 +8,7 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  error?: Error;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -15,8 +16,8 @@ export class ErrorBoundary extends Component<Props, State> {
     hasError: false,
   };
 
-  public static getDerivedStateFromError(): State {
-    return { hasError: true };
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -89,6 +90,12 @@ export class ErrorBoundary extends Component<Props, State> {
             >
               Something went wrong
             </h1>
+
+            {this.state.error && (
+              <p style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: '1rem', fontFamily: 'monospace' }}>
+                {this.state.error.message}
+              </p>
+            )}
 
             <p
               style={{

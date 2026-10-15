@@ -1,7 +1,7 @@
-import React, { lazy, Suspense, useState, useEffect } from 'react';
-
-const HomePage = lazy(() => import('./pages/HomePage.js').then(({ HomePage }) => ({ default: HomePage })));
-const RoomPage = lazy(() => import('./pages/RoomPage.js').then(({ RoomPage }) => ({ default: RoomPage })));
+import React, { useState, useEffect } from 'react';
+import { HomePage } from './pages/HomePage.js';
+import { RoomPage } from './pages/RoomPage.js';
+import { TemporaryBrowserPage } from './pages/TemporaryBrowserPage.js';
 import { CinematicBackground } from './components/CinematicBackground.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { getOrCreateUserId } from './utils/identity.js';
@@ -17,33 +17,53 @@ export function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [userId] = useState<string>(getOrCreateUserId);
+  const [isBrowserView, setIsBrowserView] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/browser';
+  });
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Check URL on load (supports ?room=ABC123, path /ABC123, and path /browser)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlRoom = params.get('room');
+    const handleLocation = () => {
+      const isBrowser = window.location.pathname.toLowerCase() === '/browser';
+      setIsBrowserView(isBrowser);
 
-    const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
-    const roomFromUrl = (urlRoom || (pathMatch ? pathMatch[1] : null))?.toUpperCase();
-
-    const storedSettings = (() => {
-      try {
-        const s = localStorage.getItem('synctube_user_settings');
-        return s ? JSON.parse(s) : null;
-      } catch {
-        return null;
+      if (isBrowser) {
+        setRoomId(null);
+        return;
       }
-    })();
 
-    const storedUsername = sessionStorage.getItem('synctube_username') || storedSettings?.name;
-    if (storedUsername) {
-      setUsername(storedUsername);
-    }
-    if (roomFromUrl && storedUsername) {
-      setRoomId(roomFromUrl);
-    }
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room');
+
+      const pathMatch = window.location.pathname.match(/^\/([A-Za-z0-9_-]{4,16})$/);
+      const rawCode = urlRoom || (pathMatch ? pathMatch[1] : null);
+      const roomFromUrl = rawCode?.toLowerCase() === 'browser' ? null : rawCode?.toUpperCase() || null;
+
+      const storedSettings = (() => {
+        try {
+          const s = localStorage.getItem('synctube_user_settings');
+          return s ? JSON.parse(s) : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      const storedUsername = sessionStorage.getItem('synctube_username') || storedSettings?.name;
+      if (storedUsername) {
+        setUsername(storedUsername);
+      }
+      if (roomFromUrl && storedUsername) {
+        setRoomId(roomFromUrl);
+      } else if (!roomFromUrl) {
+        setRoomId(null);
+      }
+    };
+
+    handleLocation();
+    window.addEventListener('popstate', handleLocation);
+    return () => window.removeEventListener('popstate', handleLocation);
   }, []);
 
   const showToast = React.useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -61,9 +81,8 @@ export function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-
-
   const handleEnterRoom = React.useCallback((targetRoomId: string, user: string) => {
+    setIsBrowserView(false);
     setRoomId(targetRoomId);
     setUsername(user);
     sessionStorage.setItem('synctube_username', user);
@@ -74,6 +93,19 @@ export function App() {
 
   const handleLeaveRoom = React.useCallback(() => {
     setRoomId(null);
+    setIsBrowserView(false);
+    window.history.pushState({ path: '/' }, '', '/');
+  }, []);
+
+  const handleOpenBrowser = React.useCallback(() => {
+    setRoomId(null);
+    setIsBrowserView(true);
+    window.history.pushState({ path: '/browser' }, '', '/browser');
+  }, []);
+
+  const handleBackToHome = React.useCallback(() => {
+    setIsBrowserView(false);
+    setRoomId(null);
     window.history.pushState({ path: '/' }, '', '/');
   }, []);
 
@@ -81,23 +113,27 @@ export function App() {
     <div className="app-root-shell">
       <CinematicBackground />
       <div className="app-content-layer">
-        <Suspense fallback={<div className="app-page-loading" role="status">Loading SyncTube…</div>}>
-          {roomId ? (
-            <RoomPage
-              roomId={roomId}
-              username={username}
-              userId={userId}
-              onLeaveRoom={handleLeaveRoom}
-              onNotify={showToast}
-            />
-          ) : (
-            <HomePage
-              onEnterRoom={handleEnterRoom}
-              onNotify={showToast}
-              userId={userId}
-            />
-          )}
-        </Suspense>
+        {roomId ? (
+          <RoomPage
+            roomId={roomId}
+            username={username}
+            userId={userId}
+            onLeaveRoom={handleLeaveRoom}
+            onNotify={showToast}
+          />
+        ) : isBrowserView ? (
+          <TemporaryBrowserPage
+            onBackToHome={handleBackToHome}
+            onNotify={showToast}
+          />
+        ) : (
+          <HomePage
+            onEnterRoom={handleEnterRoom}
+            onOpenBrowser={handleOpenBrowser}
+            onNotify={showToast}
+            userId={userId}
+          />
+        )}
       </div>
 
       {/* Floating Toast Alerts */}

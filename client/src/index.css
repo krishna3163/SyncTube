@@ -6412,14 +6412,8 @@ body.is-dragging-reaction iframe {
   opacity: 1;
 }
 
-.reaction-toggle-btn,
-.floating-reactions-launcher,
-.reaction-bar-btn {
-  display: none !important;
-}
-
 .reaction-toggle-btn {
-  display: none !important;
+  display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   background: rgba(22, 17, 34, 0.92);

@@ -222,6 +222,23 @@ export class HybridCallManager {
       this.onForceMutedCallbacks.forEach((cb) => cb(data.mutedBy));
     });
 
+    // Host force stopped screen share
+    socket.on('call:force_stop_screenshare', () => {
+      this.stopScreenShare();
+      if (socket) {
+        socket.emit('call:media_state', {
+          isMuted: this.isMuted,
+          isCameraOff: this.isCameraOff,
+          isScreenSharing: false,
+        });
+      }
+    });
+
+    // Host force removed/blocked user from call
+    socket.on('call:force_left', () => {
+      this.leaveCall();
+    });
+
     // P2P Signaling (1-to-1)
     socket.on('call:p2p:offer', async (data: { fromSocketId: string; offer: RTCSessionDescriptionInit }) => {
       if (this.topologyMode !== 'p2p' && !this.isTransitioning) return;
@@ -908,6 +925,12 @@ export class HybridCallManager {
   public hostMuteUser(targetSocketId: string, targetUserId: string): void {
     if (socket) {
       socket.emit('call:host_mute_user', { targetSocketId, targetUserId });
+    }
+  }
+
+  public hostStopScreenShare(targetSocketId: string, targetUserId: string): void {
+    if (socket) {
+      socket.emit('call:host_stop_screenshare', { targetSocketId, targetUserId });
     }
   }
 

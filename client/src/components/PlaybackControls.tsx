@@ -55,6 +55,8 @@ export interface PlaybackControlsProps {
   volume?: number;
   onSetVolume?: (volume: number) => void;
   onTogglePiP?: () => void;
+  onGoLive?: () => void;
+  isLive?: boolean;
   latencyMode?: 'ultra_low' | 'low' | 'normal';
   onSetLatencyMode?: (mode: 'ultra_low' | 'low' | 'normal') => void;
   onSetQuality?: (quality: string) => void;
@@ -70,6 +72,7 @@ export interface PlaybackControlsProps {
   onOpenRequestsTab?: () => void;
   isDockMode?: boolean;
   reactionControl?: React.ReactNode;
+  roomUptimeSeconds?: number;
 }
 
 const QUALITIES = [
@@ -104,6 +107,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   volume = 100,
   onSetVolume,
   onTogglePiP,
+  onGoLive,
+  isLive = false,
   latencyMode = 'low',
   onSetLatencyMode,
   onSetQuality,
@@ -116,6 +121,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   onOpenRequestsTab,
   isDockMode = false,
   reactionControl,
+  roomUptimeSeconds,
 }) => {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showQualityOptions, setShowQualityOptions] = useState(false);
@@ -126,6 +132,16 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const reactionRef = useRef<HTMLDivElement>(null);
   const isHost = userRole === 'HOST' || userRole === 'MODERATOR';
   const canControl = isHost;
+  const effectiveIsLive = Boolean(isLive || (playState === 'playing'));
+
+  const handleLiveEdgeClick = () => {
+    if (effectiveIsLive) {
+      return;
+    }
+    if (isHost && onGoLive) {
+      onGoLive();
+    }
+  };
   useEffect(() => {
     if (!showSettingsMenu && !showReactionMenu) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
@@ -295,6 +311,42 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             <RotateCw size={15} />
             <span>+10s</span>
           </button>
+
+          {/* Live Broadcast / GO LIVE Badge Button */}
+          {effectiveIsLive ? (
+            <div
+              className="live-edge-badge-btn is-live"
+              title={`Broadcasting Live • Active for ${formatTime(roomUptimeSeconds || 0)}`}
+              aria-label="Live broadcast"
+            >
+              <span className="live-badge-dot live-dot-pulse" />
+              <span className="live-badge-title">
+                LIVE{typeof roomUptimeSeconds === 'number' && roomUptimeSeconds > 0
+                  ? ` • ${formatTime(roomUptimeSeconds)}`
+                  : ''}
+              </span>
+            </div>
+          ) : isHost ? (
+            <button
+              type="button"
+              className="live-edge-badge-btn is-go-live"
+              onClick={handleLiveEdgeClick}
+              title="Start the live watch party broadcast for all viewers"
+              aria-label="Go Live"
+            >
+              <span className="live-badge-dot live-dot-dvr" />
+              <span className="live-badge-title">GO LIVE</span>
+            </button>
+          ) : (
+            <div
+              className="live-edge-badge-btn is-waiting"
+              title="Waiting for the host to go live"
+              aria-label="Stream starting soon"
+            >
+              <span className="live-badge-dot live-dot-dvr" />
+              <span className="live-badge-title">STARTING SOON</span>
+            </div>
+          )}
 
           {onNextVideo && canControl && (
             <button

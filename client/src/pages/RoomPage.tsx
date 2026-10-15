@@ -11,12 +11,17 @@ import {
   emitRemoveParticipant,
   emitHostSyncPulse,
   emitPlaylistAdd,
+  emitPlaylistAddBatch,
   emitPlaylistRemove,
   emitPlaylistReorder,
   emitPlaylistMoveTop,
   emitPlaylistVote,
   emitPlaylistShuffle,
   emitPlaylistClear,
+  emitAdminToggleBlockCall,
+  emitAdminToggleBlockChat,
+  emitAdminToggleBlockScreenShare,
+  emitAdminForceStopScreenShare,
   emitRequestAction,
   emitRespondActionRequest,
   emitSendChat,
@@ -27,6 +32,9 @@ import {
   emitPartyReady,
   emitSyncDriftCheck,
   emitChatTyping,
+  emitToggleRoomLike,
+  emitSetRoomCategory,
+  emitGoLive,
 } from '../services/socket.js';
 import {
   Role,
@@ -77,18 +85,22 @@ import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, 
 import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
-const YouTubeSearchModal = lazy(() => import('../components/YouTubeSearchModal.js').then(({ YouTubeSearchModal }) => ({ default: YouTubeSearchModal })));
+import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 const InviteModal = lazy(() => import('../components/InviteModal.js').then(({ InviteModal }) => ({ default: InviteModal })));
 const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthModal }) => ({ default: AuthModal })));
 const SyncDiagnosticsModal = lazy(() => import('../components/SyncDiagnosticsModal.js').then(({ SyncDiagnosticsModal }) => ({ default: SyncDiagnosticsModal })));
-const BrowserHubModal = lazy(() => import('../components/BrowserHubModal.js').then(({ BrowserHubModal }) => ({ default: BrowserHubModal })));
-const ShareStreamModal = lazy(() => import('../components/ShareStreamModal.js').then(({ ShareStreamModal }) => ({ default: ShareStreamModal })));
-const ReportStreamModal = lazy(() => import('../components/ReportStreamModal.js').then(({ ReportStreamModal }) => ({ default: ReportStreamModal })));
-const DirectVideoPlayer = lazy(() => import('../components/DirectVideoPlayer.js').then(({ DirectVideoPlayer }) => ({ default: DirectVideoPlayer })));
-const CinemaStageCard = lazy(() => import('../components/CinemaStageCard.js').then(({ CinemaStageCard }) => ({ default: CinemaStageCard })));
-const RoomTabPlayer = lazy(() => import('../components/RoomTabPlayer.js').then(({ RoomTabPlayer }) => ({ default: RoomTabPlayer })));
+import { BrowserHubModal } from '../components/BrowserHubModal.js';
+import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
+import { CinemaStageCard } from '../components/CinemaStageCard.js';
+import { RoomTabPlayer } from '../components/RoomTabPlayer.js';
+import { RoomBrowserPlayer } from '../components/RoomBrowserPlayer.js';
+import { ShareStreamModal } from '../components/ShareStreamModal.js';
+import { ReportStreamModal } from '../components/ReportStreamModal.js';
+import { StreamInfoBar } from '../components/StreamInfoBar.js';
 import { CallOverlay } from '../components/CallOverlay.js';
 import { SidebarCallStage } from '../components/SidebarCallStage.js';
+import { webrtcCallManager } from '../services/webrtcCallManager.js';
+import { extractYouTubePlaylistId } from '../utils/youtube.js';
 
 interface RoomPageProps {
   roomId: string;
@@ -242,6 +254,60 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [isStreamEnded, setIsStreamEnded] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [streamStartedAt, setStreamStartedAt] = useState<number>(() => Date.now());
+  const [streamCategory, setStreamCategory] = useState<string>('cinema');
+  const [roomLikes, setRoomLikes] = useState<number>(0);
+  const [hasLikedRoom, setHasLikedRoom] = useState<boolean>(false);
+  const [roomUptimeSeconds, setRoomUptimeSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    const start = syncState?.createdAt || streamStartedAt;
+    const updateTicker = () => {
+      setRoomUptimeSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    };
+    updateTicker();
+    const interval = setInterval(updateTicker, 1000);
+    return () => clearInterval(interval);
+  }, [syncState?.createdAt, streamStartedAt]);
+
+  useEffect(() => {
+    if (typeof syncState?.likes === 'number') {
+      setRoomLikes(syncState.likes);
+    }
+    if (syncState?.category) {
+      setStreamCategory(syncState.category);
+    }
+    if (syncState?.createdAt) {
+      setStreamStartedAt(syncState.createdAt);
+    }
+  }, [syncState?.likes, syncState?.category, syncState?.createdAt]);
+
+  useEffect(() => {
+    const onLikesUpdated = (data: { likes: number; userId: string; hasLiked: boolean }) => {
+      setRoomLikes(data.likes);
+      if (data.userId === userId) {
+        setHasLikedRoom(data.hasLiked);
+      }
+    };
+    const onCategoryUpdated = (data: { category: string }) => {
+      setStreamCategory(data.category);
+    };
+    socket.on('room:likes_updated', onLikesUpdated);
+    socket.on('room:category_updated', onCategoryUpdated);
+    return () => {
+      socket.off('room:likes_updated', onLikesUpdated);
+      socket.off('room:category_updated', onCategoryUpdated);
+    };
+  }, [userId]);
+
+  const handleToggleRoomLike = useCallback(() => {
+    emitToggleRoomLike();
+  }, []);
+
+  const handleSetCategory = useCallback((cat: string) => {
+    setStreamCategory(cat);
+    emitSetRoomCategory(cat);
+  }, []);
 
   // V2 Features State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
@@ -902,6 +968,26 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('room:went_live', onWentLive);
     socket.on('identity_credential', onIdentityCredential);
 
+    const onCallJoinApproved = (data: { approvedBy?: string }) => {
+      onNotifyRef.current(`🎉 ${data.approvedBy || 'Host'} approved your request to join the call! Connecting...`, 'success');
+      webrtcCallManager.joinCall({ audio: true, video: false });
+    };
+    const onCallJoinDenied = (data: { deniedBy?: string }) => {
+      onNotifyRef.current(`❌ ${data.deniedBy || 'Host'} declined your request to join the call.`, 'error');
+    };
+    const onCallForceLeft = () => {
+      onNotifyRef.current('⚠️ You have been removed from the voice & video call by the room host.', 'error');
+      webrtcCallManager.leaveCall();
+    };
+    const onCallForceStopShare = () => {
+      onNotifyRef.current('🛑 Your screen share has been stopped by the room host.', 'info');
+    };
+
+    socket.on('call:join_approved', onCallJoinApproved);
+    socket.on('call:join_denied', onCallJoinDenied);
+    socket.on('call:force_left', onCallForceLeft);
+    socket.on('call:force_stop_screenshare', onCallForceStopShare);
+
     const stopTimeSync = startTimeSync();
 
     if (socket.connected) {
@@ -938,6 +1024,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('error', onError);
       socket.off('room:went_live', onWentLive);
       socket.off('identity_credential', onIdentityCredential);
+      socket.off('call:join_approved', onCallJoinApproved);
+      socket.off('call:join_denied', onCallJoinDenied);
+      socket.off('call:force_left', onCallForceLeft);
+      socket.off('call:force_stop_screenshare', onCallForceStopShare);
       emitLeaveRoom(roomId);
     };
   }, [roomId, username, userId, userSettings.name, userSettings.avatarId, addActivity]);
@@ -984,6 +1074,18 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   const handleRemoveParticipant = useCallback((targetUserId: string) => {
     emitRemoveParticipant(targetUserId);
+  }, []);
+
+  const handleToggleBlockCall = useCallback((targetUserId: string) => {
+    emitAdminToggleBlockCall(targetUserId);
+  }, []);
+
+  const handleToggleBlockChat = useCallback((targetUserId: string) => {
+    emitAdminToggleBlockChat(targetUserId);
+  }, []);
+
+  const handleToggleBlockScreenShare = useCallback((targetUserId: string) => {
+    emitAdminToggleBlockScreenShare(targetUserId);
   }, []);
 
   const handleTimeChange = useCallback((time: number, dur: number) => {
@@ -1039,6 +1141,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     (videoId && (videoId.startsWith('tb:') || videoId.startsWith('tab:')))
   );
 
+  const handleGoLive = useCallback(() => {
+    if (isRoomLive) {
+      onNotify('✨ You are already broadcasting live! Grab some popcorn and enjoy the show 🍿', 'info');
+      return;
+    }
+    emitGoLive();
+    onNotify('🚀 Broadcast started! Room is now streaming live 🎬', 'success');
+  }, [isRoomLive, onNotify]);
+
   const handleToggleTheater = handleToggleTheaterMode;
 
   const handleTogglePiP = useCallback(async () => {
@@ -1073,6 +1184,50 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   }, [onNotify]);
 
   // Playlist handlers — all mutations go through server (server is source of truth)
+  const handleImportPlaylist = useCallback(
+    async (playlistUrlOrId: string) => {
+      if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
+        onNotify('👑 Only host & moderators can import playlists into the queue.', 'error');
+        return;
+      }
+      const playlistId = extractYouTubePlaylistId(playlistUrlOrId) || playlistUrlOrId.trim();
+      if (!playlistId) {
+        onNotify('Invalid playlist link or ID', 'error');
+        return;
+      }
+      onNotify('Fetching playlist videos...', 'info');
+      try {
+        const primaryApiUrl = getApiUrl();
+        const endpoint = primaryApiUrl
+          ? `${primaryApiUrl}/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`
+          : `/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`;
+
+        let resp = await fetch(endpoint);
+        if (!resp.ok) {
+          resp = await fetch(`https://synctube-2ar4.onrender.com/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`);
+        }
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch playlist (status ${resp.status})`);
+        }
+        const data = await resp.json();
+        if (!data.videos || data.videos.length === 0) {
+          onNotify('No videos found in this playlist.', 'error');
+          return;
+        }
+        emitPlaylistAddBatch(data.videos);
+        addActivity(`${username} imported ${data.videos.length} videos from playlist`, 'playlist', {
+          username,
+          userId,
+          avatarId: userSettings.avatarId,
+        });
+        onNotify(`✨ Successfully imported ${data.videos.length} videos from playlist!`, 'success');
+      } catch (err: any) {
+        onNotify(`Could not import playlist: ${err?.message || 'Error'}`, 'error');
+      }
+    },
+    [userRole, onNotify, addActivity, username, userId, userSettings.avatarId]
+  );
+
   const handleAddToPlaylist = (
     targetVideoId: string,
     title?: string,
@@ -1082,6 +1237,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   ) => {
     if (userRole !== 'HOST' && userRole !== 'MODERATOR') {
       onNotify('👑 VIP Remote alert! Only host & mods can drop videos directly into the queue. Drop a request in chat! 🎟️', 'error');
+      return;
+    }
+    if (extractYouTubePlaylistId(targetVideoId)) {
+      handleImportPlaylist(targetVideoId);
       return;
     }
     emitPlaylistAdd(targetVideoId, title, duration, channel, thumbnail);
@@ -1312,9 +1471,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Chat & Reaction Handlers
   const handleSendChat = useCallback(
     (text: string, replyTo?: ChatReplyPreview) => {
+      const myParticipant = participants.find((p) => p.userId === userId);
+      if (myParticipant?.isBlockedFromChat) {
+        onNotify('You have been restricted from sending messages in chat by the host.', 'error');
+        return;
+      }
       emitSendChat(text, userSettings.color, userSettings.avatarId, replyTo);
     },
-    [userSettings.color, userSettings.avatarId]
+    [participants, userId, userSettings.color, userSettings.avatarId, onNotify]
   );
 
   const handleToggleMessageReaction = useCallback((messageId: string, emoji: string) => {
@@ -1431,58 +1595,69 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
                 {videoId ? (
                   (() => {
+                    // 1. Temporary Browser Cloud Stream
+                    if (videoId.startsWith('tb:') || syncState?.browserSession?.sessionId) {
+                      const sId = syncState?.browserSession?.sessionId || videoId.replace(/^tb:/, '');
+                      return (
+                        <RoomBrowserPlayer
+                          roomId={roomId}
+                          sessionId={sId}
+                          userRole={userRole}
+                          guestControl={!!syncState?.browserSession?.guestControl}
+                          currentUrl={syncState?.browserSession?.currentUrl}
+                          currentTitle={syncState?.browserSession?.currentTitle}
+                          onNotify={onNotify}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                        />
+                      );
+                    }
+
                     const detectedMedia = detectClientMedia(videoId);
 
                     // 2. Browser Tab Screen Share Stream
                     if (detectedMedia?.category === 'tab_share' || videoId.startsWith('tab:')) {
                       return (
-                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
-                          <RoomTabPlayer
-                            userRole={userRole}
-                            userId={userId}
-                            roomId={roomId}
-                            socket={socket}
-                            onNotify={onNotify}
-                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                          />
-                        </Suspense>
+                        <RoomTabPlayer
+                          userRole={userRole}
+                          userId={userId}
+                          roomId={roomId}
+                          socket={socket}
+                          onNotify={onNotify}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                        />
                       );
                     }
 
                     // 3. Direct Video File / HLS Stream
                     if (detectedMedia?.category === 'direct_stream') {
                       return (
-                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
-                          <DirectVideoPlayer
-                            ref={ytPlayerRef}
-                            mediaUrl={videoId}
-                            syncState={syncState}
-                            userRole={userRole}
-                            playbackSpeed={playbackSpeed}
-                            isMuted={isMuted}
-                            onLocalPlay={handlePlay}
-                            onLocalPause={handlePause}
-                            onLocalSeek={handleSeek}
-                            onCurrentTimeChange={handleTimeChange}
-                            onVideoEnded={handleVideoEnded}
-                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                          />
-                        </Suspense>
+                        <DirectVideoPlayer
+                          ref={ytPlayerRef}
+                          mediaUrl={videoId}
+                          syncState={syncState}
+                          userRole={userRole}
+                          playbackSpeed={playbackSpeed}
+                          isMuted={isMuted}
+                          onLocalPlay={handlePlay}
+                          onLocalPause={handlePause}
+                          onLocalSeek={handleSeek}
+                          onCurrentTimeChange={handleTimeChange}
+                          onVideoEnded={handleVideoEnded}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                        />
                       );
                     }
 
                     // 3. Movie Website Hub Card (Watch Party Cinema Stage)
                     if (detectedMedia?.category === 'movie_website') {
                       return (
-                        <Suspense fallback={<div className="video-empty-state">Loading player...</div>}>
-                          <CinemaStageCard
-                            media={detectedMedia}
-                            roomId={roomId}
-                            userRole={userRole}
-                            onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                            onNotify={onNotify}
-                          />
-                        </Suspense>
+                        <CinemaStageCard
+                          media={detectedMedia}
+                          roomId={roomId}
+                          userRole={userRole}
+                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+                          onNotify={onNotify}
+                        />
                       );
                     }
 
@@ -1609,6 +1784,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       volume={volume}
                       onSetVolume={handleSetVolume}
                       onTogglePiP={handleTogglePiP}
+                      onGoLive={handleGoLive}
+                      isLive={isRoomLive}
                       latencyMode={latencyMode}
                       onSetLatencyMode={setLatencyMode}
                       onSetQuality={handleSetQuality}
@@ -1620,6 +1797,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       onRequestAction={handleRequestAction}
                       onOpenRequestsTab={() => setActiveSidebarTab('requests')}
                       reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
+                      roomUptimeSeconds={roomUptimeSeconds}
                     />
                   </div>
                 )}
@@ -1627,6 +1805,42 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             </div>
 
           </div>
+
+          {/* Live Stream Metadata Bar & Experience Info below stage */}
+          <StreamInfoBar
+            roomId={roomId}
+            title={
+              syncState?.mediaIdentity?.title ||
+              playlist.find((p) => p.videoId === videoId)?.title ||
+              (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+            }
+            hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
+            hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
+            hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
+            userRole={userRole}
+            viewersCount={participants.length}
+            streamStartedAt={syncState?.createdAt || streamStartedAt}
+            category={streamCategory}
+            onSetCategory={handleSetCategory}
+            likes={roomLikes}
+            hasLiked={hasLikedRoom}
+            onToggleLike={handleToggleRoomLike}
+            isHostRegistered={Boolean(
+              userRole === 'HOST' ||
+              participants.some((p) => p.role === 'HOST') ||
+              (currentUser?.id && currentUser?.email)
+            )}
+            hostFollowersCount={currentUser?.followersCount}
+            onOpenShare={() => setIsShareModalOpen(true)}
+            onOpenReport={() => setIsReportModalOpen(true)}
+            onNotify={onNotify}
+            thumbnailUrl={
+              playlist.find((p) => p.videoId === videoId)?.thumbnail ||
+              (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
+                ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                : undefined)
+            }
+          />
 
           {/* Mobile Controller Dock */}
           <div className="mobile-playback-dock">
@@ -1653,6 +1867,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               volume={volume}
               onSetVolume={handleSetVolume}
               onTogglePiP={handleTogglePiP}
+              onGoLive={handleGoLive}
+              isLive={isRoomLive}
               latencyMode={latencyMode}
               onSetLatencyMode={setLatencyMode}
               onSetQuality={handleSetQuality}
@@ -1664,6 +1880,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
               reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
+              roomUptimeSeconds={roomUptimeSeconds}
             />
           </div>
         </div>
@@ -1677,6 +1894,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             currentUsername={username}
             currentUserAvatarId={userSettings.avatarId}
             userRole={userRole}
+            isBlockedFromCall={participants.find((p) => p.userId === userId)?.isBlockedFromCall}
+            onRequestAction={(type) => handleRequestAction(type)}
             onNotify={onNotify}
           />
 
@@ -1751,6 +1970,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 readinessList={readinessList}
                 onAssignRole={handleAssignRole}
                 onRemoveParticipant={handleRemoveParticipant}
+                onToggleBlockCall={handleToggleBlockCall}
+                onToggleBlockChat={handleToggleBlockChat}
+                onToggleBlockScreenShare={handleToggleBlockScreenShare}
               />
             )}
 
@@ -1761,6 +1983,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 userRole={userRole}
                 currentUserId={userId}
                 onAddToPlaylist={handleAddToPlaylist}
+                onImportPlaylist={handleImportPlaylist}
                 onPlayItem={handlePlayItem}
                 onNextVideo={handleNextVideo}
                 onRemoveItem={handleRemovePlaylistItem}
@@ -1782,6 +2005,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   userRole={userRole}
                   onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
                   onAddToPlaylist={handleAddToPlaylist}
+                  onAddPlaylistBatch={(items) => emitPlaylistAddBatch(items)}
                   onRequestAction={(type, data) => handleRequestAction(type, data)}
                   onNotify={onNotify}
                 />
@@ -1852,15 +2076,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       />
 
       {/* In-App YouTube Search Modal */}
-      {isSearchModalOpen && <Suspense fallback={null}><YouTubeSearchModal
+      {isSearchModalOpen && <YouTubeSearchModal
         isOpen
         onClose={() => setIsSearchModalOpen(false)}
         userRole={userRole}
         onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
         onAddToPlaylist={handleAddToPlaylist}
+        onAddPlaylistBatch={(items) => emitPlaylistAddBatch(items)}
         onRequestAction={(type, data) => handleRequestAction(type, data)}
         onNotify={onNotify}
-      /></Suspense>}
+      />}
 
       {/* Friends Invite & QR Code Modal */}
       {isInviteModalOpen && <Suspense fallback={null}><InviteModal
@@ -1900,7 +2125,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       /></Suspense>}
 
       {/* V2 Universal Browser & Cinema Hub Modal */}
-      {isBrowserHubOpen && <Suspense fallback={null}><BrowserHubModal
+      {isBrowserHubOpen && <BrowserHubModal
         isOpen
         onClose={() => setIsBrowserHubOpen(false)}
         userRole={userRole}
@@ -1911,10 +2136,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           onNotify(`Now playing: ${title || url}`, 'success');
         }}
         onNotify={onNotify}
-      /></Suspense>}
+      />}
 
       {/* Share Stream Modal */}
-      {isShareModalOpen && <Suspense fallback={null}><ShareStreamModal
+      {isShareModalOpen && <ShareStreamModal
         isOpen
         onClose={() => setIsShareModalOpen(false)}
         roomId={roomId}
@@ -1924,10 +2149,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
         }
         onNotify={onNotify}
-      /></Suspense>}
+      />}
 
       {/* Report Stream Modal */}
-      {isReportModalOpen && <Suspense fallback={null}><ReportStreamModal
+      {isReportModalOpen && <ReportStreamModal
         isOpen
         onClose={() => setIsReportModalOpen(false)}
         roomId={roomId}
@@ -1938,7 +2163,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         }
         currentTime={currentTime}
         onNotify={onNotify}
-      /></Suspense>}
+      />}
 
       {/* Adaptive Voice & Video Chat Floating Dock & Grid */}
       <CallOverlay

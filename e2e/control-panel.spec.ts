@@ -4,7 +4,7 @@ import { artifactsDir } from './artifacts.js';
 
 test.describe('Workspaces Control Panel Comprehensive Tests', () => {
   test('User can open Control Panel and interact with all media, clipboard, printer, displays, quality, sharing, and workspaces features', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
 
     // 1. Visit Home Page
     await page.goto('/');

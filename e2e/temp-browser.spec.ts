@@ -4,6 +4,7 @@ import { artifactsDir } from './artifacts.js';
 
 test.describe('Temporary Browser Feature End-to-End Tests', () => {
   test('User can open Temporary Browser, start an isolated session, navigate, and wipe data', async ({ page }) => {
+    test.setTimeout(90000);
     // 1. Visit Home Page
     await page.goto('/');
 

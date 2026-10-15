@@ -75,7 +75,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
         </div>
 
         <div className="modal-body browser-hub-modal-body">
-          <form onSubmit={handleCustomSubmit} className="browser-hub-url-bar">
+          <form onSubmit={handleCustomSubmit} className="browser-hub-url-bar" style={{ marginBottom: '1.25rem' }}>
             <div className="browser-hub-input-wrap">
               <Globe size={16} className="browser-hub-input-icon" />
               <input
@@ -107,7 +107,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
           </form>
 
           {detected && (
-            <div className="browser-hub-detected-preview">
+            <div className="browser-hub-detected-preview" style={{ marginBottom: '1.25rem' }}>
               <div className="detected-left">
                 <span className="detected-icon">{detected.badge.icon}</span>
                 <div>
@@ -124,6 +124,97 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
               </button>
             </div>
           )}
+
+          <div className="browser-hub-platforms">
+            <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+              Curated Streaming Platforms
+            </h4>
+            <div className="browser-platform-grid">
+              {[
+                {
+                  name: 'Netflix',
+                  url: 'https://netflix.com',
+                  category: 'Cinema & TV Series',
+                  desc: 'Synchronize Netflix shows and movies in full sync with your room.',
+                  icon: '🍿',
+                  color: 'rgba(229, 9, 20, 0.2)',
+                },
+                {
+                  name: 'Prime Video',
+                  url: 'https://primevideo.com',
+                  category: 'Blockbusters & Originals',
+                  desc: 'Watch Amazon Prime Originals & blockbusters with friends.',
+                  icon: '🎬',
+                  color: 'rgba(0, 168, 225, 0.2)',
+                },
+                {
+                  name: 'Disney+',
+                  url: 'https://disneyplus.com',
+                  category: 'Animation & Marvel',
+                  desc: 'Stream Disney, Pixar, Marvel, Star Wars & National Geographic.',
+                  icon: '✨',
+                  color: 'rgba(17, 60, 207, 0.2)',
+                },
+                {
+                  name: 'Crunchyroll',
+                  url: 'https://crunchyroll.com',
+                  category: 'Anime Streaming',
+                  desc: 'Stream newest anime simulcasts with your room.',
+                  icon: '🍥',
+                  color: 'rgba(244, 117, 33, 0.2)',
+                },
+                {
+                  name: 'Twitch',
+                  url: 'https://twitch.tv',
+                  category: 'Live Broadcasts',
+                  desc: 'Co-watch gaming, esports & live streamer broadcasts.',
+                  icon: '👾',
+                  color: 'rgba(145, 70, 255, 0.2)',
+                },
+                {
+                  name: 'Direct MP4 Stream',
+                  url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                  category: 'Direct Video URL',
+                  desc: 'Direct video file link (MP4, WebM, HLS m3u8).',
+                  icon: '🌐',
+                  color: 'rgba(16, 185, 129, 0.2)',
+                },
+              ].map((p) => (
+                <div
+                  key={p.name}
+                  className="browser-platform-card"
+                  onClick={() => {
+                    onSelectMedia(p.url, p.name, 'netflix');
+                    onClose();
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="browser-platform-top">
+                    <div className="browser-platform-icon-wrap" style={{ background: p.color }}>
+                      <span>{p.icon}</span>
+                    </div>
+                    <span className="browser-platform-category">{p.category}</span>
+                  </div>
+                  <div className="browser-platform-body">
+                    <h3 className="browser-platform-name">{p.name}</h3>
+                    <p className="browser-platform-desc">{p.desc}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary browser-platform-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMedia(p.url, p.name, 'netflix');
+                      onClose();
+                    }}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Select Platform</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

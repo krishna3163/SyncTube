@@ -64,3 +64,45 @@ export function extractYouTubeId(input: string): string | null {
 
   return null;
 }
+
+const PLAYLIST_ID_REGEX = /^[a-zA-Z0-9_-]{10,64}$/;
+
+export function isValidYouTubePlaylistId(id: string): boolean {
+  return typeof id === 'string' && PLAYLIST_ID_REGEX.test(id.trim());
+}
+
+export function extractYouTubePlaylistId(input: string): string | null {
+  if (!input || typeof input !== 'string' || input.length > 2048) {
+    return null;
+  }
+
+  const trimmed = input.trim();
+
+  if (trimmed.startsWith('PL') || trimmed.startsWith('UU') || trimmed.startsWith('RD') || trimmed.startsWith('OLAK') || trimmed.startsWith('FL')) {
+    if (PLAYLIST_ID_REGEX.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  try {
+    const url = new URL(trimmed.startsWith('http://') || trimmed.startsWith('https://') ? trimmed : `https://${trimmed}`);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+
+    if (
+      hostname === 'youtube.com' ||
+      hostname === 'youtube-nocookie.com' ||
+      hostname === 'music.youtube.com' ||
+      hostname === 'youtu.be'
+    ) {
+      const list = url.searchParams.get('list');
+      if (list && PLAYLIST_ID_REGEX.test(list)) {
+        return list;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
