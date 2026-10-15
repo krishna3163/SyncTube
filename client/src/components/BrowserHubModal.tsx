@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   X,
   Globe,
+  Film,
   ExternalLink,
 } from 'lucide-react';
 import { detectClientMedia } from '../utils/media.js';
@@ -58,10 +59,13 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card browser-hub-modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <div className="browser-hub-header-title">
-            <Globe size={20} color="var(--accent)" />
+          <div className="browser-hub-header-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Film size={20} color="#38bdf8" />
+            </div>
             <div>
-              <h2>Direct Stream & Web Media</h2>
+              <h2 style={{ margin: 0, fontSize: '1.15rem' }}>Direct Stream & Web Media</h2>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Play direct MP4, HLS m3u8, screen share, or streaming platforms</span>
             </div>
           </div>
           <button
@@ -184,7 +188,7 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                   url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
                   category: 'Direct Video URL',
                   desc: 'Direct video file link (MP4, WebM, HLS m3u8).',
-                  icon: '🌐',
+                  icon: '🎬',
                   color: 'rgba(16, 185, 129, 0.2)',
                 },
               ].map((p) => (
@@ -193,6 +197,9 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                   className="browser-platform-card"
                   onClick={() => {
                     if (p.url === 'tab:share') {
+                      try {
+                        sessionStorage.setItem('synctube_pending_screen_share', 'true');
+                      } catch {}
                       window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: "Live Screen" }, '*');
                       onSelectMedia('tab:share', 'Live Screen Share', 'tab_share');
                     } else {

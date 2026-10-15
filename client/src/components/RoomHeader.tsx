@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe } from 'lucide-react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
@@ -114,12 +114,12 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <button
             className="btn btn-secondary header-btn"
             onClick={onOpenBrowserHub}
-            title="Open Universal Browser & Cinema Hub (Netflix, Prime, Disney+, Crunchyroll, Twitch, Direct Links)"
-            aria-label="Browser Hub"
+            title="Open Direct Stream & Web Media Hub (Direct MP4/m3u8, Screen Share, Netflix, Prime)"
+            aria-label="Direct Stream & Web Media"
             id="browser-hub-header-btn"
           >
-            <Globe size={14} color="#60a5fa" />
-            <span className="header-btn-text">Browser Hub</span>
+            <Film size={14} color="#38bdf8" />
+            <span className="header-btn-text">Direct Stream & Web Media</span>
           </button>
         )}
 

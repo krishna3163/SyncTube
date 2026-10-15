@@ -1091,11 +1091,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   const handleStartScreenShare = useCallback(() => {
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      onNotify('Screen sharing is not supported on this browser or mobile device.', 'error');
+      onNotify('Screen sharing is not supported on this browser or mobile device. You can still watch screens shared by other participants!', 'info');
       return;
     }
+    try {
+      sessionStorage.setItem('synctube_pending_screen_share', 'true');
+    } catch {}
     emitStartTabStream(`${username}'s Screen`, (res) => {
       if (!res?.success) {
+        try {
+          sessionStorage.removeItem('synctube_pending_screen_share');
+        } catch {}
         onNotify(res?.error || 'Could not start screen share.', 'error');
       } else {
         window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: `${username}'s Screen` }, '*');
@@ -1715,7 +1721,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           ? "🎬 You're in the Director's Chair, Boss!"
                           : "🍿 Popcorn Ready! Waiting for Host to Roll Film"}
                       </span>
-                      {(userRole === 'HOST' || userRole === 'MODERATOR') && (
+                      {(userRole === 'HOST' || userRole === 'MODERATOR') ? (
                         <div className="video-empty-actions-row">
                           <button
                             type="button"
@@ -1733,6 +1739,36 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           >
                             <Monitor size={15} />
                             <span>Share Screen 🖥️</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={() => setIsBrowserHubOpen(true)}
+                            title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
+                          >
+                            <Film size={15} color="#38bdf8" />
+                            <span>Direct Stream & Web Media 🌐</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="video-empty-actions-row">
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={handleStartScreenShare}
+                            title="Share your device screen or browser tab to the room"
+                          >
+                            <Monitor size={15} />
+                            <span>Share Screen 🖥️</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary video-empty-action-btn"
+                            onClick={() => setIsBrowserHubOpen(true)}
+                            title="Open Direct Stream & Web Media"
+                          >
+                            <Film size={15} color="#38bdf8" />
+                            <span>Direct Stream & Web Media 🌐</span>
                           </button>
                         </div>
                       )}

@@ -163,8 +163,14 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
         return;
       }
       const title = `${currentUsername}'s Screen`;
+      try {
+        sessionStorage.setItem('synctube_pending_screen_share', 'true');
+      } catch {}
       emitStartTabStream(title, (res) => {
         if (!res?.success) {
+          try {
+            sessionStorage.removeItem('synctube_pending_screen_share');
+          } catch {}
           onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
         } else {
           window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');

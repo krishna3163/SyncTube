@@ -65,6 +65,40 @@ export interface SessionPublicInfo {
   downloadsCount?: number;
 }
 
+let playwrightInstallPromise: Promise<void> | null = null;
+
+async function ensureChromiumInstalled(): Promise<void> {
+  const current = findChromiumPath();
+  if (current) return;
+
+  if (!playwrightInstallPromise) {
+    playwrightInstallPromise = (async () => {
+      console.log('[TempBrowser] Missing Chromium detected on host. Auto-installing with: npx playwright install chromium...');
+      try {
+        const { exec } = await import('child_process');
+        await new Promise<void>((resolve, reject) => {
+          exec('npx playwright install chromium', { timeout: 120000 }, (error, stdout, stderr) => {
+            if (error) {
+              console.error('[TempBrowser] Auto-install of Playwright Chromium failed:', error, stderr);
+              reject(error);
+            } else {
+              console.log('[TempBrowser] Playwright Chromium successfully installed:', stdout);
+              resolve();
+            }
+          });
+        });
+      } catch (err) {
+        console.error('[TempBrowser] Error during Chromium auto-install:', err);
+        throw err;
+      }
+    })().finally(() => {
+      playwrightInstallPromise = null;
+    });
+  }
+
+  await playwrightInstallPromise;
+}
+
 function findChromiumPath(): string | undefined {
   if (process.env.CHROMIUM_PATH && fs.existsSync(process.env.CHROMIUM_PATH)) {
     return process.env.CHROMIUM_PATH;
@@ -75,10 +109,37 @@ function findChromiumPath(): string | undefined {
   } catch {
     // ignore
   }
+
+  // Scan Playwright cache directories on Linux / Render
+  const cacheDirs = [
+    '/opt/render/.cache/ms-playwright',
+    path.join(os.homedir(), '.cache', 'ms-playwright'),
+    '/root/.cache/ms-playwright',
+  ];
+
+  for (const cacheDir of cacheDirs) {
+    if (fs.existsSync(cacheDir)) {
+      try {
+        const subdirs = fs.readdirSync(cacheDir);
+        for (const sub of subdirs) {
+          const possibleBinaries = [
+            path.join(cacheDir, sub, 'chrome-linux', 'chrome'),
+            path.join(cacheDir, sub, 'chrome-headless-shell-linux64', 'chrome-headless-shell'),
+            path.join(cacheDir, sub, 'chrome-win64', 'chrome.exe'),
+          ];
+          for (const bin of possibleBinaries) {
+            if (fs.existsSync(bin)) return bin;
+          }
+        }
+      } catch {}
+    }
+  }
+
   const candidates = [
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
     '/usr/sbin/google-chrome',
   ];
   for (const candidate of candidates) {
@@ -167,23 +228,50 @@ export class TempBrowserManager {
     this.sessions.set(sessionId, session);
 
     try {
-      const execPath = findChromiumPath();
+      let execPath = findChromiumPath();
+      if (!execPath) {
+        try {
+          await ensureChromiumInstalled();
+          execPath = findChromiumPath();
+        } catch (installErr) {
+          console.warn('[TempBrowser] Auto-install attempt failed, continuing with default launch:', installErr);
+        }
+      }
+
       console.log(`[TempBrowser] Launching browser for session ${sessionId} (execPath: ${execPath || 'default'})...`);
 
-      const browser = await chromium.launch({
-        executablePath: execPath,
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--hide-scrollbars',
-          '--disable-background-networking',
-          '--disable-default-apps',
-          '--disable-extensions',
-        ],
-      });
+      const launchArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-extensions',
+      ];
+
+      let browser: Browser;
+      try {
+        browser = await chromium.launch({
+          executablePath: execPath,
+          headless: true,
+          args: launchArgs,
+        });
+      } catch (launchErr: any) {
+        if (launchErr?.message?.includes("Executable doesn't exist") || launchErr?.message?.includes('playwright install')) {
+          console.log('[TempBrowser] Playwright launch failed with missing binary. Attempting emergency install on host...');
+          await ensureChromiumInstalled();
+          execPath = findChromiumPath();
+          browser = await chromium.launch({
+            executablePath: execPath,
+            headless: true,
+            args: launchArgs,
+          });
+        } else {
+          throw launchErr;
+        }
+      }
 
       session.browser = browser;
 

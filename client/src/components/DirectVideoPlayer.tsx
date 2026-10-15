@@ -762,7 +762,6 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
         src={isDashStream ? undefined : mediaUrl}
         className={`direct-html5-video ${videoError ? 'video-hidden' : ''}`}
         playsInline
-        crossOrigin="anonymous"
         onPlay={handlePlayEvent}
         onPause={handlePauseEvent}
         onSeeked={handleSeekedEvent}

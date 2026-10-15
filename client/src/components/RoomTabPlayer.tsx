@@ -44,6 +44,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const [, setStream] = useState<MediaStream | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const [isSharing, setIsSharing] = useState<boolean>(false);
@@ -65,6 +67,28 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
   // Anyone who holds localStreamRef is the streamer; otherwise they are a viewer!
   const isStreamer = Boolean(localStreamRef.current) || (Boolean(streamerSocketId) && streamerSocketId === socket?.id);
+
+  // Sync remoteStream with videoRef whenever it updates
+  useEffect(() => {
+    if (videoRef.current && remoteStream) {
+      if (videoRef.current.srcObject !== remoteStream) {
+        videoRef.current.srcObject = remoteStream;
+      }
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[WebRTC ScreenShare] Autoplay restricted on mobile:', err);
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            setIsMuted(true);
+            videoRef.current.play()
+              .then(() => setAutoplayBlocked(true))
+              .catch(() => setAutoplayBlocked(true));
+          }
+        });
+      }
+    }
+  }, [remoteStream]);
 
   // Helper to create and negotiate WebRTC peer connection with a viewer
   const connectViewer = useCallback(async (viewerSocketId: string) => {
@@ -116,7 +140,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const startScreenShare = async (customTitle?: string) => {
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
-        onNotify('Screen sharing is not supported in this browser.', 'error');
+        onNotify('Screen sharing is not supported in this browser or mobile device.', 'error');
         return;
       }
 
@@ -165,6 +189,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       localStreamRef.current = null;
     }
     setStream(null);
+    setRemoteStream(null);
+    remoteStreamRef.current = null;
     setIsSharing(false);
 
     peerConnectionsRef.current.forEach((pc) => pc.close());
@@ -219,13 +245,29 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           viewerPcRef.current = pc;
 
           pc.ontrack = (event) => {
-            if (videoRef.current && event.streams[0]) {
-              videoRef.current.srcObject = event.streams[0];
-              setIsSharing(true);
+            console.log('[WebRTC ScreenShare] Received remote track:', event.track.kind);
+            let stream = event.streams && event.streams[0];
+            if (!stream) {
+              if (!remoteStreamRef.current) {
+                remoteStreamRef.current = new MediaStream();
+              }
+              remoteStreamRef.current.addTrack(event.track);
+              stream = remoteStreamRef.current;
+            } else {
+              remoteStreamRef.current = stream;
+            }
+
+            setRemoteStream(stream);
+            setIsSharing(true);
+
+            if (videoRef.current) {
+              if (videoRef.current.srcObject !== stream) {
+                videoRef.current.srcObject = stream;
+              }
               const playPromise = videoRef.current.play();
               if (playPromise !== undefined) {
                 playPromise.catch((err) => {
-                  console.warn('[WebRTC ScreenShare] Unmuted autoplay restricted on mobile:', err);
+                  console.warn('[WebRTC ScreenShare] Autoplay restricted on mobile:', err);
                   if (videoRef.current) {
                     videoRef.current.muted = true;
                     setIsMuted(true);
@@ -244,6 +286,13 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
                 targetSocketId: data.fromSocketId,
                 candidate: event.candidate,
               });
+            }
+          };
+
+          pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+              console.warn('[WebRTC ScreenShare] Viewer connection dropped, re-requesting stream');
+              socket.emit('webrtc:request_stream', { streamerSocketId: data.fromSocketId });
             }
           };
 
@@ -281,8 +330,9 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             }
             pendingStreamerCandidates.current.get(data.fromSocketId)!.push(data.candidate);
           }
-        } else if (viewerPcRef.current) {
-          if (viewerPcRef.current.remoteDescription && viewerPcRef.current.remoteDescription.type) {
+        } else {
+          // Viewer receiving candidate from streamer (queue even if viewerPcRef is not ready yet)
+          if (viewerPcRef.current && viewerPcRef.current.remoteDescription && viewerPcRef.current.remoteDescription.type) {
             await viewerPcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
           } else {
             pendingViewerCandidates.current.push(data.candidate);
@@ -298,7 +348,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       if (data.streamerName) setStreamerName(data.streamerName);
       if (data.streamerSocketId) setStreamerSocketId(data.streamerSocketId);
 
-      if (data.streamerSocketId !== socket.id) {
+      if (data.streamerSocketId && data.streamerSocketId !== socket.id) {
         onNotify(`${data.streamerName || 'A friend'} is sharing their screen!`, 'info');
         socket.emit('webrtc:request_stream', { streamerSocketId: data.streamerSocketId });
       }
@@ -306,6 +356,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
     const onStreamStopped = () => {
       setIsSharing(false);
+      setRemoteStream(null);
+      remoteStreamRef.current = null;
       if (viewerPcRef.current) {
         viewerPcRef.current.close();
         viewerPcRef.current = null;
@@ -333,8 +385,15 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
     // Initial stream request for viewer upon mount
     if (!localStreamRef.current) {
-      socket.emit('webrtc:request_stream', {});
+      socket.emit('webrtc:request_stream', { streamerSocketId });
     }
+
+    // Auto-retry stream request after 2.5s if stream tracks haven't arrived yet
+    const autoRetryTimer = setTimeout(() => {
+      if (!localStreamRef.current && !remoteStreamRef.current && socket) {
+        socket.emit('webrtc:request_stream', { streamerSocketId });
+      }
+    }, 2500);
 
     const handleWindowMessage = (event: MessageEvent) => {
       if (event.data?.type === 'SYNCTUBE_START_TAB_SHARE') {
@@ -343,7 +402,15 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     };
     window.addEventListener('message', handleWindowMessage);
 
+    // Check if screen share was requested right before mounting
+    const pendingShare = sessionStorage.getItem('synctube_pending_screen_share');
+    if (pendingShare === 'true') {
+      sessionStorage.removeItem('synctube_pending_screen_share');
+      startScreenShare();
+    }
+
     return () => {
+      clearTimeout(autoRetryTimer);
       socket.off('webrtc:viewer_joined', onViewerJoined);
       socket.off('webrtc:answer', onAnswer);
       socket.off('webrtc:offer', onOffer);
@@ -353,7 +420,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       socket.off('call:force_stop_screenshare', onForceStop);
       window.removeEventListener('message', handleWindowMessage);
     };
-  }, [socket, connectViewer, onNotify]);
+  }, [socket, connectViewer, onNotify, streamerSocketId]);
 
   const toggleMute = () => {
     if (videoRef.current) {
@@ -369,8 +436,11 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     if (videoRef.current) {
       videoRef.current.muted = false;
       setIsMuted(false);
-      videoRef.current.play().catch(() => {});
-      setAutoplayBlocked(false);
+      videoRef.current.play().then(() => {
+        setAutoplayBlocked(false);
+      }).catch((err) => {
+        console.warn('Playback error on user interact:', err);
+      });
     }
   };
 
@@ -548,7 +618,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       )}
 
       {/* Empty / Connecting / Share Prompt Overlay */}
-      {!isSharing && (
+      {(!localStreamRef.current && !remoteStream) && (
         <div
           style={{
             position: 'absolute',
@@ -565,7 +635,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
             zIndex: 5,
           }}
         >
-          {isStreamer ? (
+          {(isStreamer || !streamerSocketId || userRole === 'HOST' || userRole === 'MODERATOR') ? (
             <>
               <Tv size={36} color="var(--accent)" />
               <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>
