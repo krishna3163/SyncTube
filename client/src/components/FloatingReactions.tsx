@@ -454,33 +454,7 @@ export const FloatingReactions: React.FC<FloatingReactionsProps> = ({ socket, us
           renderPalette({ marginBottom: '0.4rem' })
         )}
 
-        {/* Draggable React Pill Button */}
-        {!alwaysExpanded && (
-          <button
-            type="button"
-            className="reaction-toggle-btn"
-            ref={buttonRef}
-            onPointerDown={inline ? undefined : handlePointerDown}
-            onClick={() => {
-              if (ignoreNextClickRef.current) {
-                ignoreNextClickRef.current = false;
-                return;
-              }
-              if (!isDraggingRef.current) {
-                setIsOpen((open) => !open);
-              }
-            }}
-            title={isOpen ? 'Close live reactions' : 'Send live reactions'}
-            aria-label={isOpen ? 'Close Live Reactions' : 'Open Live Reactions'}
-            aria-expanded={isOpen}
-          >
-            <span className="reaction-drag-handle" title="Drag to move">
-              <GripVertical size={14} />
-            </span>
-            <span className="reaction-toggle-emoji">{characterEmoji}</span>
-            <span className="reaction-toggle-label">React</span>
-          </button>
-        )}
+
 
         {/* If placed in upper/middle of screen, or inline, show emoji palette BELOW the button */}
         {(isOpen || alwaysExpanded) && (inline || !isNearBottom) && (

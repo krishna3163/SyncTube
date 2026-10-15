@@ -37,7 +37,7 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
     await expect(page.locator('.host-badge, .role-badge, .header-badge').first()).toBeVisible({ timeout: 15000 });
   });
 
-  test('Draggable React button is present, movable, and opens emoji palette', async ({ page }) => {
+  test('Room stage is loaded with clean interface and no intrusive floating buttons', async ({ page }) => {
     test.setTimeout(60000);
     await page.goto('/');
     const usernameInput = page.locator('input[placeholder*="username" i], input[type="text"]').first();
@@ -47,47 +47,12 @@ test.describe('SyncTube Watch Party E2E Automated Tests', () => {
 
     await expect(page).toHaveURL(/\/[A-Z0-9]{6,8}/i);
 
-    // Draggable reaction launcher
-    const reactBtn = page.locator('.reaction-toggle-btn');
-    await expect(reactBtn).toBeVisible();
+    // Verify intrusive reaction-toggle-btn is removed from page
+    await expect(page.locator('.reaction-toggle-btn')).toHaveCount(0);
 
-    // Verify drag handle grip icon exists
-    await expect(page.locator('.reaction-drag-handle')).toBeVisible();
-
-    // Drag into screen corner and verify it unsticks and moves back smoothly
-    const boxBefore = await reactBtn.boundingBox();
-    if (boxBefore) {
-      await page.mouse.move(boxBefore.x + boxBefore.width / 2, boxBefore.y + boxBefore.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(1200, 800, { steps: 5 });
-      await page.mouse.up();
-      await page.waitForTimeout(200);
-
-      const boxInCorner = await reactBtn.boundingBox();
-
-      // Drag back away from corner - button must immediately follow cursor and not be stuck
-      await page.mouse.move(boxInCorner!.x + boxInCorner!.width / 2, boxInCorner!.y + boxInCorner!.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(boxInCorner!.x - 200, boxInCorner!.y - 200, { steps: 5 });
-      await page.mouse.up();
-
-      const boxAfterUnstick = await reactBtn.boundingBox();
-      expect(boxAfterUnstick!.x).toBeLessThan(boxInCorner!.x);
-      expect(boxAfterUnstick!.y).toBeLessThan(boxInCorner!.y);
-    }
-
-    // Click to open emoji reactions palette
-    await reactBtn.click();
-    const palette = page.locator('.reactions-palette');
-    await expect(palette).toBeVisible();
-
-    // Verify emoji buttons are interactive
-    const heartEmoji = page.locator('.reaction-btn').first();
-    await expect(heartEmoji).toBeVisible();
-    await heartEmoji.click({ force: true });
-
-    // Palette remains or closes cleanly, no crash
+    // Verify stage area is clean and visible
     await expect(page.locator('.stage-area')).toBeVisible();
+    await expect(page.locator('.stream-info-card')).toBeVisible();
   });
 
   test('Playlist and Up Next section are interactive', async ({ page }) => {

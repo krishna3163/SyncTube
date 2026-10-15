@@ -65,6 +65,7 @@ import {
   RoomStartTabStreamSchema,
   ToggleLikeSchema,
   SetCategorySchema,
+  SetDescriptionSchema,
   WebRtcOfferSchema,
   WebRtcAnswerSchema,
   WebRtcIceCandidateSchema,
@@ -1572,6 +1573,22 @@ export function setupSocketHandlers(
         io.to(room.id).emit('room:category_updated', { category: room.category });
       } catch (err: any) {
         sendError('INTERNAL_ERROR', err?.message || 'Failed to set stream category.');
+      }
+    });
+
+    socket.on('room:set_description', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host can edit stream description.');
+        }
+        const parsed = SetDescriptionSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid stream description.');
+        room.setDescription(parsed.data.description);
+        io.to(room.id).emit('room:description_updated', { description: room.description });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to set stream description.');
       }
     });
 

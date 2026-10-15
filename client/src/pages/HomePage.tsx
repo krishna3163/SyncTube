@@ -30,6 +30,10 @@ import {
   Video,
   Radio,
   MessageSquare,
+  ShieldCheck,
+  Smartphone,
+  Activity,
+  ListMusic,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { detectClientMedia } from '../utils/media.js';
@@ -497,52 +501,82 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
   const featureCards = [
     {
-      emoji: '⚡',
+      icon: Zap,
+      color: '#ffd21f',
+      bg: 'rgba(255, 210, 31, 0.12)',
+      borderColor: 'rgba(255, 210, 31, 0.28)',
       title: 'Millisecond Sync Engine',
       description: 'Authoritative server clock synchronization keeps all room participants locked within ±100ms drift.',
     },
     {
-      emoji: '🎙️',
+      icon: Video,
+      color: '#38bdf8',
+      bg: 'rgba(56, 189, 248, 0.12)',
+      borderColor: 'rgba(56, 189, 248, 0.28)',
       title: 'Voice & Video Calls',
       description: 'Adaptive hybrid WebRTC: direct peer-to-peer for 1-to-1, with seamless Mediasoup SFU routing for group calls.',
     },
     {
-      emoji: '🖥️',
+      icon: Monitor,
+      color: '#818cf8',
+      bg: 'rgba(129, 140, 248, 0.12)',
+      borderColor: 'rgba(129, 140, 248, 0.28)',
       title: 'Live Screen Sharing',
       description: 'Stream your browser tab, application window, or full device screen directly to the main cinema stage.',
     },
     {
-      emoji: '🎭',
+      icon: Sparkles,
+      color: '#f472b6',
+      bg: 'rgba(244, 114, 182, 0.12)',
+      borderColor: 'rgba(244, 114, 182, 0.28)',
       title: '16 Anime Avatars',
       description: 'Choose your favorite anime character (Tanjiro, Gojo, Naruto, Luffy, Anya, and more) with persistent identity.',
     },
     {
-      emoji: '🌐',
+      icon: Globe,
+      color: '#34d399',
+      bg: 'rgba(52, 211, 153, 0.12)',
+      borderColor: 'rgba(52, 211, 153, 0.28)',
       title: 'Universal Cinema Hub',
       description: 'Co-watch YouTube, direct MP4/m3u8 video streams, or launch cloud browser sessions for Netflix, Prime, Crunchyroll, and Twitch.',
     },
     {
-      emoji: '💬',
+      icon: MessageSquare,
+      color: '#a78bfa',
+      bg: 'rgba(167, 139, 250, 0.12)',
+      borderColor: 'rgba(167, 139, 250, 0.28)',
       title: 'Live Chat & Reactions',
       description: 'Rich message replies, emoji reactions, and Twitch/Instagram-style floating particle bursts across the player.',
     },
     {
-      emoji: '🎟️',
+      icon: ShieldCheck,
+      color: '#fbbf24',
+      bg: 'rgba(251, 191, 36, 0.12)',
+      borderColor: 'rgba(251, 191, 36, 0.28)',
       title: 'Host Action Requests',
       description: 'Audience members can request play, pause, seek, or change video with instant one-click host approval.',
     },
     {
-      emoji: '📱',
+      icon: Smartphone,
+      color: '#06b6d4',
+      bg: 'rgba(6, 182, 212, 0.12)',
+      borderColor: 'rgba(6, 182, 212, 0.28)',
       title: 'Mobile Touch & QR Join',
       description: 'Fully responsive mobile interface with dedicated playback dock, tap-to-unmute screen audio, and instant QR camera join.',
     },
     {
-      emoji: '📊',
+      icon: Activity,
+      color: '#f87171',
+      bg: 'rgba(248, 113, 113, 0.12)',
+      borderColor: 'rgba(248, 113, 113, 0.28)',
       title: 'Sync Telemetry & DVR',
       description: 'Live latency RTT, packet loss diagnostics, and interactive DVR scrubber to jump instantly to the live edge.',
     },
     {
-      emoji: '🍿',
+      icon: ListMusic,
+      color: '#fb923c',
+      bg: 'rgba(251, 146, 60, 0.12)',
+      borderColor: 'rgba(251, 146, 60, 0.28)',
       title: 'Up Next Playlist',
       description: 'Shared queue with in-app YouTube search, community upvoting, drag-and-drop reordering, and shuffle mode.',
     },
@@ -648,21 +682,20 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '20px',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
               background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
               color: 'var(--text-secondary, #cbd5e1)',
-              fontSize: '0.8rem',
-              fontWeight: 600,
               textDecoration: 'none',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
+              flexShrink: 0,
             }}
           >
-            <Github size={14} />
-            <span>GitHub</span>
+            <Github size={18} />
           </a>
 
           <div
@@ -846,26 +879,15 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <div className="input-group">
                 <div className="input-label-row">
                   <label className="input-label" htmlFor="create-username-input">Your Name</label>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      type="button"
-                      className="btn-text-change-avatar"
-                      onClick={() => setIsAvatarModalOpen(true)}
-                    >
-                      <Sparkles size={12} />
-                      <span>Change Character</span>
-                    </button>
-                    <a
-                      href="https://github.com/krishna3163/SyncTube"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="SyncTube GitHub Repository"
-                      aria-label="SyncTube GitHub Repository"
-                      style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', transition: 'color 0.15s ease' }}
-                    >
-                      <Github size={13} />
-                    </a>
-                  </div>
+                  <button
+                    type="button"
+                    className="btn-text-change-avatar"
+                    onClick={() => setIsAvatarModalOpen(true)}
+                    title="Change your anime character avatar"
+                  >
+                    <Sparkles size={12} />
+                    <span>Change Character</span>
+                  </button>
                 </div>
                 <div className="input-with-left-icon">
                   <User size={16} className="input-left-icon" />
@@ -947,26 +969,15 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <div className="input-group">
                 <div className="input-label-row">
                   <label className="input-label" htmlFor="join-username-input">Your Name</label>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                      type="button"
-                      className="btn-text-change-avatar"
-                      onClick={() => setIsAvatarModalOpen(true)}
-                    >
-                      <Sparkles size={12} />
-                      <span>Change Character</span>
-                    </button>
-                    <a
-                      href="https://github.com/krishna3163/SyncTube"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="SyncTube GitHub Repository"
-                      aria-label="SyncTube GitHub Repository"
-                      style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', transition: 'color 0.15s ease' }}
-                    >
-                      <Github size={13} />
-                    </a>
-                  </div>
+                  <button
+                    type="button"
+                    className="btn-text-change-avatar"
+                    onClick={() => setIsAvatarModalOpen(true)}
+                    title="Change your anime character avatar"
+                  >
+                    <Sparkles size={12} />
+                    <span>Change Character</span>
+                  </button>
                 </div>
                 <div className="input-with-left-icon">
                   <User size={16} className="input-left-icon" />
@@ -1330,48 +1341,51 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
                 padding: '1rem',
               }}
             >
-              {featureCards.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="feature-item-card"
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.45rem',
-                    padding: '1rem',
-                    borderRadius: '12px',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    transition: 'border-color 0.15s ease, transform 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '8px',
-                        background: 'rgba(255, 210, 31, 0.12)',
-                        border: '1px solid rgba(255, 210, 31, 0.25)',
-                        fontSize: '1.1rem',
-                        flexShrink: 0,
-                      }}
-                      aria-hidden="true"
-                    >
-                      {feature.emoji}
-                    </span>
-                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
-                      {feature.title}
-                    </h4>
+              {featureCards.map((feature) => {
+                const IconComponent = feature.icon;
+                return (
+                  <div
+                    key={feature.title}
+                    className="feature-item-card"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.45rem',
+                      padding: '1rem',
+                      borderRadius: '12px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      transition: 'border-color 0.15s ease, transform 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '9px',
+                          background: feature.bg,
+                          border: `1px solid ${feature.borderColor}`,
+                          flexShrink: 0,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                        }}
+                        aria-hidden="true"
+                      >
+                        <IconComponent size={17} color={feature.color} />
+                      </span>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
+                        {feature.title}
+                      </h4>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      {feature.description}
+                    </p>
                   </div>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    {feature.description}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

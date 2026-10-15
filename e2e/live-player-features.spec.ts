@@ -48,13 +48,16 @@ test.describe('Viewer Features Group A: Live Video Player & Stream Experience', 
     await expect(infoBar.locator('.viewers-pill')).toBeVisible();
     await expect(infoBar.locator('.uptime-pill')).toBeVisible();
 
-    // Check Channel Host, Avatar, Verified Badge, and Subscribe Button
+    // Check Channel Host, Avatar, Verified Badge, and Edit Description Button (Host)
     await expect(infoBar.locator('.channel-username')).toBeVisible();
     await expect(infoBar.locator('.channel-verified-badge')).toBeVisible();
-    const subscribeBtn = infoBar.locator('.channel-subscribe-btn');
-    await expect(subscribeBtn).toBeVisible();
-    await subscribeBtn.click();
-    await expect(subscribeBtn).toHaveClass(/is-subscribed/);
+    const editDescBtn = infoBar.locator('.stream-desc-edit-btn');
+    await expect(editDescBtn).toBeVisible();
+    await editDescBtn.click();
+    await expect(infoBar.locator('.stream-desc-textarea')).toBeVisible();
+    await infoBar.locator('.stream-desc-textarea').fill('Updated Party Description by Host!');
+    await infoBar.locator('.stream-desc-edit-actions .btn-primary').click();
+    await expect(infoBar.locator('.stream-desc-text')).toContainText('Updated Party Description by Host!');
 
     // Check Like Button
     const likeBtn = infoBar.locator('.like-btn');

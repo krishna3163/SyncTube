@@ -57,6 +57,7 @@ export class Room {
   public readonly createdAt: number;
   public likes: number = 0;
   public category: string = 'cinema';
+  public description: string = '';
   public likedUserIds: Set<string> = new Set();
   public isLive: boolean = false;
   public browserSessionId: string | null = null;
@@ -160,6 +161,12 @@ export class Room {
   public setCategory(cat: string): void {
     if (cat && typeof cat === 'string') {
       this.category = cat.trim();
+    }
+  }
+
+  public setDescription(desc: string): void {
+    if (typeof desc === 'string') {
+      this.description = desc.trim().slice(0, 1000);
     }
   }
 
@@ -518,6 +525,7 @@ export class Room {
       createdAt: this.createdAt,
       likes: this.likes,
       category: this.category,
+      description: this.description,
       isLive: this.isLive,
       browserSession: this.browserSessionId
         ? {

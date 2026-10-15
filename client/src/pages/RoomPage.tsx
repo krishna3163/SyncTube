@@ -283,6 +283,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
   }, [syncState?.likes, syncState?.category, syncState?.createdAt]);
 
+  const [streamDescription, setStreamDescription] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`synctube_room_desc_${roomId}`) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    if (syncState?.description) {
+      setStreamDescription(syncState.description);
+    }
+  }, [syncState?.description]);
+
   useEffect(() => {
     const onLikesUpdated = (data: { likes: number; userId: string; hasLiked: boolean }) => {
       setRoomLikes(data.likes);
@@ -293,13 +307,23 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const onCategoryUpdated = (data: { category: string }) => {
       setStreamCategory(data.category);
     };
+    const onDescriptionUpdated = (data: { description: string }) => {
+      if (typeof data?.description === 'string') {
+        setStreamDescription(data.description);
+        try {
+          localStorage.setItem(`synctube_room_desc_${roomId}`, data.description);
+        } catch {}
+      }
+    };
     socket.on('room:likes_updated', onLikesUpdated);
     socket.on('room:category_updated', onCategoryUpdated);
+    socket.on('room:description_updated', onDescriptionUpdated);
     return () => {
       socket.off('room:likes_updated', onLikesUpdated);
       socket.off('room:category_updated', onCategoryUpdated);
+      socket.off('room:description_updated', onDescriptionUpdated);
     };
-  }, [userId]);
+  }, [userId, roomId]);
 
   const handleToggleRoomLike = useCallback(() => {
     emitToggleRoomLike();
@@ -309,6 +333,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     setStreamCategory(cat);
     emitSetRoomCategory(cat);
   }, []);
+
+  const handleUpdateDescription = useCallback((newDesc: string) => {
+    setStreamDescription(newDesc);
+    try {
+      localStorage.setItem(`synctube_room_desc_${roomId}`, newDesc);
+    } catch {}
+    if (socket) {
+      socket.emit('room:set_description', { description: newDesc });
+    }
+  }, [roomId]);
 
   // V2 Features State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
@@ -1867,43 +1901,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
           </div>
 
-          {/* Live Stream Metadata Bar & Experience Info below stage */}
-          <StreamInfoBar
-            roomId={roomId}
-            title={
-              syncState?.mediaIdentity?.title ||
-              playlist.find((p) => p.videoId === videoId)?.title ||
-              (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
-            }
-            hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
-            hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
-            hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
-            userRole={userRole}
-            viewersCount={participants.length}
-            streamStartedAt={syncState?.createdAt || streamStartedAt}
-            category={streamCategory}
-            onSetCategory={handleSetCategory}
-            likes={roomLikes}
-            hasLiked={hasLikedRoom}
-            onToggleLike={handleToggleRoomLike}
-            isHostRegistered={Boolean(
-              userRole === 'HOST' ||
-              participants.some((p) => p.role === 'HOST') ||
-              (currentUser?.id && currentUser?.email)
-            )}
-            hostFollowersCount={currentUser?.followersCount}
-            onOpenShare={() => setIsShareModalOpen(true)}
-            onOpenReport={() => setIsReportModalOpen(true)}
-            onNotify={onNotify}
-            thumbnailUrl={
-              playlist.find((p) => p.videoId === videoId)?.thumbnail ||
-              (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
-                ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-                : undefined)
-            }
-          />
-
-          {/* Mobile Controller Dock */}
+          {/* Mobile Controller Dock - on mobile phone view this is placed above stream-info-card for instant player access; hidden on desktop */}
           <div className="mobile-playback-dock">
             <PlaybackControls
               playState={syncState?.playState || 'paused'}
@@ -1944,6 +1942,44 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               roomUptimeSeconds={roomUptimeSeconds}
             />
           </div>
+
+          {/* Live Stream Metadata Bar & Experience Info below stage (and below controls dock on phone view) */}
+          <StreamInfoBar
+            roomId={roomId}
+            title={
+              syncState?.mediaIdentity?.title ||
+              playlist.find((p) => p.videoId === videoId)?.title ||
+              (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+            }
+            hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
+            hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
+            hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
+            userRole={userRole}
+            viewersCount={participants.length}
+            streamStartedAt={syncState?.createdAt || streamStartedAt}
+            category={streamCategory}
+            onSetCategory={handleSetCategory}
+            description={streamDescription || syncState?.description}
+            onUpdateDescription={handleUpdateDescription}
+            likes={roomLikes}
+            hasLiked={hasLikedRoom}
+            onToggleLike={handleToggleRoomLike}
+            isHostRegistered={Boolean(
+              userRole === 'HOST' ||
+              participants.some((p) => p.role === 'HOST') ||
+              (currentUser?.id && currentUser?.email)
+            )}
+            hostFollowersCount={currentUser?.followersCount}
+            onOpenShare={() => setIsShareModalOpen(true)}
+            onOpenReport={() => setIsReportModalOpen(true)}
+            onNotify={onNotify}
+            thumbnailUrl={
+              playlist.find((p) => p.videoId === videoId)?.thumbnail ||
+              (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
+                ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                : undefined)
+            }
+          />
         </div>
 
         {/* Right Side: Sidebar with Participants, Playlist, and Activity */}
@@ -2127,14 +2163,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onAmbientSpreadChange={handleAmbientSpreadChange}
       /></Suspense>}
 
-      {/* Floating Animated Emojis & Live Reaction Dock */}
-      <FloatingReactions
-        socket={socket}
-        username={username}
-        avatarId={userSettings.avatarId}
-        currentTime={currentTime}
-        userRole={userRole}
-      />
 
       {/* In-App YouTube Search Modal */}
       {isSearchModalOpen && <YouTubeSearchModal

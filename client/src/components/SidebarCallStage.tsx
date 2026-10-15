@@ -326,19 +326,21 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setIsCollapsed((prev) => !prev)}
-            className="sidebar-call-toggle-collapse"
-            title={isCollapsed ? 'Expand video tiles' : 'Collapse video tiles'}
-          >
-            {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-          </button>
+          {(participants.length > 0 || inCall) && (
+            <button
+              type="button"
+              onClick={() => setIsCollapsed((prev) => !prev)}
+              className="sidebar-call-toggle-collapse"
+              title={isCollapsed ? 'Expand video tiles' : 'Collapse video tiles'}
+            >
+              {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Video & Voice Tiles Gallery */}
-      {!isCollapsed && (
+      {/* Video & Voice Tiles Gallery - Only shown when someone is active in the call */}
+      {!isCollapsed && (participants.length > 0 || inCall) && (
         <div className="sidebar-call-tiles-gallery">
           {participants.length > 0 ? (
             participants.map((p) => (

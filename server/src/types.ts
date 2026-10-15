@@ -27,6 +27,7 @@ export interface SyncStatePayload {
   createdAt?: number;
   likes?: number;
   category?: string;
+  description?: string;
   isLive?: boolean;
   browserSession?: {
     sessionId: string;

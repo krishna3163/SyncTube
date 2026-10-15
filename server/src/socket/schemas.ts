@@ -202,6 +202,10 @@ export const SetCategorySchema = z.object({
   category: z.string().trim().min(1).max(50),
 });
 
+export const SetDescriptionSchema = z.object({
+  description: z.string().trim().max(1000),
+});
+
 export const WebRtcOfferSchema = z.object({
   targetSocketId: z.string().trim().min(1),
   offer: z.any(),

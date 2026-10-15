@@ -10,8 +10,8 @@ import {
   ThumbsUp,
   ChevronDown,
   ChevronUp,
-  Bell,
-  BellRing,
+  Edit3,
+  X,
   Sparkles,
   Film,
   Gamepad2,
@@ -38,6 +38,7 @@ export interface StreamInfoBarProps {
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
   thumbnailUrl?: string;
   description?: string;
+  onUpdateDescription?: (newDesc: string) => void;
   likes?: number;
   hasLiked?: boolean;
   onToggleLike?: () => void;
@@ -69,6 +70,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   onNotify,
   thumbnailUrl,
   description,
+  onUpdateDescription,
   likes = 0,
   hasLiked = false,
   onToggleLike,
@@ -76,9 +78,12 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   hostFollowersCount,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
+  const defaultDesc = `Welcome to ${hostUsername}'s synchronized live watch party! Enjoy real-time video synchronization, theater viewing, interactive chat, and live reactions. Invite friends to join room #${roomId} to watch together without delay.`;
+  const [localDescription, setLocalDescription] = useState<string>(description || '');
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
   const [localLikes, setLocalLikes] = useState<number>(likes);
   const [localHasLiked, setLocalHasLiked] = useState<boolean>(hasLiked);
-  const [isSubscribed, setIsSubscribed] = useState(false);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(category);
@@ -94,6 +99,12 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   useEffect(() => {
     setCurrentCategory(category);
   }, [category]);
+
+  useEffect(() => {
+    if (typeof description === 'string') {
+      setLocalDescription(description);
+    }
+  }, [description]);
 
   // Live stream uptime ticker
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
@@ -141,14 +152,24 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
     }
   };
 
-  const handleSubscribeToggle = () => {
-    setIsSubscribed((prev) => !prev);
-    onNotify(
-      !isSubscribed
-        ? `Subscribed to ${hostUsername}! Notifications turned on.`
-        : `Unsubscribed from ${hostUsername}.`,
-      'info'
-    );
+  const canEditDesc = userRole === 'HOST' || userRole === 'MODERATOR';
+
+  const handleStartEditing = () => {
+    setDescDraft(localDescription || defaultDesc);
+    setIsDescExpanded(true);
+    setIsEditingDesc(true);
+  };
+
+  const handleSaveDescription = () => {
+    const trimmed = descDraft.trim();
+    setLocalDescription(trimmed);
+    setIsEditingDesc(false);
+    onUpdateDescription?.(trimmed);
+    onNotify('Stream description updated successfully!', 'success');
+  };
+
+  const handleCancelEditing = () => {
+    setIsEditingDesc(false);
   };
 
   const selectedCatObj = CATEGORIES.find((c) => c.id === currentCategory) || CATEGORIES[0];
@@ -256,28 +277,6 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
               )}
             </div>
           </div>
-
-          {/* Subscribe Button - only shown for registered host profiles */}
-          {isHostRegistered && (
-            <button
-              type="button"
-              className={`btn channel-subscribe-btn ${isSubscribed ? 'is-subscribed' : ''}`}
-              onClick={handleSubscribeToggle}
-              aria-label={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
-            >
-              {isSubscribed ? (
-                <>
-                  <BellRing size={14} />
-                  <span>Subscribed</span>
-                </>
-              ) : (
-                <>
-                  <Bell size={14} />
-                  <span>Subscribe</span>
-                </>
-              )}
-            </button>
-          )}
         </div>
 
         {/* Right: Stream Actions (Like, Share, Copy Link, Report) */}
@@ -329,7 +328,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
         </div>
       </div>
 
-      {/* Bottom: Collapsible Description Card */}
+      {/* Bottom: Collapsible Description Card with Host Edit Capability */}
       <div className="stream-desc-panel">
         <div className="stream-desc-header" onClick={() => setIsDescExpanded((prev) => !prev)}>
           <div className="stream-desc-preview">
@@ -346,22 +345,101 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
               <span className="stream-tag">#CinemaHub</span>
             </div>
           </div>
-          <button type="button" className="stream-desc-toggle-btn" aria-label="Toggle Description">
-            {isDescExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+          <div className="stream-desc-header-right">
+            {canEditDesc && !isEditingDesc && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-xs stream-desc-edit-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStartEditing();
+                }}
+                title="Edit stream description (Host)"
+              >
+                <Edit3 size={12} />
+                <span>Edit Description</span>
+              </button>
+            )}
+            <button type="button" className="stream-desc-toggle-btn" aria-label="Toggle Description">
+              {isDescExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
         </div>
 
         {isDescExpanded && (
           <div className="stream-desc-body">
-            {thumbnailUrl && (
-              <div className="stream-desc-thumb">
-                <img src={thumbnailUrl} alt={displayTitle} />
+            {isEditingDesc ? (
+              <div className="stream-desc-edit-box">
+                <div className="stream-desc-edit-header">
+                  <div className="stream-desc-edit-title">
+                    <Edit3 size={14} color="var(--accent)" />
+                    <span>Edit Stream Description (Host / Mod)</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={handleCancelEditing}
+                    title="Close editor"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <textarea
+                  className="stream-desc-textarea"
+                  value={descDraft}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  placeholder="Enter stream description, rules, schedule, or notes for party viewers..."
+                  rows={4}
+                  maxLength={1000}
+                  autoFocus
+                />
+                <div className="stream-desc-edit-footer">
+                  <span className="desc-char-count">{descDraft.length} / 1000 chars</span>
+                  <div className="stream-desc-edit-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleCancelEditing}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleSaveDescription}
+                    >
+                      <Check size={14} />
+                      <span>Save Description</span>
+                    </button>
+                  </div>
+                </div>
               </div>
+            ) : (
+              <>
+                {thumbnailUrl && (
+                  <div className="stream-desc-thumb">
+                    <img src={thumbnailUrl} alt={displayTitle} />
+                  </div>
+                )}
+                <div className="stream-desc-text-wrapper">
+                  <p className="stream-desc-text">
+                    {localDescription || defaultDesc}
+                  </p>
+                  {canEditDesc && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs stream-desc-inline-edit-btn"
+                      onClick={handleStartEditing}
+                      title="Edit stream description"
+                    >
+                      <Edit3 size={12} />
+                      <span>Edit Description</span>
+                    </button>
+                  )}
+                </div>
+              </>
             )}
-            <p className="stream-desc-text">
-              {description ||
-                `Welcome to ${hostUsername}'s synchronized live watch party! Enjoy real-time video synchronization, theater viewing, interactive chat, and live reactions. Invite friends to join room #${roomId} to watch together without delay.`}
-            </p>
+
             <div className="stream-extra-meta">
               <div className="meta-field">
                 <span className="meta-k">Broadcast Platform:</span>
