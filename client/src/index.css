@@ -1310,16 +1310,20 @@ body {
 }
 
 .sidebar-tab-bar.has-left-shadow {
+  padding-left: 22px;
   mask-image: linear-gradient(to right, transparent, black 16px, black 100%);
   -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black 100%);
 }
 
 .sidebar-tab-bar.has-right-shadow {
+  padding-right: 22px;
   mask-image: linear-gradient(to left, transparent, black 16px, black 100%);
   -webkit-mask-image: linear-gradient(to left, transparent, black 16px, black 100%);
 }
 
 .sidebar-tab-bar.has-left-shadow.has-right-shadow {
+  padding-left: 22px;
+  padding-right: 22px;
   mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent 100%);
   -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent 100%);
 }
@@ -1698,26 +1702,35 @@ body {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .participant-name {
   font-size: 0.86rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
 }
 
 .participant-actions {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.22rem;
+  flex-shrink: 0;
 }
 
 .participant-actions .btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 2px;
   border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);

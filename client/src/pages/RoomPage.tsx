@@ -2226,14 +2226,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onNotify={onNotify}
       />}
 
-      {/* Adaptive Voice & Video Chat Floating Dock & Grid */}
-      <CallOverlay
-        currentUserId={userId}
-        currentUsername={username}
-        currentUserAvatarId={participants.find((p) => p.userId === userId)?.avatarId}
-        userRole={userRole}
-        onNotify={onNotify}
-      />
+      {/* Adaptive Voice & Video Chat Floating Dock (shown only when in Theater Mode where sidebar is hidden) */}
+      {isTheaterMode && (
+        <CallOverlay
+          currentUserId={userId}
+          currentUsername={username}
+          currentUserAvatarId={participants.find((p) => p.userId === userId)?.avatarId}
+          userRole={userRole}
+          onNotify={onNotify}
+        />
+      )}
     </div>
   );
 };

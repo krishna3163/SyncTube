@@ -103,12 +103,13 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
 
           return (
             <div key={p.userId} className="participant-item">
-              <div className="participant-info">
+              <div className="participant-info" style={{ minWidth: 0, flex: 1, overflow: 'hidden', gap: '0.5rem' }}>
                 {/* Anime avatar */}
                 <div
                   style={{
                     boxShadow: p.role !== 'PARTICIPANT' ? `0 0 0 2px ${glowColor}` : undefined,
                     borderRadius: '50%',
+                    flexShrink: 0,
                   }}
                 >
                   <AnimeAvatarDisplay
@@ -119,8 +120,12 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1 }}>
-                  <span className="participant-name">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <span
+                    className="participant-name"
+                    title={p.username}
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', maxWidth: '100%' }}
+                  >
                     {p.username}
                     {isCurrentUser && (
                       <span style={{ color: 'var(--accent)', fontSize: '0.72rem', marginLeft: '0.3rem' }}>
@@ -185,9 +190,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       aria-label="Toggle Call Permission"
                     >
                       {p.isBlockedFromCall ? (
-                        <PhoneOff size={16} color="#f87171" strokeWidth={2.2} />
+                        <PhoneOff size={14} color="#f87171" strokeWidth={2.2} />
                       ) : (
-                        <Phone size={16} color="#34d399" strokeWidth={2.2} />
+                        <Phone size={14} color="#34d399" strokeWidth={2.2} />
                       )}
                     </button>
                   )}
@@ -201,9 +206,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       aria-label="Toggle Chat Permission"
                     >
                       {p.isBlockedFromChat ? (
-                        <MessageSquareOff size={16} color="#f87171" strokeWidth={2.2} />
+                        <MessageSquareOff size={14} color="#f87171" strokeWidth={2.2} />
                       ) : (
-                        <MessageSquare size={16} color="#94a3b8" strokeWidth={2.2} />
+                        <MessageSquare size={14} color="#94a3b8" strokeWidth={2.2} />
                       )}
                     </button>
                   )}
@@ -217,9 +222,9 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       aria-label="Toggle Screen Share Permission"
                     >
                       {p.isBlockedFromScreenShare ? (
-                        <MonitorOff size={16} color="#f87171" strokeWidth={2.2} />
+                        <MonitorOff size={14} color="#f87171" strokeWidth={2.2} />
                       ) : (
-                        <Monitor size={16} color="#38bdf8" strokeWidth={2.2} />
+                        <Monitor size={14} color="#38bdf8" strokeWidth={2.2} />
                       )}
                     </button>
                   )}
@@ -232,7 +237,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       title="Promote to Moderator"
                       aria-label="Promote to Moderator"
                     >
-                      <ShieldCheck size={18} color="#38bdf8" strokeWidth={2.2} />
+                      <ShieldCheck size={15} color="#38bdf8" strokeWidth={2.2} />
                     </button>
                   )}
 
@@ -244,7 +249,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       title="Demote to Participant"
                       aria-label="Demote to Participant"
                     >
-                      <ShieldAlert size={18} color="#f4a942" strokeWidth={2.2} />
+                      <ShieldAlert size={15} color="#f4a942" strokeWidth={2.2} />
                     </button>
                   )}
 
@@ -260,7 +265,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       title="Transfer Host Ownership"
                       aria-label="Transfer Host Ownership"
                     >
-                      <Crown size={18} color="#ffd21f" strokeWidth={2.2} />
+                      <Crown size={15} color="#ffd21f" strokeWidth={2.2} />
                     </button>
                   )}
 
@@ -272,7 +277,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
                       title="Remove user from room"
                       aria-label="Remove user from room"
                     >
-                      <UserMinus size={18} color="#f25f5c" strokeWidth={2.2} />
+                      <UserMinus size={15} color="#f25f5c" strokeWidth={2.2} />
                     </button>
                   )}
                 </div>
