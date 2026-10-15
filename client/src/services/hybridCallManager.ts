@@ -25,11 +25,21 @@ export interface CallParticipantState {
 
 const DEFAULT_ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+    { urls: 'stun:global.stun.twilio.com:3478' },
     { urls: 'stun:stun.services.mozilla.com' },
+    // Free high-performance public TURN relay with UDP and TCP transport for 4G/5G mobile CGNAT / symmetric NAT
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 type PeersChangeCallback = (peers: CallParticipantState[]) => void;
@@ -299,11 +309,20 @@ export class HybridCallManager {
     const pc = new RTCPeerConnection(DEFAULT_ICE_SERVERS);
     this.p2pPeerConnection = pc;
 
-    // Attach local audio & video tracks
-    if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
+    // Attach local audio track or transceiver
+    const audioTrack = this.localStream?.getAudioTracks()[0];
+    if (audioTrack) {
+      pc.addTrack(audioTrack, this.localStream!);
+    } else {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+    }
+
+    // Attach local video track or transceiver upfront so SDP always includes video capabilities
+    const videoTrack = this.localStream?.getVideoTracks()[0];
+    if (videoTrack && !this.isCameraOff) {
+      pc.addTrack(videoTrack, this.localStream!);
+    } else {
+      pc.addTransceiver('video', { direction: 'sendrecv' });
     }
 
     pc.onicecandidate = (event) => {
@@ -315,13 +334,39 @@ export class HybridCallManager {
       }
     };
 
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0] || new MediaStream([event.track]);
-      const p = this.participants.get(remoteSocketId);
-      if (p) {
-        p.stream = remoteStream;
-        this.notifyPeersChange();
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[P2P] ICE state with ${remoteSocketId}: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'failed') {
+        console.warn('[P2P] ICE connection failed, attempting ICE restart...');
+        try {
+          pc.restartIce?.();
+        } catch {}
       }
+    };
+
+    pc.ontrack = (event) => {
+      console.log(`[P2P] ontrack: ${event.track.kind} (${event.track.id}) from ${remoteSocketId}`);
+      const p = this.participants.get(remoteSocketId);
+      if (!p) return;
+
+      let remoteStream = p.stream;
+      if (!remoteStream) {
+        remoteStream = event.streams[0] || new MediaStream();
+      }
+
+      if (!remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+        remoteStream.addTrack(event.track);
+      }
+
+      event.track.onended = () => this.notifyPeersChange();
+      event.track.onmute = () => this.notifyPeersChange();
+      event.track.onunmute = () => this.notifyPeersChange();
+
+      this.participants.set(remoteSocketId, {
+        ...p,
+        stream: remoteStream,
+      });
+      this.notifyPeersChange();
     };
 
     // Perfect negotiation: Polite peer pattern
@@ -354,32 +399,50 @@ export class HybridCallManager {
 
     const offerCollision = this.isMakingOffer || pc.signalingState !== 'stable';
     this.ignoreOffer = !isPolite && offerCollision;
-    if (this.ignoreOffer) return;
-
-    await pc.setRemoteDescription(offer);
-
-    // Drain pending candidates
-    while (this.p2pPendingCandidates.length > 0) {
-      const c = this.p2pPendingCandidates.shift()!;
-      await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+    if (this.ignoreOffer) {
+      console.log(`[P2P] Impolite peer ignoring offer collision from ${fromSocketId}`);
+      return;
     }
 
-    await pc.setLocalDescription();
-    if (socket && pc.localDescription) {
-      socket.emit('call:p2p:answer', {
-        targetSocketId: fromSocketId,
-        answer: pc.localDescription,
-      });
+    try {
+      if (offerCollision) {
+        await Promise.all([
+          pc.setLocalDescription({ type: 'rollback' }),
+          pc.setRemoteDescription(offer),
+        ]);
+      } else {
+        await pc.setRemoteDescription(offer);
+      }
+
+      // Drain pending candidates
+      while (this.p2pPendingCandidates.length > 0) {
+        const c = this.p2pPendingCandidates.shift()!;
+        await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+      }
+
+      await pc.setLocalDescription();
+      if (socket && pc.localDescription) {
+        socket.emit('call:p2p:answer', {
+          targetSocketId: fromSocketId,
+          answer: pc.localDescription,
+        });
+      }
+    } catch (err) {
+      console.error('[P2P] handleP2POffer error:', err);
     }
   }
 
   private async handleP2PAnswer(fromSocketId: string, answer: RTCSessionDescriptionInit): Promise<void> {
     if (!this.p2pPeerConnection || this.p2pRemoteSocketId !== fromSocketId) return;
-    await this.p2pPeerConnection.setRemoteDescription(answer);
+    try {
+      await this.p2pPeerConnection.setRemoteDescription(answer);
 
-    while (this.p2pPendingCandidates.length > 0) {
-      const c = this.p2pPendingCandidates.shift()!;
-      await this.p2pPeerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+      while (this.p2pPendingCandidates.length > 0) {
+        const c = this.p2pPendingCandidates.shift()!;
+        await this.p2pPeerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+      }
+    } catch (err) {
+      console.error('[P2P] handleP2PAnswer error:', err);
     }
   }
 
@@ -775,7 +838,7 @@ export class HybridCallManager {
           // @ts-ignore
           googHighpassFilter: { ideal: true },
         },
-        video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+        video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
       });
 
       this.localStream = stream;
@@ -881,17 +944,39 @@ export class HybridCallManager {
     if (!this.isCameraOff && (!this.localStream || this.localStream.getVideoTracks().length === 0)) {
       try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
         });
         const newTrack = videoStream.getVideoTracks()[0];
         if (this.localStream && newTrack) {
           this.localStream.addTrack(newTrack);
         }
-      } catch {
+      } catch (err) {
+        console.warn('[HybridCall] Failed to access camera:', err);
         this.isCameraOff = true;
       }
     } else if (this.localStream) {
       this.localStream.getVideoTracks().forEach((t) => (t.enabled = !this.isCameraOff));
+    }
+
+    // Update P2P RTCPeerConnection sender with the live video track
+    if (this.topologyMode === 'p2p' && this.p2pPeerConnection) {
+      const pc = this.p2pPeerConnection;
+      const videoTrack = this.localStream?.getVideoTracks()[0];
+      const videoSender =
+        pc.getSenders().find((s) => s.track?.kind === 'video') ||
+        pc.getTransceivers().find((t) => t.receiver.track?.kind === 'video' || t.sender.track?.kind === 'video')?.sender;
+
+      if (videoSender) {
+        await videoSender.replaceTrack(!this.isCameraOff && videoTrack ? videoTrack : null).catch((err) => {
+          console.warn('[P2P] replaceTrack error:', err);
+        });
+      } else if (!this.isCameraOff && videoTrack) {
+        try {
+          pc.addTrack(videoTrack, this.localStream!);
+        } catch (err) {
+          console.warn('[P2P] addTrack error:', err);
+        }
+      }
     }
 
     // If on SFU, handle producer
@@ -908,6 +993,8 @@ export class HybridCallManager {
     const local = this.participants.get((socket && socket.id) ? socket.id : 'local');
     if (local) {
       local.isCameraOff = this.isCameraOff;
+      local.stream = this.localStream || undefined;
+      this.participants.set((socket && socket.id) ? socket.id : 'local', { ...local });
       this.notifyPeersChange();
     }
 

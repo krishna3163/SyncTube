@@ -387,15 +387,39 @@ const SidebarParticipantTile: React.FC<{
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && participant.stream) {
-      videoRef.current.srcObject = participant.stream;
-      videoRef.current.play().catch(() => {});
+    const videoEl = videoRef.current;
+    if (!videoEl || !participant.stream) return;
+
+    if (videoEl.srcObject !== (participant.stream || null)) {
+      videoEl.srcObject = participant.stream || null;
     }
+    videoEl.play().catch(() => {});
+
+    const vTracks = participant.stream.getVideoTracks();
+    const handleTrackState = () => {
+      if (videoEl.srcObject !== (participant.stream || null)) {
+        videoEl.srcObject = participant.stream || null;
+      }
+      videoEl.play().catch(() => {});
+    };
+
+    vTracks.forEach((t) => {
+      t.addEventListener('unmute', handleTrackState);
+      t.addEventListener('ended', handleTrackState);
+    });
+
+    return () => {
+      vTracks.forEach((t) => {
+        t.removeEventListener('unmute', handleTrackState);
+        t.removeEventListener('ended', handleTrackState);
+      });
+    };
   }, [participant.stream, participant.isCameraOff]);
 
   const hasVideoTrack =
-    participant.stream &&
-    participant.stream.getVideoTracks().length > 0 &&
+    Boolean(participant.stream) &&
+    participant.stream!.getVideoTracks().length > 0 &&
+    participant.stream!.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') &&
     !participant.isCameraOff;
 
   return (
