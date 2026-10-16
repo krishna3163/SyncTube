@@ -66,6 +66,7 @@ import {
   ToggleLikeSchema,
   SetCategorySchema,
   SetDescriptionSchema,
+  SetTagsSchema,
   WebRtcOfferSchema,
   WebRtcAnswerSchema,
   WebRtcIceCandidateSchema,
@@ -1589,6 +1590,22 @@ export function setupSocketHandlers(
         io.to(room.id).emit('room:description_updated', { description: room.description });
       } catch (err: any) {
         sendError('INTERNAL_ERROR', err?.message || 'Failed to set stream description.');
+      }
+    });
+
+    socket.on('room:set_tags', async (rawPayload: unknown) => {
+      try {
+        const { room, participant } = getContext();
+        if (!room || !participant) return;
+        if (!canPerformAction(participant.role, 'change_video')) {
+          return sendError('FORBIDDEN', 'Only Host can edit stream tags.');
+        }
+        const parsed = SetTagsSchema.safeParse(rawPayload);
+        if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid stream tags.');
+        room.setTags(parsed.data.tags);
+        io.to(room.id).emit('room:tags_updated', { tags: room.tags });
+      } catch (err: any) {
+        sendError('INTERNAL_ERROR', err?.message || 'Failed to set stream tags.');
       }
     });
 

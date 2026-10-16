@@ -344,6 +344,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     }
   }, [roomId]);
 
+  const [roomTags, setRoomTags] = useState<string[]>(['#WatchParty', '#SyncTubeLive', '#CinemaHub']);
+
+  const handleUpdateTags = useCallback((newTags: string[]) => {
+    setRoomTags(newTags);
+    if (socket) {
+      socket.emit('room:set_tags', { tags: newTags });
+    }
+  }, []);
+
   // V2 Features State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
@@ -668,6 +677,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     const onSyncState = (data: SyncStatePayload) => {
       setSyncState(data);
       setVideoId(data.videoId);
+      if (Array.isArray(data.tags) && data.tags.length > 0) {
+        setRoomTags(data.tags);
+      }
     };
 
     const onUserJoined = (data: UserJoinedPayload) => {
@@ -971,6 +983,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       });
     };
 
+    const onTagsUpdated = (data: { tags: string[] }) => {
+      if (Array.isArray(data?.tags)) {
+        setRoomTags(data.tags);
+      }
+    };
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
@@ -980,6 +998,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('party:readiness_update', onReadinessUpdate);
     socket.on('sync:drift_assessment', onDriftAssessmentReceived);
     socket.on('chat:user_typing', onUserTyping);
+    socket.on('room:tags_updated', onTagsUpdated);
     socket.on('playlist_sync', onPlaylistSync);
     socket.on('playlist_update', onPlaylistUpdate);
     socket.on('pending_requests_sync', onPendingRequestsSync);
@@ -1043,6 +1062,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('party:readiness_update', onReadinessUpdate);
       socket.off('sync:drift_assessment', onDriftAssessmentReceived);
       socket.off('chat:user_typing', onUserTyping);
+      socket.off('room:tags_updated', onTagsUpdated);
       socket.off('playlist_sync', onPlaylistSync);
       socket.off('playlist_update', onPlaylistUpdate);
       socket.off('pending_requests_sync', onPendingRequestsSync);
@@ -1941,7 +1961,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
               onRequestAction={handleRequestAction}
               onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-              reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
               roomUptimeSeconds={roomUptimeSeconds}
             />
           </div>
@@ -1964,6 +1983,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             onSetCategory={handleSetCategory}
             description={streamDescription || syncState?.description}
             onUpdateDescription={handleUpdateDescription}
+            tags={roomTags}
+            onUpdateTags={handleUpdateTags}
             likes={roomLikes}
             hasLiked={hasLikedRoom}
             onToggleLike={handleToggleRoomLike}

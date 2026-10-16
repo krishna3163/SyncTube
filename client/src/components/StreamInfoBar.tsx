@@ -39,6 +39,8 @@ export interface StreamInfoBarProps {
   thumbnailUrl?: string;
   description?: string;
   onUpdateDescription?: (newDesc: string) => void;
+  tags?: string[];
+  onUpdateTags?: (newTags: string[]) => void;
   likes?: number;
   hasLiked?: boolean;
   onToggleLike?: () => void;
@@ -71,6 +73,8 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   thumbnailUrl,
   description,
   onUpdateDescription,
+  tags,
+  onUpdateTags,
   likes = 0,
   hasLiked = false,
   onToggleLike,
@@ -80,13 +84,24 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const defaultDesc = `Welcome to ${hostUsername}'s synchronized live watch party! Enjoy real-time video synchronization, theater viewing, interactive chat, and live reactions. Invite friends to join room #${roomId} to watch together without delay.`;
   const [localDescription, setLocalDescription] = useState<string>(description || '');
+  const [localTags, setLocalTags] = useState<string[]>(
+    tags && tags.length > 0 ? tags : ['#WatchParty', '#SyncTubeLive', '#CinemaHub']
+  );
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [descDraft, setDescDraft] = useState('');
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [tagsDraft, setTagsDraft] = useState('');
   const [localLikes, setLocalLikes] = useState<number>(likes);
   const [localHasLiked, setLocalHasLiked] = useState<boolean>(hasLiked);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(category);
+
+  useEffect(() => {
+    if (tags && tags.length > 0) {
+      setLocalTags(tags);
+    }
+  }, [tags]);
 
   useEffect(() => {
     setLocalLikes(likes);
@@ -156,8 +171,23 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
 
   const handleStartEditing = () => {
     setDescDraft(localDescription || defaultDesc);
+    setTagsDraft(localTags.join(' '));
     setIsDescExpanded(true);
     setIsEditingDesc(true);
+  };
+
+  const handleSaveTags = () => {
+    const parsed = tagsDraft
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+      .map((t) => (t.startsWith('#') ? t : `#${t}`))
+      .slice(0, 12);
+    const finalTags = parsed.length > 0 ? parsed : ['#WatchParty'];
+    setLocalTags(finalTags);
+    setIsEditingTags(false);
+    onUpdateTags?.(finalTags);
+    onNotify('Stream tags updated successfully!', 'success');
   };
 
   const handleSaveDescription = () => {
@@ -165,7 +195,20 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
     setLocalDescription(trimmed);
     setIsEditingDesc(false);
     onUpdateDescription?.(trimmed);
-    onNotify('Stream description updated successfully!', 'success');
+
+    if (tagsDraft) {
+      const parsed = tagsDraft
+        .split(/[\s,]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+        .map((t) => (t.startsWith('#') ? t : `#${t}`))
+        .slice(0, 12);
+      const finalTags = parsed.length > 0 ? parsed : ['#WatchParty'];
+      setLocalTags(finalTags);
+      onUpdateTags?.(finalTags);
+    }
+
+    onNotify('Stream details updated successfully!', 'success');
   };
 
   const handleCancelEditing = () => {
@@ -339,11 +382,77 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
                 minute: '2-digit',
               })}
             </span>
-            <div className="stream-tags-list">
-              <span className="stream-tag">#WatchParty</span>
-              <span className="stream-tag">#SyncTubeLive</span>
-              <span className="stream-tag">#CinemaHub</span>
-            </div>
+            {isEditingTags ? (
+              <div className="stream-tags-inline-editor" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  className="stream-tags-inline-input"
+                  value={tagsDraft}
+                  onChange={(e) => setTagsDraft(e.target.value)}
+                  placeholder="Tags: #Anime #Movies #Live..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveTags();
+                    } else if (e.key === 'Escape') {
+                      setIsEditingTags(false);
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-xs"
+                  onClick={handleSaveTags}
+                  title="Save tags"
+                >
+                  <Check size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  onClick={() => setIsEditingTags(false)}
+                  title="Cancel"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="stream-tags-list">
+                {localTags.map((tag, idx) => (
+                  <span
+                    key={idx}
+                    className="stream-tag"
+                    onClick={(e) => {
+                      if (canEditDesc) {
+                        e.stopPropagation();
+                        setTagsDraft(localTags.join(' '));
+                        setIsEditingTags(true);
+                      }
+                    }}
+                    style={{ cursor: canEditDesc ? 'pointer' : 'default' }}
+                    title={canEditDesc ? 'Click to edit stream tags' : undefined}
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {canEditDesc && (
+                  <button
+                    type="button"
+                    className="stream-tag-edit-pill-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTagsDraft(localTags.join(' '));
+                      setIsEditingTags(true);
+                    }}
+                    title="Edit stream tags (Host)"
+                  >
+                    <Edit3 size={10} />
+                    <span>Edit Tags</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div className="stream-desc-header-right">
             {canEditDesc && !isEditingDesc && (
@@ -393,6 +502,27 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
                   maxLength={1000}
                   autoFocus
                 />
+                <div className="stream-desc-tags-edit-block" style={{ marginTop: '0.65rem' }}>
+                  <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '0.25rem' }}>
+                    <Edit3 size={11} color="var(--accent)" /> Stream Tags (e.g. #Action #Cinema #Music):
+                  </label>
+                  <input
+                    type="text"
+                    className="stream-desc-tags-input"
+                    value={tagsDraft}
+                    onChange={(e) => setTagsDraft(e.target.value)}
+                    placeholder="#WatchParty #CinemaHub #Anime..."
+                    style={{
+                      width: '100%',
+                      padding: '0.45rem 0.75rem',
+                      borderRadius: '8px',
+                      background: 'rgba(0,0,0,0.35)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#f8fafc',
+                      fontSize: '0.82rem',
+                    }}
+                  />
+                </div>
                 <div className="stream-desc-edit-footer">
                   <span className="desc-char-count">{descDraft.length} / 1000 chars</span>
                   <div className="stream-desc-edit-actions">

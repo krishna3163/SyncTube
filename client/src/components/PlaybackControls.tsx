@@ -20,7 +20,6 @@ import {
   Subtitles,
   Check,
   Gauge,
-  Smile,
   PictureInPicture,
   Tv,
   Zap,
@@ -126,10 +125,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showQualityOptions, setShowQualityOptions] = useState(false);
   const [showLatencyOptions, setShowLatencyOptions] = useState(false);
-  const [showReactionMenu, setShowReactionMenu] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
-  const reactionRef = useRef<HTMLDivElement>(null);
   const isHost = userRole === 'HOST' || userRole === 'MODERATOR';
   const canControl = isHost;
   const effectiveIsLive = Boolean(isLive || (playState === 'playing'));
@@ -143,19 +140,15 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
   };
   useEffect(() => {
-    if (!showSettingsMenu && !showReactionMenu) return;
+    if (!showSettingsMenu) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (showSettingsMenu && !settingsRef.current?.contains(event.target as Node)) {
         setShowSettingsMenu(false);
-      }
-      if (showReactionMenu && !reactionRef.current?.contains(event.target as Node)) {
-        setShowReactionMenu(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setShowSettingsMenu(false);
-        setShowReactionMenu(false);
       }
     };
     document.addEventListener('pointerdown', closeOnOutsidePointer);
@@ -164,7 +157,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
       document.removeEventListener('pointerdown', closeOnOutsidePointer);
       document.removeEventListener('keydown', closeOnEscape);
     };
-  }, [showSettingsMenu, showReactionMenu]);
+  }, [showSettingsMenu]);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const target = parseFloat(e.target.value);
@@ -433,40 +426,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
             </button>
           )}
 
-          {/* Dedicated Live Reactions Trigger Button */}
-          {reactionControl && (
-            <div ref={reactionRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className={`btn-icon control-btn-icon reaction-bar-btn ${showReactionMenu ? 'active' : ''}`}
-                onClick={() => {
-                  setShowReactionMenu(!showReactionMenu);
-                  setShowSettingsMenu(false);
-                }}
-                title="Send Live Reaction"
-                aria-label="Send Live Reaction"
-              >
-                <Smile size={18} />
-              </button>
-
-              {showReactionMenu && (
-                <div className="local-reactions-popover card glass">
-                  <div className="local-reactions-popover-header">
-                    <span>Live Reactions</span>
-                    <button
-                      type="button"
-                      className="popover-close-btn"
-                      onClick={() => setShowReactionMenu(false)}
-                      aria-label="Close reactions"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <div className="controls-reaction-slot">{reactionControl}</div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Local Video Settings Popover */}
           {(onSetQuality || onToggleCaptions || onSetPlaybackSpeed || onSetLatencyMode || onToggleAmbient) && (
@@ -476,7 +435,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 className={`btn-icon control-btn-icon ${showSettingsMenu ? 'active' : ''}`}
                 onClick={() => {
                   setShowSettingsMenu(!showSettingsMenu);
-                  setShowReactionMenu(false);
                 }}
                 title="Video & Latency Settings"
                 aria-label="Video Settings"

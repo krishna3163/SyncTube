@@ -58,6 +58,7 @@ export class Room {
   public likes: number = 0;
   public category: string = 'cinema';
   public description: string = '';
+  public tags: string[] = ['#WatchParty', '#SyncTubeLive', '#CinemaHub'];
   public likedUserIds: Set<string> = new Set();
   public isLive: boolean = false;
   public browserSessionId: string | null = null;
@@ -167,6 +168,15 @@ export class Room {
   public setDescription(desc: string): void {
     if (typeof desc === 'string') {
       this.description = desc.trim().slice(0, 1000);
+    }
+  }
+
+  public setTags(tags: string[]): void {
+    if (Array.isArray(tags)) {
+      this.tags = tags
+        .map((t) => (t.startsWith('#') ? t : `#${t}`).trim().slice(0, 50))
+        .filter((t) => t.length > 1)
+        .slice(0, 15);
     }
   }
 
@@ -526,6 +536,7 @@ export class Room {
       likes: this.likes,
       category: this.category,
       description: this.description,
+      tags: this.tags,
       isLive: this.isLive,
       browserSession: this.browserSessionId
         ? {

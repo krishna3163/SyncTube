@@ -12922,13 +12922,62 @@ body.is-dragging-reaction iframe {
 .stream-tags-list {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4rem;
 }
 
 .stream-tag {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: #60a5fa;
   font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(96, 165, 250, 0.08);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  transition: all 0.15s ease;
+}
+
+.stream-tag:hover {
+  background: rgba(96, 165, 250, 0.16);
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.stream-tag-edit-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stream-tag-edit-pill-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+.stream-tags-inline-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stream-tags-inline-input {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--accent);
+  color: #f8fafc;
+  outline: none;
+  min-width: 220px;
 }
 
 .stream-desc-header-right {

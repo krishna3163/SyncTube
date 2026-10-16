@@ -28,6 +28,7 @@ export interface SyncStatePayload {
   likes?: number;
   category?: string;
   description?: string;
+  tags?: string[];
   isLive?: boolean;
   browserSession?: {
     sessionId: string;
