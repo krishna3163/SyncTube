@@ -951,7 +951,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       if (data.action === 'soft_rate_adjust' && data.targetRate) {
         ytPlayerRef.current?.setPlaybackRate(data.targetRate);
       } else if (data.action === 'hard_seek' && data.targetPosition !== undefined) {
-        ytPlayerRef.current?.seekTo(data.targetPosition, true);
+        const currentPos = ytPlayerRef.current?.getCurrentTime?.() ?? 0;
+        if (Math.abs(currentPos - data.targetPosition) > 15) {
+          ytPlayerRef.current?.seekTo(data.targetPosition, true);
+        }
         ytPlayerRef.current?.setPlaybackRate(1.0);
       } else {
         ytPlayerRef.current?.setPlaybackRate(1.0);

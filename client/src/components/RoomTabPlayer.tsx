@@ -43,6 +43,43 @@ const RTC_CONFIG: RTCConfiguration = {
   iceCandidatePoolSize: 10,
 };
 
+// Enhances WebRTC SDP with Opus high-bitrate stereo parameters for movies and music
+const enhanceAudioSdp = (sdp: string): string => {
+  if (!sdp) return sdp;
+  let lines = sdp.split('\r\n');
+  let opusPt: string | null = null;
+  for (const line of lines) {
+    const match = line.match(/^a=rtpmap:(\d+)\s+opus\/48000/i);
+    if (match) {
+      opusPt = match[1];
+      break;
+    }
+  }
+  if (!opusPt) return sdp;
+
+  let fmtpFound = false;
+  lines = lines.map((line) => {
+    if (line.startsWith(`a=fmtp:${opusPt} `)) {
+      fmtpFound = true;
+      let params = line.substring(`a=fmtp:${opusPt} `.length);
+      if (!params.includes('stereo=1')) params += ';stereo=1;sprop-stereo=1';
+      if (!params.includes('maxaveragebitrate=')) params += ';maxaveragebitrate=510000';
+      if (!params.includes('cbr=1')) params += ';cbr=1';
+      if (!params.includes('useinbandfec=1')) params += ';useinbandfec=1';
+      return `a=fmtp:${opusPt} ${params}`;
+    }
+    return line;
+  });
+
+  if (!fmtpFound) {
+    const idx = lines.findIndex((l) => l.startsWith(`a=rtpmap:${opusPt} `));
+    if (idx !== -1) {
+      lines.splice(idx + 1, 0, `a=fmtp:${opusPt} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=510000;cbr=1`);
+    }
+  }
+  return lines.join('\r\n');
+};
+
 export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   userRole,
   userId,
@@ -59,6 +96,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   const [, setStream] = useState<MediaStream | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const [isSharing, setIsSharing] = useState<boolean>(false);
+  const [hasAudioTrack, setHasAudioTrack] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState<boolean>(false);
@@ -136,6 +174,9 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
       };
 
       const offer = await pc.createOffer();
+      if (offer.sdp) {
+        offer.sdp = enhanceAudioSdp(offer.sdp);
+      }
       await pc.setLocalDescription(offer);
 
       socket.emit('webrtc:offer', {
@@ -154,13 +195,41 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
         return;
       }
 
-      const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: 'browser',
-          frameRate: { ideal: 30, max: 60 },
-        } as any,
-        audio: true,
-      });
+      let mediaStream: MediaStream;
+      try {
+        // High-fidelity tab/media audio constraints:
+        // Echo cancellation and noise suppression MUST be disabled for crisp movie & music audio!
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: 'browser',
+            frameRate: { ideal: 30, max: 60 },
+          } as any,
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 2,
+            sampleRate: 48000,
+          } as any,
+        });
+      } catch {
+        // Fallback if browser requires boolean audio constraint
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: 'browser',
+            frameRate: { ideal: 30, max: 60 },
+          } as any,
+          audio: true,
+        });
+      }
+
+      const hasAudio = mediaStream.getAudioTracks().length > 0;
+      setHasAudioTrack(hasAudio);
+      if (!hasAudio) {
+        onNotify('⚠️ No tab audio detected! When sharing a tab, check "Also share tab audio" in the popup.', 'info');
+      } else {
+        onNotify('🔊 High-Fidelity HD Stereo Audio active for stream!', 'success');
+      }
 
       setStream(mediaStream);
       localStreamRef.current = mediaStream;
@@ -202,6 +271,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
     setRemoteStream(null);
     remoteStreamRef.current = null;
     setIsSharing(false);
+    setHasAudioTrack(false);
 
     peerConnectionsRef.current.forEach((pc) => pc.close());
     peerConnectionsRef.current.clear();
@@ -269,6 +339,9 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
             setRemoteStream(stream);
             setIsSharing(true);
+            if (stream) {
+              setHasAudioTrack(stream.getAudioTracks().length > 0);
+            }
 
             if (videoRef.current) {
               if (videoRef.current.srcObject !== stream) {
@@ -314,6 +387,9 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           pendingViewerCandidates.current = [];
 
           const answer = await pc.createAnswer();
+          if (answer.sdp) {
+            answer.sdp = enhanceAudioSdp(answer.sdp);
+          }
           await pc.setLocalDescription(answer);
 
           socket.emit('webrtc:answer', {
@@ -366,6 +442,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
     const onStreamStopped = () => {
       setIsSharing(false);
+      setHasAudioTrack(false);
       setRemoteStream(null);
       remoteStreamRef.current = null;
       if (viewerPcRef.current) {
@@ -502,6 +579,27 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
           <span style={{ fontSize: '12px', fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {streamTitle}
           </span>
+          {isSharing && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '2px 7px',
+                borderRadius: '9999px',
+                background: hasAudioTrack ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                border: `1px solid ${hasAudioTrack ? 'rgba(34, 197, 94, 0.4)' : 'rgba(234, 179, 8, 0.4)'}`,
+                color: hasAudioTrack ? '#86efac' : '#fde047',
+                fontSize: '10px',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+              title={hasAudioTrack ? 'Stereo HD sound active' : 'No tab audio shared. Re-share and check "Also share tab audio".'}
+            >
+              {hasAudioTrack ? <Volume2 size={11} /> : <VolumeX size={11} />}
+              {hasAudioTrack ? 'HD Stereo' : 'No Audio'}
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>

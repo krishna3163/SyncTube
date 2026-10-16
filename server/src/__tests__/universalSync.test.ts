@@ -50,15 +50,20 @@ describe('UniversalSyncSession', () => {
     const assessment1 = session.assessDrift(0.1, 0);
     expect(assessment1.action).toBe('none');
 
-    // 500ms behind: between 250ms and 1000ms -> soft_rate_adjust
+    // 500ms behind: between 250ms and 15000ms -> soft_rate_adjust
     const assessment2 = session.assessDrift(-0.5, 0);
     expect(assessment2.action).toBe('soft_rate_adjust');
-    expect(assessment2.targetRate).toBe(1.05); // speed up slightly
+    expect(assessment2.targetRate).toBe(1.06); // speed up slightly
 
-    // 1500ms ahead: > 1000ms -> hard_seek
+    // 1500ms ahead: between 250ms and 15000ms -> soft_rate_adjust (no hard seek!)
     const assessment3 = session.assessDrift(1.5, 0);
-    expect(assessment3.action).toBe('hard_seek');
-    expect(assessment3.targetPosition).toBe(0);
+    expect(assessment3.action).toBe('soft_rate_adjust');
+    expect(assessment3.targetRate).toBe(0.94);
+
+    // 16000ms ahead: > 15000ms -> hard_seek
+    const assessment4 = session.assessDrift(16.0, 0);
+    expect(assessment4.action).toBe('hard_seek');
+    expect(assessment4.targetPosition).toBe(0);
   });
 
   it('manages participant readiness and auto-play triggers', () => {

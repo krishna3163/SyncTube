@@ -353,9 +353,8 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       }, 500);
     }
 
-    // 3-tiered Drift Reconciliation:
-    // Tier 1: Large drift (>= 3.2s) - throttled hard seek (at most once every 3.5s)
-    if (absDrift >= 3.2 && (now - lastHardSeekTimeRef.current > 3500)) {
+    // Smooth Rate Adjustment only - DO NOT jump forward/backward during playback!
+    if (absDrift >= 15.0 && (now - lastHardSeekTimeRef.current > 10000)) {
       lastHardSeekTimeRef.current = now;
       isSyncingFromRemoteRef.current = true;
       video.currentTime = targetTime;
@@ -363,14 +362,12 @@ export const DirectVideoPlayer = forwardRef<YouTubePlayerHandle, DirectVideoPlay
       setTimeout(() => {
         isSyncingFromRemoteRef.current = false;
       }, 1000);
-    } else if (absDrift >= 1.0 && absDrift < 3.2) {
-      // Tier 2: Medium drift (1.0s to 3.2s) - gentle rate catch-up.
-      // NEVER hard-seek here! Hard-seeking on mobile flushes hardware decoder buffers and stutters.
-      // If local is behind, slightly increase speed (1.07x). If ahead, slightly decrease speed (0.93x).
-      const rateMultiplier = drift < 0 ? 1.07 : 0.93;
+    } else if (absDrift >= 0.3) {
+      // Gentle rate catch-up: NO hard seeking!
+      const rateMultiplier = drift < 0 ? (absDrift > 5.0 ? 1.12 : 1.06) : (absDrift > 5.0 ? 0.88 : 0.94);
       video.playbackRate = playbackSpeed * rateMultiplier;
     } else {
-      // Tier 3: In sync (< 1.0s) - smoothly maintain normal user playbackSpeed
+      // In sync (< 0.3s) - smoothly maintain normal user playbackSpeed
       video.playbackRate = playbackSpeed;
     }
   }, [syncState, playbackSpeed]);

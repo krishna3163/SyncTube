@@ -91,15 +91,6 @@ const TwitchLogo: React.FC = () => (
   </svg>
 );
 
-const YouTubeLogo: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22">
-    <path
-      fill="#FF0000"
-      d="M23.5 6.2c-.3-1.1-1.1-1.9-2.2-2.2C19.3 3.5 12 3.5 12 3.5s-7.3 0-9.3.5c-1.1.3-1.9 1.1-2.2 2.2C0 8.2 0 12 0 12s0 3.8.5 5.8c.3 1.1 1.1 1.9 2.2 2.2 2 .5 9.3.5 9.3.5s7.3 0 9.3-.5c1.1-.3 1.9-1.1 2.2-2.2.5-2 .5-5.8.5-5.8s0-3.8-.5-5.8z"
-    />
-    <polygon fill="#FFFFFF" points="9.5,15.5 15.5,12 9.5,8.5" />
-  </svg>
-);
 
 const ScreenShareLogo: React.FC = () => (
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
@@ -159,14 +150,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
   };
 
   const platforms = [
-    {
-      name: 'YouTube',
-      url: 'https://youtube.com',
-      category: 'Video & Live Streams',
-      desc: 'Watch YouTube videos, music & livestreams in real-time sync.',
-      logo: <YouTubeLogo />,
-      color: 'rgba(255, 0, 0, 0.18)',
-    },
     {
       name: 'Netflix',
       url: 'https://netflix.com',
@@ -315,8 +298,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                       } catch {}
                       window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: "Live Screen" }, '*');
                       onSelectMedia('tab:share', 'Live Screen Share', 'tab_share');
-                    } else if (p.url === 'https://youtube.com') {
-                      onSelectMedia('https://www.youtube.com', 'YouTube', 'youtube');
                     } else {
                       onSelectMedia(p.url, p.name, 'netflix');
                     }
@@ -345,8 +326,6 @@ export const BrowserHubModal: React.FC<BrowserHubModalProps> = ({
                         } catch {}
                         window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: "Live Screen" }, '*');
                         onSelectMedia('tab:share', 'Live Screen Share', 'tab_share');
-                      } else if (p.url === 'https://youtube.com') {
-                        onSelectMedia('https://www.youtube.com', 'YouTube', 'youtube');
                       } else {
                         onSelectMedia(p.url, p.name, 'netflix');
                       }

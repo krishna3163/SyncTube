@@ -51,9 +51,15 @@ export const CinemaStageCard: React.FC<CinemaStageCardProps> = ({
       onNotify('Only the Host can start Tab Sharing in this room.', 'info');
       return;
     }
+    try {
+      sessionStorage.setItem('synctube_pending_screen_share', 'true');
+    } catch {}
+    if (media.url) {
+      window.open(media.url, '_blank', 'noopener,noreferrer');
+    }
     emitStartTabStream(media.title, (res) => {
       if (res?.success) {
-        onNotify('Switched room stage to Browser Tab Stream!', 'success');
+        onNotify('Starting tab stream with HD audio! In the popup, select your tab and check "Also share tab audio".', 'success');
       } else if (res?.error) {
         onNotify(res.error, 'error');
       }

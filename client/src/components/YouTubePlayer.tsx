@@ -276,14 +276,17 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
 
     const baseRate = targetPlaybackRateRef.current || 1.0;
 
-    // Large drift (> 3s): hard seek to catch up quickly
-    if (Math.abs(drift) > 3.0) {
+    // Do NOT jump forward and backward during playback!
+    // Only hard seek if drift is extreme (> 15s)
+    if (Math.abs(drift) > 15.0) {
       ignoreStateChangesUntilRef.current = Date.now() + 1200;
       playerRef.current.seekTo(targetTime, true);
       try { playerRef.current.setPlaybackRate(baseRate); } catch {}
-    } else if (Math.abs(drift) > 0.5) {
-      // Medium drift: adjust playback rate gently (no seek = no buffering)
-      const rate = drift > 0 ? baseRate * 0.92 : baseRate * 1.08;
+    } else if (Math.abs(drift) > 0.3) {
+      // Smooth gradual rate adjustment without any jumping!
+      const rate = drift > 0
+        ? (Math.abs(drift) > 5.0 ? baseRate * 0.88 : baseRate * 0.94)
+        : (Math.abs(drift) > 5.0 ? baseRate * 1.12 : baseRate * 1.06);
       try { playerRef.current.setPlaybackRate(rate); } catch {}
     } else {
       // In sync: restore chosen rate
@@ -332,14 +335,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           const drift = time - expected; // positive = ahead, negative = behind
           const baseRate = targetPlaybackRateRef.current || 1.0;
 
-          if (Math.abs(drift) > 3.0) {
-            // Large drift: hard seek
+          // Smooth rate adjustment only: do NOT jump back and forth!
+          if (Math.abs(drift) > 15.0) {
             ignoreStateChangesUntilRef.current = Date.now() + 1200;
             playerRef.current.seekTo(expected, true);
             try { playerRef.current.setPlaybackRate(baseRate); } catch {}
-          } else if (Math.abs(drift) > 0.5) {
-            // Medium drift: rate adjustment only (no buffering!)
-            const rate = drift > 0 ? baseRate * 0.92 : baseRate * 1.08;
+          } else if (Math.abs(drift) > 0.3) {
+            const rate = drift > 0
+              ? (Math.abs(drift) > 5.0 ? baseRate * 0.88 : baseRate * 0.94)
+              : (Math.abs(drift) > 5.0 ? baseRate * 1.12 : baseRate * 1.06);
             try { playerRef.current.setPlaybackRate(rate); } catch {}
           } else {
             // In sync
