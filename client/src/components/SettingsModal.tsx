@@ -19,10 +19,14 @@ import {
   Film,
   PhoneCall,
   Volume2,
+  VolumeX,
+  Radio,
+  Play,
   Monitor,
   Activity,
   Zap,
 } from 'lucide-react';
+import { Socket } from 'socket.io-client';
 import { UserSettings, RoomSettingsData, Role } from '../types.js';
 import { AvatarPicker } from './AnimeAvatar.js';
 import {
@@ -30,6 +34,16 @@ import {
   FEATURE_METADATA,
   FeatureFlagKey,
 } from '../utils/featureFlags.js';
+import {
+  SOUNDBOARD_SOUNDS,
+  SoundboardEffectId,
+  playSoundboardEffect,
+  canPlaySoundboard,
+  getSoundPreferences,
+  setSoundPreferences,
+  SoundPreferences,
+} from '../utils/soundEffects.js';
+import { firePartyConfetti } from '../utils/confetti.js';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -46,7 +60,9 @@ interface SettingsModalProps {
   ambientSpread?: number;
   onAmbientBlurChange?: (value: number) => void;
   onAmbientSpreadChange?: (value: number) => void;
-  initialTab?: 'room' | 'user' | 'features';
+  initialTab?: 'room' | 'user' | 'features' | 'audio';
+  socket?: Socket | null;
+  onNotify?: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
 const PRESET_USER_COLORS = [
@@ -123,21 +139,110 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onAmbientBlurChange,
   onAmbientSpreadChange,
   initialTab = 'room',
+  socket,
+  onNotify,
 }) => {
-  const [activeTab, setActiveTab] = useState<'room' | 'user' | 'features'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'room' | 'user' | 'features' | 'audio'>(initialTab);
   const [flags, updateFlag, updateBatch, resetAllFlags] = useFeatureFlags();
   const [localUser, setLocalUser] = useState<UserSettings>(userSettings);
   const [localRoom, setLocalRoom] = useState<RoomSettingsData>(roomSettings);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Audio & Soundboard State
+  const [soundPrefs, setSoundPrefs] = useState<SoundPreferences>(getSoundPreferences);
+  const [soundCooldownRemaining, setSoundCooldownRemaining] = useState<number>(0);
+  const [activeSoundPlaying, setActiveSoundPlaying] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
     setLocalUser(userSettings);
     setLocalRoom(roomSettings);
     setDeleteConfirm(false);
     setSaveSuccess(false);
-  }, [isOpen, userSettings, roomSettings]);
+    setSoundPrefs(getSoundPreferences());
+  }, [isOpen, initialTab, userSettings, roomSettings]);
+
+  // Sound cooldown countdown timer
+  useEffect(() => {
+    if (soundCooldownRemaining <= 0) return;
+    const interval = setInterval(() => {
+      setSoundCooldownRemaining((prev) => Math.max(0, prev - 100));
+    }, 100);
+    return () => clearInterval(interval);
+  }, [soundCooldownRemaining]);
+
+  const handleToggleAudioMute = () => {
+    const updated = setSoundPreferences((prev) => ({
+      ...prev,
+      masterMute: !prev.masterMute,
+    }));
+    setSoundPrefs(updated);
+  };
+
+  const handleAudioVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    const updated = setSoundPreferences((prev) => ({
+      ...prev,
+      masterVolume: val,
+    }));
+    setSoundPrefs(updated);
+  };
+
+  const handleToggleAudioEvent = (key: keyof SoundPreferences['events']) => {
+    const updated = setSoundPreferences((prev) => ({
+      ...prev,
+      events: {
+        ...prev.events,
+        [key]: !prev.events[key],
+      },
+    }));
+    setSoundPrefs(updated);
+  };
+
+  const handleLocalPlaySound = (soundId: SoundboardEffectId) => {
+    setActiveSoundPlaying(soundId);
+    playSoundboardEffect(soundId);
+    if (soundId === 'cheer') {
+      firePartyConfetti({ particleCount: 35 });
+    }
+    setTimeout(() => setActiveSoundPlaying(null), 600);
+  };
+
+  const handleBroadcastSound = (soundId: SoundboardEffectId) => {
+    if (!canPlaySoundboard()) {
+      onNotify?.('Please wait a moment before sending another party sound.', 'info');
+      return;
+    }
+    handleLocalPlaySound(soundId);
+    if (socket && socket.connected) {
+      socket.emit('send_sound_effect', { soundId });
+      setSoundCooldownRemaining(soundPrefs.soundboardCooldownMs);
+      onNotify?.(`Broadcasted ${soundId} sound to party!`, 'success');
+    }
+  };
+
+  const handleResetAudioToDefault = () => {
+    const def = setSoundPreferences(() => ({
+      masterMute: false,
+      masterVolume: 0.7,
+      events: {
+        roomJoin: true,
+        roomLeave: true,
+        chatReceive: true,
+        chatSend: true,
+        reaction: true,
+        linkCopy: true,
+        soundboard: true,
+      },
+      soundboardCooldownMs: 1200,
+    }));
+    setSoundPrefs(def);
+    onNotify?.('Audio settings reset to defaults', 'info');
+  };
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -223,9 +328,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <header className="cinejoy-settings-header">
           <div className="cinejoy-settings-brand-row">
             <div className="cinejoy-settings-title-group">
-              <span className="cinejoy-settings-badge">CineJoy Settings</span>
+              <span className="cinejoy-settings-badge">SyncTube Central Settings</span>
               <h1 id="settings-dialog-title" className="cinejoy-settings-title">
-                {activeTab === 'room' ? 'Room Settings' : 'User Settings'}
+                {activeTab === 'room'
+                  ? 'Room Settings'
+                  : activeTab === 'user'
+                  ? 'User & Profile Settings'
+                  : activeTab === 'audio'
+                  ? 'Party Soundboard & Audio FX'
+                  : 'Feature Switches & Controls'}
               </h1>
             </div>
 
@@ -244,22 +355,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <nav className="cinejoy-tabs-nav" aria-label="Settings categories">
             <button
               type="button"
-              id="tab-features-settings"
-              role="tab"
-              aria-selected={activeTab === 'features'}
-              aria-controls="panel-features-settings"
-              className={`cinejoy-tab-btn ${activeTab === 'features' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('features');
-                setDeleteConfirm(false);
-              }}
-            >
-              <SlidersHorizontal size={16} strokeWidth={2} />
-              <span>Feature Switches</span>
-            </button>
-
-            <button
-              type="button"
               id="tab-room-settings"
               role="tab"
               aria-selected={activeTab === 'room'}
@@ -271,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }}
             >
               <Sliders size={16} strokeWidth={2} />
-              <span>Room Settings</span>
+              <span>Room</span>
             </button>
 
             <button
@@ -287,7 +382,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }}
             >
               <User size={16} strokeWidth={2} />
-              <span>User Settings</span>
+              <span>Profile</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-audio-settings"
+              role="tab"
+              aria-selected={activeTab === 'audio'}
+              aria-controls="panel-audio-settings"
+              className={`cinejoy-tab-btn ${activeTab === 'audio' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('audio');
+                setDeleteConfirm(false);
+              }}
+            >
+              <Volume2 size={16} strokeWidth={2} />
+              <span>Soundboard & FX</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-features-settings"
+              role="tab"
+              aria-selected={activeTab === 'features'}
+              aria-controls="panel-features-settings"
+              className={`cinejoy-tab-btn ${activeTab === 'features' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('features');
+                setDeleteConfirm(false);
+              }}
+            >
+              <SlidersHorizontal size={16} strokeWidth={2} />
+              <span>Feature Switches</span>
             </button>
           </nav>
         </header>
@@ -1010,7 +1137,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </footer>
             </form>
-          ) : (
+          ) : activeTab === 'user' ? (
             <form
               id="panel-user-settings"
               role="tabpanel"
@@ -1287,6 +1414,303 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </footer>
             </form>
+          ) : (
+            <div
+              id="panel-audio-settings"
+              role="tabpanel"
+              aria-labelledby="tab-audio-settings"
+              className="cinejoy-settings-stack"
+            >
+              {/* Audio Section 1: Master Controls */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill">
+                      <Volume2 size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Master Audio Controls</h2>
+                      <p className="cinejoy-subtext">
+                        Global volume, instant mute, and synthesized party feedback
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="cinejoy-btn-text"
+                    onClick={handleResetAudioToDefault}
+                    title="Reset Audio Settings"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Reset</span>
+                  </button>
+                </div>
+
+                <div className="cinejoy-card-body">
+                  <div className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Master Mute</span>
+                      <span className="cinejoy-help">Silence all UI sound effects and soundboard playback</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`soundboard-mute-toggle ${soundPrefs.masterMute ? 'muted' : 'active'}`}
+                      onClick={handleToggleAudioMute}
+                      style={{
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: '9999px',
+                        fontSize: '0.82rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        background: soundPrefs.masterMute ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 210, 31, 0.15)',
+                        color: soundPrefs.masterMute ? '#f87171' : '#ffd21f',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {soundPrefs.masterMute ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                      <span>{soundPrefs.masterMute ? 'Muted' : 'Unmuted'}</span>
+                    </button>
+                  </div>
+
+                  <div className="cinejoy-setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="cinejoy-label">Master Volume</span>
+                      <strong style={{ color: 'var(--accent)', fontSize: '0.9rem' }}>
+                        {Math.round(soundPrefs.masterVolume * 100)}%
+                      </strong>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={soundPrefs.masterVolume}
+                      onChange={handleAudioVolumeChange}
+                      className="cinejoy-range-slider"
+                      aria-label="Master audio volume"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Audio Section 2: Party Soundboard Matrix */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill" style={{ color: '#ec4899', background: 'rgba(236, 72, 153, 0.12)' }}>
+                      <Sparkles size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Watch Party Soundboard</h2>
+                      <p className="cinejoy-subtext">
+                        Play effects locally or broadcast in real-time to everyone in the room
+                      </p>
+                    </div>
+                  </div>
+                  {soundCooldownRemaining > 0 && (
+                    <span style={{ fontSize: '0.78rem', color: '#f59e0b', fontWeight: 600 }}>
+                      Cooldown: {(soundCooldownRemaining / 1000).toFixed(1)}s
+                    </span>
+                  )}
+                </div>
+
+                <div className="cinejoy-card-body">
+                  <div className="soundboard-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    {SOUNDBOARD_SOUNDS.map((sound) => {
+                      const isPlaying = activeSoundPlaying === sound.id;
+                      return (
+                        <div
+                          key={sound.id}
+                          className={`soundboard-card ${isPlaying ? 'playing' : ''}`}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '12px',
+                            padding: '0.75rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.5rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '1.4rem' }}>{sound.icon}</span>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#f8fafc' }}>
+                                {sound.label}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                                {sound.description}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: 'auto' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleLocalPlaySound(sound.id)}
+                              title="Listen locally"
+                              style={{ flex: 1, padding: '0.4rem 0.5rem', fontSize: '0.75rem' }}
+                            >
+                              <Play size={12} />
+                              <span>Preview</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleBroadcastSound(sound.id)}
+                              disabled={soundCooldownRemaining > 0}
+                              title="Broadcast to everyone in the party"
+                              style={{ flex: 1.2, padding: '0.4rem 0.5rem', fontSize: '0.75rem' }}
+                            >
+                              <Radio size={12} />
+                              <span>Broadcast</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Audio Section 3: Sound Event Toggles */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill" style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)' }}>
+                      <Activity size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Event Sound Notifications</h2>
+                      <p className="cinejoy-subtext">Toggle individual tactile audio feedback events</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cinejoy-card-body">
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Participant Join Chime</span>
+                      <span className="cinejoy-help">Ascending dual-tone chime when a friend enters the room</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.roomJoin}
+                        onChange={() => handleToggleAudioEvent('roomJoin')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Participant Leave Alert</span>
+                      <span className="cinejoy-help">Descending tone when a participant disconnects</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.roomLeave}
+                        onChange={() => handleToggleAudioEvent('roomLeave')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Incoming Chat Messages</span>
+                      <span className="cinejoy-help">Soft organic bubble blip when a new message arrives</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.chatReceive}
+                        onChange={() => handleToggleAudioEvent('chatReceive')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Outgoing Chat Message</span>
+                      <span className="cinejoy-help">Subtle chirp confirmation when sending a message</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.chatSend}
+                        onChange={() => handleToggleAudioEvent('chatSend')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Live Emoji Reactions</span>
+                      <span className="cinejoy-help">Springy upward pop sound on floating reaction bursts</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.reaction}
+                        onChange={() => handleToggleAudioEvent('reaction')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Link & Code Copy Chime</span>
+                      <span className="cinejoy-help">Satisfying bell chime when copying party links or codes</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.linkCopy}
+                        onChange={() => handleToggleAudioEvent('linkCopy')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+
+                  <label className="cinejoy-setting-row">
+                    <div className="cinejoy-setting-meta">
+                      <span className="cinejoy-label">Incoming Soundboard Broadcasts</span>
+                      <span className="cinejoy-help">Allow party members to trigger sound effects on your device</span>
+                    </div>
+                    <div className="cinejoy-switch">
+                      <input
+                        type="checkbox"
+                        checked={soundPrefs.events.soundboard}
+                        onChange={() => handleToggleAudioEvent('soundboard')}
+                      />
+                      <span className="cinejoy-slider" />
+                    </div>
+                  </label>
+                </div>
+              </section>
+
+              {/* Actions Footer */}
+              <footer className="cinejoy-modal-footer">
+                <button
+                  type="button"
+                  className="cinejoy-btn cinejoy-btn-primary"
+                  onClick={onClose}
+                >
+                  <Check size={16} strokeWidth={2} />
+                  <span>Done</span>
+                </button>
+              </footer>
+            </div>
           )}
         </main>
       </div>

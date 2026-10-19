@@ -294,4 +294,33 @@ Users have two immediate ways to toggle features like buttons:
   - `npm run build`: Production server & client builds succeed cleanly (0 errors).
   - Visual verification with Playwright headless Chrome: Captured full-resolution desktop screenshot (`desktop_home_current.png`) confirming pristine visual aesthetics, symmetry, and glowing gradients.
 
+### Entry 8: 2026-10-20 — Unified Central Settings Modal & Console Error Fixes
+- **Author**: Antigravity Assistant (Pair programmer with Krishna)
+- **Objective**:
+  1. Consolidate Feature Controller & Switches, Watch Party Soundboard & Audio FX, Room Settings, and User & Profile Settings into a single unified settings hub accessible under header button `//*[@id="root"]/div/div[2]/div/header/div[3]/div/button[6]` (`SettingsModal.tsx`).
+  2. Implement four dedicated segmented tabs in `SettingsModal.tsx`:
+     - **Room**: Room passcode, max viewers, permissions, theme, background, clear/delete room.
+     - **Profile**: Moniker/username, anime avatar picker (16 characters), chat colors, media hardware devices, ambient mode.
+     - **Soundboard & FX**: Real-time watch party soundboard (Applause, Airhorn, Cheer, Nani, Wow, Boom), local preview, room-wide socket broadcast (`send_sound_effect`), cooldown timer, master volume slider, instant mute, event notification sound toggles (joins, leaves, chat, reactions, links).
+     - **Feature Switches**: Master switch, category filters (Video, Audio & Calls, Social & Chat, Platform), live search, and individual modular feature switches.
+  3. Clean up `RoomHeader.tsx` so separate cluttered buttons for soundboard and feature switches are consolidated under the single unified Settings button (`#room-settings-header-btn`).
+  4. Fix `<meta name="apple-mobile-web-app-capable" content="yes">` deprecation by adding `<meta name="mobile-web-app-capable" content="yes">` in `client/index.html`.
+  5. Fix YouTube widgetapi postMessage targetOrigin mismatch error by optimizing `playerVars` in `YouTubePlayer.tsx` and removing redundant explicit `host: 'https://www.youtube.com'`.
+  6. Fix `Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true...` in `extension/src/background/serviceWorker.ts` by ensuring `return true;` is only returned for asynchronous actions, and returning `false` for synchronous or unhandled messages.
+- **Files Touched**:
+  - `client/src/components/SettingsModal.tsx`: Integrated full Soundboard & Audio FX tab, updated tab navigation and title.
+  - `client/src/components/RoomHeader.tsx`: Consolidated tools group under unified Settings button.
+  - `client/src/pages/RoomPage.tsx`: Wired `handleOpenSettings` with tab parameter across header and mobile drawers.
+  - `client/src/components/YouTubePlayer.tsx`: Optimized `playerVars` origin & widget referrer.
+  - `client/index.html`: Added `mobile-web-app-capable` meta tag.
+  - `extension/src/background/serviceWorker.ts`: Fixed synchronous message channel return in extension listener.
+  - `client/src/__tests__/soundAndMobile.test.ts`: Added test for unified settings tab configurations.
+  - `PROJECT_MEMORY.md`: Logged Entry 8 ledger update.
+- **Status & Verification**:
+  - `npm run typecheck`: Passed with 0 errors across server, client, extension.
+  - `npm run test:client`: 9/9 test files passed (38/38 tests passing).
+  - `npm run test:extension`: 2/2 test files passed (18/18 tests passing).
+  - `npm run test:server`: 18/18 test files passed (117/117 tests passing).
+  - `npm run build`: Production server & client builds succeed cleanly (0 errors).
+
 *(Future AI assistants: Append your changes above this line, keeping exact dates and files touched).*

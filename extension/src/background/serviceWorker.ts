@@ -64,9 +64,9 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
         break;
       }
       default:
-        break;
+        return false;
     }
 
-    return true;
+    return false;
   });
 }

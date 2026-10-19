@@ -173,35 +173,12 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
             </button>
           )}
 
-          {onOpenFeatureControls && (
-            <button
-              className="btn-icon header-tool-btn"
-              onClick={onOpenFeatureControls}
-              title="Feature Controls & Switches (Turn features ON/OFF)"
-              aria-label="Feature Controls"
-              id="feature-controls-header-btn"
-            >
-              <SlidersHorizontal size={15} color="#38bdf8" />
-            </button>
-          )}
-
-          {onOpenSoundboard && (
-            <button
-              className="btn-icon header-tool-btn"
-              onClick={onOpenSoundboard}
-              title="Party Soundboard & Audio FX"
-              aria-label="Soundboard"
-              id="soundboard-header-btn"
-            >
-              <Volume2 size={15} color="var(--accent)" />
-            </button>
-          )}
-
           <button
             className="btn-icon header-tool-btn"
             onClick={onOpenSettings}
-            title="Room & User Settings"
+            title="Unified Settings: Room, Profile, Soundboard & Feature Switches"
             aria-label="Settings"
+            id="room-settings-header-btn"
           >
             <Settings size={15} />
           </button>

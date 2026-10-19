@@ -82,7 +82,7 @@ import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.j
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, LogOut } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, Settings, LogOut } from 'lucide-react';
 import {
   playRequestAlertSound,
   playMessageReceiveSound,
@@ -287,6 +287,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'room' | 'user' | 'features' | 'audio'>('room');
+
+  const handleOpenSettings = (tab: 'room' | 'user' | 'features' | 'audio' = 'room') => {
+    setSettingsInitialTab(tab);
+    setIsSettingsOpen(true);
+  };
 
   // New Features: Theater Mode, Invite Modal, YouTube Search Modal
   const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
@@ -1659,9 +1665,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         connectionStatus={connectionStatus}
         onLeaveRoom={onLeaveRoom}
         onNotify={onNotify}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenFeatureControls={() => setIsFeatureControlsOpen(true)}
-        onOpenSoundboard={() => setIsSoundboardOpen(true)}
+        onOpenSettings={() => handleOpenSettings('room')}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenDiagnostics={featureFlags.syncDiagnostics ? () => setIsDiagnosticsModalOpen(true) : undefined}
@@ -2236,7 +2240,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         </Suspense>
       )}
 
-      {/* Settings Modal (User & Room tabs) */}
+      {/* Settings Modal (Room, User, Audio/Soundboard, and Feature Switches tabs) */}
       {isSettingsOpen && <Suspense fallback={null}><SettingsModal
         isOpen
         onClose={() => setIsSettingsOpen(false)}
@@ -2252,6 +2256,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         ambientSpread={ambientSpread}
         onAmbientBlurChange={handleAmbientBlurChange}
         onAmbientSpreadChange={handleAmbientSpreadChange}
+        initialTab={settingsInitialTab}
+        socket={socket}
+        onNotify={onNotify}
       /></Suspense>}
 
 
@@ -2371,7 +2378,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           if (tab === 'stage') {
             setMobileDrawerTab(null);
           } else if (tab === 'soundboard') {
-            setIsSoundboardOpen(true);
+            handleOpenSettings('audio');
           } else {
             setMobileDrawerTab(tab);
             if (tab === 'chat') setHasUnreadChat(false);
@@ -2477,7 +2484,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             className="mobile-hub-btn"
             onClick={() => {
               setMobileDrawerTab(null);
-              setIsSoundboardOpen(true);
+              handleOpenSettings('audio');
             }}
           >
             <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
@@ -2507,14 +2514,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             className="mobile-hub-btn"
             onClick={() => {
               setMobileDrawerTab(null);
-              setIsSettingsOpen(true);
+              handleOpenSettings('room');
             }}
           >
             <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
-              <SlidersHorizontal size={24} />
+              <Settings size={24} />
             </div>
-            <span className="mobile-hub-label">Sound & Audio</span>
-            <span className="mobile-hub-subtext">Volume & chime toggles</span>
+            <span className="mobile-hub-label">Room & User Settings</span>
+            <span className="mobile-hub-subtext">Passcode, themes & profile</span>
           </button>
 
           <button
@@ -2522,14 +2529,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             className="mobile-hub-btn"
             onClick={() => {
               setMobileDrawerTab(null);
-              setIsFeatureControlsOpen(true);
+              handleOpenSettings('features');
             }}
           >
             <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
-              <Monitor size={24} />
+              <SlidersHorizontal size={24} />
             </div>
-            <span className="mobile-hub-label">Feature Modules</span>
-            <span className="mobile-hub-subtext">Toggle party switches</span>
+            <span className="mobile-hub-label">Feature Switches</span>
+            <span className="mobile-hub-subtext">Modular system switches</span>
           </button>
 
           <button

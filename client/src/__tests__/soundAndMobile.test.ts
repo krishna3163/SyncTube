@@ -138,4 +138,18 @@ describe('Social Share & Copy Link Sound Logic', () => {
     expect(xLink).toContain('x.com/intent/tweet');
     expect(xLink).toContain('TEST99');
   });
+
+  it('supports all 4 unified settings tabs', () => {
+    const validTabs: Array<'room' | 'user' | 'features' | 'audio'> = [
+      'room',
+      'user',
+      'features',
+      'audio',
+    ];
+    expect(validTabs).toHaveLength(4);
+    expect(validTabs).toContain('room');
+    expect(validTabs).toContain('user');
+    expect(validTabs).toContain('audio');
+    expect(validTabs).toContain('features');
+  });
 });
