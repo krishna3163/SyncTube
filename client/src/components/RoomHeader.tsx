@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film } from 'lucide-react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
@@ -10,9 +10,11 @@ interface RoomHeaderProps {
   onLeaveRoom: () => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
   onOpenSettings: () => void;
+  onOpenFeatureControls?: () => void;
   onOpenInvite?: () => void;
   onOpenSearch?: () => void;
   onOpenDiagnostics?: () => void;
+  showDiagnostics?: boolean;
   onOpenAuth?: () => void;
   onOpenBrowserHub?: () => void;
   currentUser?: UserProfile | null;
@@ -29,9 +31,11 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onLeaveRoom,
   onNotify,
   onOpenSettings,
+  onOpenFeatureControls,
   onOpenInvite,
   onOpenSearch,
   onOpenDiagnostics,
+  showDiagnostics = true,
   onOpenAuth,
   onOpenBrowserHub,
   currentUser,
@@ -76,12 +80,14 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
       {/* Center: Live Sync Quality Badge */}
       <div className="header-sync-center">
-        <SyncQualityBadge
-          syncState={syncState}
-          currentTime={currentTime}
-          isConnected={connectionStatus === 'connected'}
-          onResync={onResync}
-        />
+        {showDiagnostics && (
+          <SyncQualityBadge
+            syncState={syncState}
+            currentTime={currentTime}
+            isConnected={connectionStatus === 'connected'}
+            onResync={onResync}
+          />
+        )}
       </div>
 
       {/* Right Cluster: Primary Invite + Media Actions + Quick Tools */}
@@ -139,7 +145,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
             </button>
           )}
 
-          {onOpenDiagnostics && (
+          {onOpenDiagnostics && showDiagnostics && (
             <button
               className="btn-icon header-tool-btn"
               onClick={onOpenDiagnostics}
@@ -162,6 +168,18 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
               ) : (
                 <User size={15} color="#c084fc" />
               )}
+            </button>
+          )}
+
+          {onOpenFeatureControls && (
+            <button
+              className="btn-icon header-tool-btn"
+              onClick={onOpenFeatureControls}
+              title="Feature Controls & Switches (Turn features ON/OFF)"
+              aria-label="Feature Controls"
+              id="feature-controls-header-btn"
+            >
+              <SlidersHorizontal size={15} color="#38bdf8" />
             </button>
           )}
 

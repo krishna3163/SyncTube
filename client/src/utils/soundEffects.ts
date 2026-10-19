@@ -1,9 +1,11 @@
 // Synthesized sound effects using standard Web Audio API (zero external asset dependencies)
+import { isFeatureEnabled } from './featureFlags.js';
 
 let audioCtx: AudioContext | null = null;
 
 const getAudioContext = (): AudioContext | null => {
   if (typeof window === 'undefined') return null;
+  if (!isFeatureEnabled('soundEffects')) return null;
   try {
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;

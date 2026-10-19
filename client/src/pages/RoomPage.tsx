@@ -86,10 +86,12 @@ import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, 
 import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
+const FeatureControlsModal = lazy(() => import('../components/FeatureControlsModal.js').then(({ FeatureControlsModal }) => ({ default: FeatureControlsModal })));
 import { YouTubeSearchModal } from '../components/YouTubeSearchModal.js';
 const InviteModal = lazy(() => import('../components/InviteModal.js').then(({ InviteModal }) => ({ default: InviteModal })));
 const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthModal }) => ({ default: AuthModal })));
 const SyncDiagnosticsModal = lazy(() => import('../components/SyncDiagnosticsModal.js').then(({ SyncDiagnosticsModal }) => ({ default: SyncDiagnosticsModal })));
+import { useFeatureFlags } from '../utils/featureFlags.js';
 import { BrowserHubModal } from '../components/BrowserHubModal.js';
 import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
 import { CinemaStageCard } from '../components/CinemaStageCard.js';
@@ -141,8 +143,32 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [duration, setDuration] = useState<number>(0);
   const currentTimeRef = useRef<number>(0);
 
+  // Feature Flags & Modular Toggle State
+  const [featureFlags, updateFeatureFlag] = useFeatureFlags();
+  const [isFeatureControlsOpen, setIsFeatureControlsOpen] = useState<boolean>(false);
+
   // Active Sidebar Tab: 'participants' | 'playlist' | 'chat' | 'requests' | 'activity'
   const [activeSidebarTab, setActiveSidebarTab] = useState<TabId>('participants');
+
+  // Filter tabs dynamically based on feature flags (core 'participants' and 'search' are always kept)
+  const availableTabs = React.useMemo(() => {
+    return TABS.filter((tab) => {
+      if (tab.id === 'chat' && !featureFlags.chat) return false;
+      if (tab.id === 'playlist' && !featureFlags.playlist) return false;
+      if (tab.id === 'requests' && !featureFlags.actionRequests) return false;
+      if (tab.id === 'activity' && !featureFlags.activityFeed) return false;
+      return true;
+    });
+  }, [featureFlags.chat, featureFlags.playlist, featureFlags.actionRequests, featureFlags.activityFeed]);
+
+  // If the active tab gets toggled off, smoothly fallback to 'participants' without crashing
+  useEffect(() => {
+    const isTabValid = availableTabs.some((t) => t.id === activeSidebarTab);
+    if (!isTabValid) {
+      setActiveSidebarTab('participants');
+    }
+  }, [availableTabs, activeSidebarTab]);
+
   const tabBarRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -1599,13 +1625,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onLeaveRoom={onLeaveRoom}
         onNotify={onNotify}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenFeatureControls={() => setIsFeatureControlsOpen(true)}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
-        onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+        onOpenDiagnostics={featureFlags.syncDiagnostics ? () => setIsDiagnosticsModalOpen(true) : undefined}
+        showDiagnostics={featureFlags.syncDiagnostics}
         onOpenAuth={() => setIsAuthModalOpen(true)}
-        onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
+        onOpenBrowserHub={featureFlags.browserHub ? () => setIsBrowserHubOpen(true) : undefined}
         currentUser={currentUser}
-        isTheaterMode={isTheaterMode}
+        isTheaterMode={isTheaterMode || featureFlags.theaterMode}
         onToggleTheater={handleToggleTheaterMode}
         syncState={syncState}
         currentTime={currentTime}
@@ -1617,7 +1645,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         <div className="stage-area">
 
           {/* Floating Host Approval Alert Banner for incoming Participant requests */}
-          {pendingRequests.length > 0 && (userRole === 'HOST' || userRole === 'MODERATOR') && (
+          {featureFlags.actionRequests && pendingRequests.length > 0 && (userRole === 'HOST' || userRole === 'MODERATOR') && (
             <div className="host-approval-banner">
               <div className="host-approval-info">
                 <Bell size={16} color="var(--accent)" />
@@ -1653,7 +1681,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             {/* Real-time Video Ambient Mode Backdrop */}
             <VideoAmbientBackdrop
               containerRef={stageContainerRef}
-              isEnabled={ambientMode}
+              isEnabled={ambientMode && featureFlags.ambientGlow}
               playState={syncState?.playState || 'paused'}
               blur={ambientBlur}
               spread={ambientSpread}
@@ -1668,7 +1696,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onTouchStart={handleUserActivity}
             >
               <div className="video-wrapper">
-                <ReactionOverlay reactions={activeReactions} />
+                {featureFlags.floatingReactions && <ReactionOverlay reactions={activeReactions} />}
 
                 
 
@@ -1788,45 +1816,53 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                             <Search size={15} />
                             <span>YouTube Search 🔍</span>
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary video-empty-action-btn"
-                            onClick={handleStartScreenShare}
-                            title="Share your device screen or browser tab to the room"
-                          >
-                            <Monitor size={15} />
-                            <span>Share Screen 🖥️</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary video-empty-action-btn"
-                            onClick={() => setIsBrowserHubOpen(true)}
-                            title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
-                          >
-                            <Film size={15} color="#38bdf8" />
-                            <span>Direct Stream & Web Media 🌐</span>
-                          </button>
+                          {featureFlags.screenShare && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary video-empty-action-btn"
+                              onClick={handleStartScreenShare}
+                              title="Share your device screen or browser tab to the room"
+                            >
+                              <Monitor size={15} />
+                              <span>Share Screen 🖥️</span>
+                            </button>
+                          )}
+                          {featureFlags.browserHub && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary video-empty-action-btn"
+                              onClick={() => setIsBrowserHubOpen(true)}
+                              title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
+                            >
+                              <Film size={15} color="#38bdf8" />
+                              <span>Direct Stream & Web Media 🌐</span>
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="video-empty-actions-row">
-                          <button
-                            type="button"
-                            className="btn btn-secondary video-empty-action-btn"
-                            onClick={handleStartScreenShare}
-                            title="Share your device screen or browser tab to the room"
-                          >
-                            <Monitor size={15} />
-                            <span>Share Screen 🖥️</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary video-empty-action-btn"
-                            onClick={() => setIsBrowserHubOpen(true)}
-                            title="Open Direct Stream & Web Media"
-                          >
-                            <Film size={15} color="#38bdf8" />
-                            <span>Direct Stream & Web Media 🌐</span>
-                          </button>
+                          {featureFlags.screenShare && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary video-empty-action-btn"
+                              onClick={handleStartScreenShare}
+                              title="Share your device screen or browser tab to the room"
+                            >
+                              <Monitor size={15} />
+                              <span>Share Screen 🖥️</span>
+                            </button>
+                          )}
+                          {featureFlags.browserHub && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary video-empty-action-btn"
+                              onClick={() => setIsBrowserHubOpen(true)}
+                              title="Open Direct Stream & Web Media"
+                            >
+                              <Film size={15} color="#38bdf8" />
+                              <span>Direct Stream & Web Media 🌐</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1914,7 +1950,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
                       onRequestAction={handleRequestAction}
                       onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-                      reactionControl={<FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded />}
+                      reactionControl={featureFlags.floatingReactions ? <FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded /> : undefined}
                       roomUptimeSeconds={roomUptimeSeconds}
                     />
                   </div>
@@ -2010,15 +2046,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         <aside className="sidebar">
 
           {/* Zoom / Google Meet Style Voice & Video Call Stage above Tab Bar */}
-          <SidebarCallStage
-            currentUserId={userId}
-            currentUsername={username}
-            currentUserAvatarId={userSettings.avatarId}
-            userRole={userRole}
-            isBlockedFromCall={participants.find((p) => p.userId === userId)?.isBlockedFromCall}
-            onRequestAction={(type) => handleRequestAction(type)}
-            onNotify={onNotify}
-          />
+          {featureFlags.voiceVideoCall && (
+            <SidebarCallStage
+              currentUserId={userId}
+              currentUsername={username}
+              currentUserAvatarId={userSettings.avatarId}
+              userRole={userRole}
+              isBlockedFromCall={participants.find((p) => p.userId === userId)?.isBlockedFromCall}
+              onRequestAction={(type) => handleRequestAction(type)}
+              onNotify={onNotify}
+            />
+          )}
 
           {/* Button-style Segmented Tab Bar with smooth horizontal navigation */}
           <div className="sidebar-tab-wrapper">
@@ -2039,7 +2077,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               ref={tabBarRef}
               onWheel={handleTabBarWheel}
             >
-              {TABS.map((tab) => {
+              {availableTabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeSidebarTab === tab.id;
                 return (
@@ -2168,6 +2206,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           </div>
         </aside>
       </main>
+
+      {/* Modular Feature Controls & Switches Modal */}
+      {isFeatureControlsOpen && (
+        <Suspense fallback={null}>
+          <FeatureControlsModal
+            isOpen
+            onClose={() => setIsFeatureControlsOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Settings Modal (User & Room tabs) */}
       {isSettingsOpen && <Suspense fallback={null}><SettingsModal

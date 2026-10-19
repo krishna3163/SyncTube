@@ -13,9 +13,23 @@ import {
   Layers,
   AlertTriangle,
   Lock,
+  SlidersHorizontal,
+  RotateCcw,
+  ShieldCheck,
+  Film,
+  PhoneCall,
+  Volume2,
+  Monitor,
+  Activity,
+  Zap,
 } from 'lucide-react';
 import { UserSettings, RoomSettingsData, Role } from '../types.js';
 import { AvatarPicker } from './AnimeAvatar.js';
+import {
+  useFeatureFlags,
+  FEATURE_METADATA,
+  FeatureFlagKey,
+} from '../utils/featureFlags.js';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -32,7 +46,7 @@ interface SettingsModalProps {
   ambientSpread?: number;
   onAmbientBlurChange?: (value: number) => void;
   onAmbientSpreadChange?: (value: number) => void;
-  initialTab?: 'room' | 'user';
+  initialTab?: 'room' | 'user' | 'features';
 }
 
 const PRESET_USER_COLORS = [
@@ -110,7 +124,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onAmbientSpreadChange,
   initialTab = 'room',
 }) => {
-  const [activeTab, setActiveTab] = useState<'room' | 'user'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'room' | 'user' | 'features'>(initialTab);
+  const [flags, updateFlag, updateBatch, resetAllFlags] = useFeatureFlags();
   const [localUser, setLocalUser] = useState<UserSettings>(userSettings);
   const [localRoom, setLocalRoom] = useState<RoomSettingsData>(roomSettings);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -229,6 +244,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <nav className="cinejoy-tabs-nav" aria-label="Settings categories">
             <button
               type="button"
+              id="tab-features-settings"
+              role="tab"
+              aria-selected={activeTab === 'features'}
+              aria-controls="panel-features-settings"
+              className={`cinejoy-tab-btn ${activeTab === 'features' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('features');
+                setDeleteConfirm(false);
+              }}
+            >
+              <SlidersHorizontal size={16} strokeWidth={2} />
+              <span>Feature Switches</span>
+            </button>
+
+            <button
+              type="button"
               id="tab-room-settings"
               role="tab"
               aria-selected={activeTab === 'room'}
@@ -263,7 +294,259 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Modal Scrollable Body */}
         <main className="cinejoy-settings-body">
-          {activeTab === 'room' ? (
+          {activeTab === 'features' ? (
+            <div
+              id="panel-features-settings"
+              role="tabpanel"
+              aria-labelledby="tab-features-settings"
+              className="cinejoy-settings-stack"
+            >
+              {/* Presets Header */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+                <button
+                  type="button"
+                  className="cinejoy-btn cinejoy-btn-secondary"
+                  onClick={() =>
+                    updateBatch({
+                      ambientGlow: false,
+                      floatingReactions: false,
+                      soundEffects: false,
+                      voiceVideoCall: false,
+                      chat: false,
+                      playlist: false,
+                      actionRequests: false,
+                      activityFeed: false,
+                      browserHub: false,
+                      syncDiagnostics: false,
+                      theaterMode: false,
+                      autoResync: true,
+                    })
+                  }
+                >
+                  <Film size={14} />
+                  <span>Minimal (Video Only)</span>
+                </button>
+                <button
+                  type="button"
+                  className="cinejoy-btn cinejoy-btn-secondary"
+                  onClick={() =>
+                    updateBatch({
+                      ambientGlow: true,
+                      floatingReactions: true,
+                      soundEffects: true,
+                      voiceVideoCall: true,
+                      screenShare: true,
+                      chat: true,
+                      playlist: true,
+                      actionRequests: true,
+                      activityFeed: true,
+                      browserHub: true,
+                      syncDiagnostics: true,
+                      theaterMode: false,
+                      autoResync: true,
+                    })
+                  }
+                >
+                  <Sparkles size={14} />
+                  <span>Full Party Experience</span>
+                </button>
+                <button
+                  type="button"
+                  className="cinejoy-btn cinejoy-btn-secondary"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={resetAllFlags}
+                >
+                  <RotateCcw size={14} />
+                  <span>Reset Defaults</span>
+                </button>
+              </div>
+
+              {/* Group 1: Visuals & Cinema */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill">
+                      <Sparkles size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Visuals & Cinema Experience</h2>
+                      <p className="cinejoy-subtext">Toggle ambient glow, flying reactions, and theater dimming.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="cinejoy-card-content">
+                  <div className="cinejoy-toggles-stack">
+                    {(['ambientGlow', 'floatingReactions', 'theaterMode'] as FeatureFlagKey[]).map((key) => {
+                      const meta = FEATURE_METADATA[key];
+                      return (
+                        <label key={key} className="cinejoy-toggle-row">
+                          <div className="cinejoy-toggle-text">
+                            <span className="cinejoy-toggle-title">{meta.label}</span>
+                            <span className="cinejoy-toggle-desc">{meta.description}</span>
+                          </div>
+                          <div className="cinejoy-switch">
+                            <input
+                              type="checkbox"
+                              checked={flags[key]}
+                              onChange={(e) => updateFlag(key, e.target.checked)}
+                              aria-label={`Toggle ${meta.label}`}
+                            />
+                            <span className="cinejoy-slider" />
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Group 2: Social & Communication */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill">
+                      <MessageSquare size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Social & Communication</h2>
+                      <p className="cinejoy-subtext">Toggle Zoom/Meet call stage, live chat, and audio chimes.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="cinejoy-card-content">
+                  <div className="cinejoy-toggles-stack">
+                    {(['voiceVideoCall', 'chat', 'soundEffects'] as FeatureFlagKey[]).map((key) => {
+                      const meta = FEATURE_METADATA[key];
+                      return (
+                        <label key={key} className="cinejoy-toggle-row">
+                          <div className="cinejoy-toggle-text">
+                            <span className="cinejoy-toggle-title">{meta.label}</span>
+                            <span className="cinejoy-toggle-desc">{meta.description}</span>
+                          </div>
+                          <div className="cinejoy-switch">
+                            <input
+                              type="checkbox"
+                              checked={flags[key]}
+                              onChange={(e) => updateFlag(key, e.target.checked)}
+                              aria-label={`Toggle ${meta.label}`}
+                            />
+                            <span className="cinejoy-slider" />
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Group 3: Media & Streams */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill">
+                      <Film size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Media, Streams & Queue</h2>
+                      <p className="cinejoy-subtext">Toggle playlist queue, screen sharing, and media hub launcher.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="cinejoy-card-content">
+                  <div className="cinejoy-toggles-stack">
+                    {(['playlist', 'screenShare', 'browserHub'] as FeatureFlagKey[]).map((key) => {
+                      const meta = FEATURE_METADATA[key];
+                      return (
+                        <label key={key} className="cinejoy-toggle-row">
+                          <div className="cinejoy-toggle-text">
+                            <span className="cinejoy-toggle-title">{meta.label}</span>
+                            <span className="cinejoy-toggle-desc">{meta.description}</span>
+                          </div>
+                          <div className="cinejoy-switch">
+                            <input
+                              type="checkbox"
+                              checked={flags[key]}
+                              onChange={(e) => updateFlag(key, e.target.checked)}
+                              aria-label={`Toggle ${meta.label}`}
+                            />
+                            <span className="cinejoy-slider" />
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Group 4: Controls & Telemetry */}
+              <section className="cinejoy-framed-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill">
+                      <ShieldCheck size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Controls & Automation</h2>
+                      <p className="cinejoy-subtext">Toggle action requests, activity log, telemetry, and auto drift correction.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="cinejoy-card-content">
+                  <div className="cinejoy-toggles-stack">
+                    {(['actionRequests', 'activityFeed', 'syncDiagnostics', 'autoResync'] as FeatureFlagKey[]).map((key) => {
+                      const meta = FEATURE_METADATA[key];
+                      return (
+                        <label key={key} className="cinejoy-toggle-row">
+                          <div className="cinejoy-toggle-text">
+                            <span className="cinejoy-toggle-title">{meta.label}</span>
+                            <span className="cinejoy-toggle-desc">{meta.description}</span>
+                          </div>
+                          <div className="cinejoy-switch">
+                            <input
+                              type="checkbox"
+                              checked={flags[key]}
+                              onChange={(e) => updateFlag(key, e.target.checked)}
+                              aria-label={`Toggle ${meta.label}`}
+                            />
+                            <span className="cinejoy-slider" />
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* Safe Mode Guarantee */}
+              <section className="cinejoy-framed-card cinejoy-info-card">
+                <div className="cinejoy-card-header">
+                  <div className="cinejoy-card-title-row">
+                    <div className="cinejoy-icon-pill cinejoy-icon-pill-accent">
+                      <ShieldCheck size={16} strokeWidth={2} />
+                    </div>
+                    <div className="cinejoy-card-title-text">
+                      <h2 className="cinejoy-heading">Safe Mode Guarantee</h2>
+                      <p className="cinejoy-subtext">
+                        Turning features on or off will never interrupt video playback, synchronization, or room connection.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Modal Actions Footer */}
+              <footer className="cinejoy-modal-footer">
+                <button
+                  type="button"
+                  className="cinejoy-btn cinejoy-btn-primary"
+                  onClick={onClose}
+                >
+                  <Check size={16} strokeWidth={2} />
+                  <span>Done</span>
+                </button>
+              </footer>
+            </div>
+          ) : activeTab === 'room' ? (
             <form
               id="panel-room-settings"
               role="tabpanel"
