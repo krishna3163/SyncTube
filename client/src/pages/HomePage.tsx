@@ -868,7 +868,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
         {/* The Two Main Action Cards Grid */}
         <div className="home-grid">
           {/* Card 1: Create a Room */}
-          <div className="home-card create-card">
+          <div className="home-card create-card magic-spotlight">
             <div className="home-card-header">
               <div className="home-card-icon-box create-icon">
                 <PlusCircle size={20} color="var(--accent)" />
@@ -930,6 +930,17 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
                     value={createVideoUrl}
                     onChange={(e) => setCreateVideoUrl(e.target.value)}
                   />
+                  {createVideoUrl && (
+                    <button
+                      type="button"
+                      className="origin-clear-btn"
+                      onClick={() => setCreateVideoUrl('')}
+                      title="Clear video URL"
+                      aria-label="Clear video URL"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
                 {mediaValidation ? (
                   <div className="input-inline-feedback success">
@@ -948,7 +959,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
               <button
                 type="submit"
-                className="btn btn-card-action create-action-btn"
+                className="btn btn-card-action create-action-btn magic-shimmer-btn"
                 disabled={isCreating}
               >
                 <Play size={16} fill="currentColor" />
@@ -959,7 +970,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
           </div>
 
           {/* Card 2: Join a Room */}
-          <div className="home-card join-card">
+          <div className="home-card join-card magic-spotlight">
             <div className="home-card-header">
               <div className="home-card-icon-box join-icon">
                 <Users size={20} color="var(--accent)" />
@@ -1023,6 +1034,17 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
                     aria-invalid={!!joinCodeError}
                     aria-describedby={joinCodeError ? 'join-code-error' : undefined}
                   />
+                  {joinRoomCode && (
+                    <button
+                      type="button"
+                      className="origin-clear-btn"
+                      onClick={() => setJoinRoomCode('')}
+                      title="Clear code"
+                      aria-label="Clear room code"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
                 {joinCodeError ? (
                   <div id="join-code-error" className="input-inline-feedback error" role="alert">
@@ -1038,7 +1060,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
               <button
                 type="submit"
-                className="btn btn-card-action join-action-btn"
+                className="btn btn-card-action join-action-btn magic-shimmer-btn"
               >
                 <LogIn size={16} />
                 <span>Join Room</span>

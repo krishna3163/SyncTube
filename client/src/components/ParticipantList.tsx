@@ -102,7 +102,7 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({
           const readiness = readinessList?.find((r) => r.userId === p.userId);
 
           return (
-            <div key={p.userId} className="participant-item">
+            <div key={p.userId} className="participant-item motion-item-enter">
               <div className="participant-info" style={{ minWidth: 0, flex: 1, overflow: 'hidden', gap: '0.5rem' }}>
                 {/* Anime avatar */}
                 <div

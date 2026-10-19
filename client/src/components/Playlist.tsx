@@ -330,7 +330,7 @@ export const Playlist: React.FC<PlaylistProps> = ({
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
-                className={`upnext-item-row ${isPlaying ? 'is-playing-row' : ''} ${isMenuOpen ? 'has-active-menu' : ''}`}
+                className={`upnext-item-row motion-item-enter ${isPlaying ? 'is-playing-row' : ''} ${isMenuOpen ? 'has-active-menu' : ''}`}
               >
                 {/* Index Number */}
                 <div className="upnext-index-col">

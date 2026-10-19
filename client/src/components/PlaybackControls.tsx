@@ -185,7 +185,19 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     }
   };
 
+  // ImageKit-inspired transient HUD ripple indicator
+  const [hudAction, setHudAction] = useState<{ type: 'play' | 'pause' | 'seek_fwd' | 'seek_back'; text?: string } | null>(null);
+
+  const triggerHud = (type: 'play' | 'pause' | 'seek_fwd' | 'seek_back', text?: string) => {
+    setHudAction({ type, text });
+    setTimeout(() => {
+      setHudAction((prev) => (prev?.type === type ? null : prev));
+    }, 600);
+  };
+
   const handleJump = (delta: number) => {
+    if (delta > 0) triggerHud('seek_fwd', '+10s');
+    else triggerHud('seek_back', '-10s');
     const nextTime = Math.max(0, Math.min(duration || 9999, currentTime + delta));
     if (canControl) {
       onSeek(nextTime);
@@ -196,8 +208,13 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   const handlePlayPause = () => {
     if (canControl) {
-      if (playState === 'playing') onPause();
-      else onPlay();
+      if (playState === 'playing') {
+        triggerHud('pause');
+        onPause();
+      } else {
+        triggerHud('play');
+        onPlay();
+      }
     } else if (onRequestAction) {
       if (playState === 'playing') onRequestAction('pause');
       else onRequestAction('play');
@@ -236,6 +253,29 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   return (
     <div className={containerClass}>
+      {/* ImageKit-inspired Center HUD Ripple Indicator */}
+      {hudAction && (
+        <div
+          className={`player-hud-overlay ${hudAction.type.startsWith('seek') ? 'hud-seek' : ''}`}
+          aria-hidden="true"
+        >
+          {hudAction.type === 'play' && <Play size={36} fill="currentColor" />}
+          {hudAction.type === 'pause' && <Pause size={36} fill="currentColor" />}
+          {hudAction.type === 'seek_fwd' && (
+            <>
+              <RotateCw size={26} />
+              <span className="player-hud-seek-label">+10s</span>
+            </>
+          )}
+          {hudAction.type === 'seek_back' && (
+            <>
+              <RotateCcw size={26} />
+              <span className="player-hud-seek-label">-10s</span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Timeline Slider with glowing progress & precision hover preview */}
       <div className="timeline-container">
         <span className="time-text current">{formatTime(currentTime)}</span>
@@ -286,7 +326,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         <div className="playback-buttons">
           <button
             type="button"
-            className="btn btn-primary control-btn-play"
+            className="btn btn-primary control-btn-play magic-shimmer-btn"
             onClick={handlePlayPause}
             disabled={!hasVideo}
             title={

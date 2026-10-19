@@ -2109,7 +2109,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                     type="button"
                     role="tab"
                     aria-selected={isActive}
-                    className={`sidebar-tab-btn ${isActive ? 'active' : ''}`}
+                    className={`sidebar-tab-btn motion-tab-pill ${isActive ? 'active' : ''}`}
                     onClick={() => setActiveSidebarTab(tab.id)}
                   >
                     <Icon size={14} />

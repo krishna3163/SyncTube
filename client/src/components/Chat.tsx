@@ -327,7 +327,7 @@ export const Chat: React.FC<ChatProps> = ({
             return (
               <div
                 key={msg.id}
-                className={`chat-row-v2 ${isMe ? 'chat-row-me chat-msg-send-pop' : 'chat-msg-incoming'} ${!isFirst ? 'chat-row-continued' : ''}`}
+                className={`chat-row-v2 motion-item-enter ${isMe ? 'chat-row-me chat-msg-send-pop' : 'chat-msg-incoming'} ${!isFirst ? 'chat-row-continued' : ''}`}
               >
                 {/* Avatar — only on first message in a group, left side for others */}
                 {!isMe && (

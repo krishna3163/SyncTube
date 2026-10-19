@@ -24,7 +24,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 1. Video Stage Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'stage' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'stage' ? 'active' : ''}`}
           onClick={() => onSelectTab('stage')}
           aria-label="Video Stage"
           aria-selected={activeTab === 'stage'}
@@ -36,7 +36,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 2. Chat Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'chat' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'chat' ? 'active' : ''}`}
           onClick={() => onSelectTab('chat')}
           aria-label="Live Chat"
           aria-selected={activeTab === 'chat'}
@@ -51,7 +51,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 3. Playlist Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'playlist' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'playlist' ? 'active' : ''}`}
           onClick={() => onSelectTab('playlist')}
           aria-label="Party Playlist"
           aria-selected={activeTab === 'playlist'}
@@ -68,7 +68,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 4. Viewers Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'viewers' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'viewers' ? 'active' : ''}`}
           onClick={() => onSelectTab('viewers')}
           aria-label="Participants & Viewers"
           aria-selected={activeTab === 'viewers'}
@@ -83,7 +83,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 5. Soundboard Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'soundboard' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'soundboard' ? 'active' : ''}`}
           onClick={() => onSelectTab('soundboard')}
           aria-label="Party Soundboard"
           aria-selected={activeTab === 'soundboard'}
@@ -95,7 +95,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {/* 6. More Actions Tab */}
         <button
           type="button"
-          className={`mobile-nav-btn ${activeTab === 'more' ? 'active' : ''}`}
+          className={`mobile-nav-btn motion-scale-press ${activeTab === 'more' ? 'active' : ''}`}
           onClick={() => onSelectTab('more')}
           aria-label="More Room Options"
           aria-selected={activeTab === 'more'}

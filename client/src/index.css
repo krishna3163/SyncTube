@@ -16675,3 +16675,339 @@ body.is-dragging-reaction iframe {
   justify-content: center;
 }
 
+/* ==========================================================================
+   SyncTube UI/UX Overhaul — 6 Repositories Integration System
+   (shadcn/ui, Magic UI, Motion Primitives, Origin UI, ImageKit Player, Lucide)
+   ========================================================================== */
+
+/* 1. MAGIC UI: Cinematic Border Beam, Shimmer Buttons & Spotlights */
+@keyframes magicBorderBeamRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.magic-border-beam-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.magic-border-beam-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -150%;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    transparent 280deg,
+    rgba(255, 210, 31, 0.7) 320deg,
+    rgba(56, 189, 248, 0.8) 345deg,
+    transparent 360deg
+  );
+  animation: magicBorderBeamRotate 8s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.85;
+}
+
+@keyframes magicShimmer {
+  0% { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(250%) skewX(-20deg); }
+}
+
+.magic-shimmer-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.magic-shimmer-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22),
+    transparent
+  );
+  transform: translateX(-150%) skewX(-20deg);
+  animation: magicShimmer 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+.magic-gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #ffd21f 55%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.magic-spotlight {
+  position: relative;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.magic-spotlight:hover {
+  box-shadow: 0 10px 30px -10px rgba(255, 210, 31, 0.15),
+              0 0 20px 2px rgba(255, 210, 31, 0.08);
+  border-color: rgba(255, 210, 31, 0.35);
+}
+
+/* 2. MOTION PRIMITIVES: Spring Tabs, List Slide-Up & Tactile Press */
+@keyframes motionSlideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.motion-item-enter {
+  animation: motionSlideUpFade 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.motion-scale-press:active {
+  transform: scale(0.96);
+  transition: transform 0.08s ease;
+}
+
+.motion-tab-pill {
+  position: relative;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+
+.motion-tab-pill.active {
+  background: rgba(255, 210, 31, 0.14) !important;
+  color: #ffd21f !important;
+  box-shadow: 0 2px 8px rgba(255, 210, 31, 0.2);
+}
+
+/* 3. ORIGIN UI: Form Controls, Keyboard Badges & Action Suffixes */
+.origin-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.origin-clear-btn {
+  position: absolute;
+  right: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.origin-clear-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.origin-kbd-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.68rem;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  line-height: 1;
+}
+
+/* 4. IMAGEKIT VIDEO PLAYER: Transient HUD Center Ripple & Scrub Tooltip */
+@keyframes playerHudPulse {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  75% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+.player-hud-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: rgba(11, 13, 14, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(255, 210, 31, 0.6);
+  box-shadow: 0 0 24px rgba(255, 210, 31, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffd21f;
+  pointer-events: none;
+  z-index: 45;
+  animation: playerHudPulse 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.player-hud-overlay.hud-seek {
+  width: 90px;
+  height: 90px;
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.player-hud-seek-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-family: var(--mono);
+}
+
+.timeline-hover-pill {
+  position: absolute;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: rgba(14, 17, 20, 0.94);
+  border: 1px solid rgba(255, 210, 31, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(255, 210, 31, 0.2);
+  backdrop-filter: blur(8px);
+  color: #ffd21f;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  transition: left 0.06s ease-out;
+}
+
+.timeline-hover-pill::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(255, 210, 31, 0.5) transparent transparent transparent;
+}
+
+/* 5. SHADCN/UI STANDARDIZED BUTTONS & BADGES */
+.ui-btn-primary {
+  background: linear-gradient(135deg, #ffd21f 0%, #f59e0b 100%);
+  color: #0b0d0e;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 2px 8px rgba(255, 210, 31, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ui-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 210, 31, 0.4);
+}
+
+.ui-btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ui-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.ui-btn-destructive {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ui-btn-destructive:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  line-height: 1.2;
+}
+
+.ui-badge-yellow {
+  background: rgba(255, 210, 31, 0.12);
+  border: 1px solid rgba(255, 210, 31, 0.35);
+  color: #ffd21f;
+}
+
+.ui-badge-cyan {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+.ui-badge-emerald {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+/* 6. ACCESSIBILITY: PREFERS-REDUCED-MOTION SUPPORT */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .magic-border-beam-wrap::before,
+  .magic-shimmer-btn::after,
+  .player-hud-overlay {
+    animation: none !important;
+  }
+}
+
+

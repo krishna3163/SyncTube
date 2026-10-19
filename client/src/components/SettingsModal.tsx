@@ -318,7 +318,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       role="presentation"
     >
       <div
-        className="modal-card cinejoy-settings-card"
+        className="modal-card cinejoy-settings-card magic-border-beam-wrap"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -359,7 +359,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               role="tab"
               aria-selected={activeTab === 'room'}
               aria-controls="panel-room-settings"
-              className={`cinejoy-tab-btn ${activeTab === 'room' ? 'active' : ''}`}
+              className={`cinejoy-tab-btn motion-tab-pill ${activeTab === 'room' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('room');
                 setDeleteConfirm(false);
@@ -375,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               role="tab"
               aria-selected={activeTab === 'user'}
               aria-controls="panel-user-settings"
-              className={`cinejoy-tab-btn ${activeTab === 'user' ? 'active' : ''}`}
+              className={`cinejoy-tab-btn motion-tab-pill ${activeTab === 'user' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('user');
                 setDeleteConfirm(false);
@@ -391,7 +391,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               role="tab"
               aria-selected={activeTab === 'audio'}
               aria-controls="panel-audio-settings"
-              className={`cinejoy-tab-btn ${activeTab === 'audio' ? 'active' : ''}`}
+              className={`cinejoy-tab-btn motion-tab-pill ${activeTab === 'audio' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('audio');
                 setDeleteConfirm(false);
@@ -407,7 +407,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               role="tab"
               aria-selected={activeTab === 'features'}
               aria-controls="panel-features-settings"
-              className={`cinejoy-tab-btn ${activeTab === 'features' ? 'active' : ''}`}
+              className={`cinejoy-tab-btn motion-tab-pill ${activeTab === 'features' ? 'active' : ''}`}
               onClick={() => {
                 setActiveTab('features');
                 setDeleteConfirm(false);
