@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Share2, Copy, Check, X, MessageSquare, Send } from 'lucide-react';
+import { Share2, Copy, Check, X } from 'lucide-react';
+import { SocialShareBar } from './SocialShareBar.js';
+import { playLinkCopySound } from '../utils/soundEffects.js';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -49,6 +51,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({
   const copyToClipboard = async (text: string, type: 'link' | 'code') => {
     try {
       await navigator.clipboard.writeText(text);
+      playLinkCopySound();
       if (type === 'link') {
         setCopiedLink(true);
         setTimeout(() => setCopiedLink(false), 2000);
@@ -149,36 +152,9 @@ export const InviteModal: React.FC<InviteModalProps> = ({
           </div>
 
           {/* Quick Share Buttons */}
-          <div className="invite-social-row">
-            <button
-              type="button"
-              className="btn invite-social-btn whatsapp-btn"
-              onClick={shareToWhatsApp}
-              title="Share via WhatsApp"
-            >
-              <MessageSquare size={16} />
-              <span>WhatsApp</span>
-            </button>
-            <button
-              type="button"
-              className="btn invite-social-btn telegram-btn"
-              onClick={shareToTelegram}
-              title="Share via Telegram"
-            >
-              <Send size={16} />
-              <span>Telegram</span>
-            </button>
-            {'share' in navigator && (
-              <button
-                type="button"
-                className="btn btn-secondary invite-social-btn"
-                onClick={handleNativeShare}
-                title="Share using device options"
-              >
-                <Share2 size={16} />
-                <span>More</span>
-              </button>
-            )}
+          <div className="invite-social-section">
+            <span className="invite-social-label">SHARE WITH FRIENDS</span>
+            <SocialShareBar roomId={roomId} onNotify={onNotify} />
           </div>
         </div>
       </div>

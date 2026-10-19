@@ -4,11 +4,10 @@ import {
   Copy,
   Check,
   X,
-  MessageSquare,
-  Send,
   QrCode,
-  Globe,
 } from 'lucide-react';
+import { SocialShareBar } from './SocialShareBar.js';
+import { playLinkCopySound } from '../utils/soundEffects.js';
 
 export interface ShareStreamModalProps {
   isOpen: boolean;
@@ -31,12 +30,12 @@ export const ShareStreamModal: React.FC<ShareStreamModalProps> = ({
 
   if (!isOpen) return null;
 
-  const roomUrl = `${window.location.origin}/room/${roomId}`;
+  const roomUrl = `${window.location.origin}/?room=${encodeURIComponent(roomId)}`;
   const encodedUrl = encodeURIComponent(roomUrl);
-  const shareText = encodeURIComponent(`🍿 Watch "${streamTitle}" live with me on SyncTube! Room code: ${roomId}`);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(roomUrl);
+    playLinkCopySound();
     setCopiedLink(true);
     onNotify('Stream link copied to clipboard!', 'success');
     setTimeout(() => setCopiedLink(false), 2000);
@@ -44,37 +43,11 @@ export const ShareStreamModal: React.FC<ShareStreamModalProps> = ({
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomId);
+    playLinkCopySound();
     setCopiedCode(true);
     onNotify(`Room code ${roomId} copied!`, 'success');
     setTimeout(() => setCopiedCode(false), 2000);
   };
-
-  const socialLinks = [
-    {
-      name: 'WhatsApp',
-      url: `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`,
-      color: '#25D366',
-      icon: MessageSquare,
-    },
-    {
-      name: 'Telegram',
-      url: `https://t.me/share/url?url=${encodedUrl}&text=${shareText}`,
-      color: '#0088cc',
-      icon: Send,
-    },
-    {
-      name: 'X (Twitter)',
-      url: `https://twitter.com/intent/tweet?text=${shareText}&url=${encodedUrl}`,
-      color: '#1DA1F2',
-      icon: Globe,
-    },
-    {
-      name: 'Reddit',
-      url: `https://reddit.com/submit?url=${encodedUrl}&title=${shareText}`,
-      color: '#FF4500',
-      icon: MessageSquare,
-    },
-  ];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -140,24 +113,7 @@ export const ShareStreamModal: React.FC<ShareStreamModalProps> = ({
           {/* Social Platforms Row */}
           <div className="share-social-section">
             <span className="share-social-label">Share directly to apps</span>
-            <div className="share-social-grid">
-              {socialLinks.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <a
-                    key={s.name}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="share-social-item"
-                    style={{ '--brand-color': s.color } as React.CSSProperties}
-                  >
-                    <Icon size={18} style={{ color: s.color }} />
-                    <span>{s.name}</span>
-                  </a>
-                );
-              })}
-            </div>
+            <SocialShareBar roomId={roomId} streamTitle={streamTitle} onNotify={onNotify} />
           </div>
 
           {/* QR Code Toggle for TV & Mobile */}

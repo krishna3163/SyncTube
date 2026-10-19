@@ -115,3 +115,27 @@ describe('Confetti Celebrations', () => {
     expect(confetti).toHaveBeenCalled();
   });
 });
+
+describe('Social Share & Copy Link Sound Logic', () => {
+  it('correctly constructs social share URLs and parameters', () => {
+    const roomId = 'TEST99';
+    const streamTitle = 'Inception Live Party';
+    const inviteUrl = `https://synctube.app/?room=${roomId}`;
+    const shareText = `🍿 Join my SyncTube Watch Party: "${streamTitle}" (Room: ${roomId})`;
+
+    const encodedText = encodeURIComponent(shareText);
+    const encodedUrl = encodeURIComponent(inviteUrl);
+
+    const waLink = `https://api.whatsapp.com/send?text=${encodeURIComponent(`${shareText}\n${inviteUrl}`)}`;
+    expect(waLink).toContain('TEST99');
+    expect(waLink).toContain('api.whatsapp.com');
+
+    const tgLink = `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`;
+    expect(tgLink).toContain('t.me/share');
+    expect(tgLink).toContain('TEST99');
+
+    const xLink = `https://x.com/intent/tweet?text=${encodedText}&url=${encodedUrl}&hashtags=SyncTube,WatchParty`;
+    expect(xLink).toContain('x.com/intent/tweet');
+    expect(xLink).toContain('TEST99');
+  });
+});

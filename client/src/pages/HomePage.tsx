@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Home,
   HelpCircle,
+  Info,
   Settings,
   Sun,
   Zap,
@@ -874,6 +875,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               </div>
               <div className="home-card-title-wrap">
                 <h2 className="card-title">Create a Room</h2>
+                <p className="card-subtitle">Host a synchronized watch party for YouTube, movie links, or DASH streams</p>
               </div>
             </div>
 
@@ -964,6 +966,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               </div>
               <div className="home-card-title-wrap">
                 <h2 className="card-title">Join a Room</h2>
+                <p className="card-subtitle">Enter a 6-character room code to watch together in real time</p>
               </div>
             </div>
 
@@ -1021,9 +1024,14 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
                     aria-describedby={joinCodeError ? 'join-code-error' : undefined}
                   />
                 </div>
-                {joinCodeError && (
+                {joinCodeError ? (
                   <div id="join-code-error" className="input-inline-feedback error" role="alert">
                     <span>⚠</span> {joinCodeError}
+                  </div>
+                ) : (
+                  <div className="input-inline-feedback info">
+                    <Info size={13} style={{ flexShrink: 0, opacity: 0.85, color: '#38bdf8' }} />
+                    <span>Tip: Ask your room host or friend for their 6-character code</span>
                   </div>
                 )}
               </div>
@@ -1066,7 +1074,9 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
           {storedParties.length === 0 ? (
             <div className="stored-parties-empty">
-              <Tv size={32} color="var(--text-muted)" style={{ opacity: 0.6, marginBottom: '0.5rem' }} />
+              <div className="empty-icon-wrap">
+                <Tv size={28} />
+              </div>
               <p className="empty-text">
                 {activeUsername
                   ? `No watch parties saved for "${activeUsername}" yet.`

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
 import { Role } from '../types.js';
+import { playLinkCopySound } from '../utils/soundEffects.js';
 
 export interface StreamInfoBarProps {
   roomId: string;
@@ -147,6 +148,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
   const handleCopyLink = () => {
     const url = `${window.location.origin}/room/${roomId}`;
     navigator.clipboard.writeText(url);
+    playLinkCopySound();
     setCopiedLink(true);
     onNotify('Stream link copied to clipboard!', 'success');
     setTimeout(() => setCopiedLink(false), 2000);
