@@ -90,6 +90,8 @@ export interface CallParticipant {
 
 const activeRoomCalls = new Map<string, Map<string, CallParticipant>>();
 const activeRoomScreenShares = new Map<string, { socketId: string; userId: string; username: string; title: string }>();
+const userReactionTimestamps = new Map<string, number[]>();
+const userSoundEffectCooldowns = new Map<string, number>();
 
 interface SocketData {
   roomId?: string;
@@ -1034,11 +1036,20 @@ export function setupSocketHandlers(
       }
     });
 
-    // 18. EMOJI REACTION
+    // 18. EMOJI REACTION (with per-user rate limit: max 10 reactions per 3s)
     socket.on('send_reaction', (rawPayload: unknown) => {
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const now = Date.now();
+        const timestamps = userReactionTimestamps.get(participant.userId) || [];
+        const recentTimestamps = timestamps.filter((t) => now - t < 3000);
+        if (recentTimestamps.length >= 10) {
+          return sendError('BAD_REQUEST', 'Too many reactions. Please wait a moment.');
+        }
+        recentTimestamps.push(now);
+        userReactionTimestamps.set(participant.userId, recentTimestamps);
 
         const parsed = SendReactionSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid send_reaction payload.');
@@ -1105,11 +1116,18 @@ export function setupSocketHandlers(
       }
     });
 
-    // 19. SOUND EFFECT
+    // 19. SOUND EFFECT (with per-user cooldown: min 1000ms cooldown)
     socket.on('send_sound_effect', (rawPayload: unknown) => {
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return sendError('NOT_FOUND', 'You must join a room first.');
+
+        const now = Date.now();
+        const lastSound = userSoundEffectCooldowns.get(participant.userId) || 0;
+        if (now - lastSound < 1000) {
+          return sendError('BAD_REQUEST', 'Soundboard is cooling down. Please wait a moment.');
+        }
+        userSoundEffectCooldowns.set(participant.userId, now);
 
         const parsed = SendSoundEffectSchema.safeParse(rawPayload);
         if (!parsed.success) return sendError('BAD_REQUEST', 'Invalid send_sound_effect payload.');

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal } from 'lucide-react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
@@ -11,6 +11,7 @@ interface RoomHeaderProps {
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
   onOpenSettings: () => void;
   onOpenFeatureControls?: () => void;
+  onOpenSoundboard?: () => void;
   onOpenInvite?: () => void;
   onOpenSearch?: () => void;
   onOpenDiagnostics?: () => void;
@@ -32,6 +33,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onNotify,
   onOpenSettings,
   onOpenFeatureControls,
+  onOpenSoundboard,
   onOpenInvite,
   onOpenSearch,
   onOpenDiagnostics,
@@ -180,6 +182,18 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
               id="feature-controls-header-btn"
             >
               <SlidersHorizontal size={15} color="#38bdf8" />
+            </button>
+          )}
+
+          {onOpenSoundboard && (
+            <button
+              className="btn-icon header-tool-btn"
+              onClick={onOpenSoundboard}
+              title="Party Soundboard & Audio FX"
+              aria-label="Soundboard"
+              id="soundboard-header-btn"
+            >
+              <Volume2 size={15} color="var(--accent)" />
             </button>
           )}
 

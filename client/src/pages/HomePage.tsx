@@ -48,6 +48,7 @@ import { ANIME_AVATARS, getAvatarById } from '../utils/animeAvatars.js';
 import { AnimeAvatarDisplay, AvatarPicker } from '../components/AnimeAvatar.js';
 import { rememberParticipantCharacter } from '../utils/characterMemory.js';
 import { getSafeYouTubeThumbnailUrl, saveRoomIdentityToken } from '../utils/identity.js';
+import { fireCelebrationMilestone } from '../utils/confetti.js';
 import { authStorage } from '../utils/authStorage.js';
 import { getApiUrl } from '../utils/api.js';
 export { getApiUrl } from '../utils/api.js';
@@ -320,6 +321,7 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
         lastVisited: Date.now(),
       });
       refreshParties(createUsername.trim());
+      fireCelebrationMilestone();
       onNotify(`Room ${data.roomId} created!`, 'success');
       onEnterRoom(data.roomId, createUsername.trim(), true);
     } catch (err) {

@@ -9,7 +9,7 @@ export const getApiUrl = (): string => {
       if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
         return envUrl;
       }
-      return 'https://synctube-2ar4.onrender.com';
+      return 'https://synctube-qg7l.onrender.com';
     }
 
     if (isLocalhost || import.meta.env.DEV || hostname.endsWith('.onrender.com')) {
@@ -18,7 +18,7 @@ export const getApiUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://synctube-2ar4.onrender.com';
+    return 'https://synctube-qg7l.onrender.com';
   }
-  return envUrl || 'https://synctube-2ar4.onrender.com';
+  return envUrl || 'https://synctube-qg7l.onrender.com';
 };

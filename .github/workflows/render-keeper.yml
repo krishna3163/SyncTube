@@ -1,0 +1,48 @@
+name: Render Keep-Alive & Auto-Healer
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free-tier sleep
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_recovery:
+        description: 'Force recreate service on Render'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  keep-alive:
+    name: Check Health & Keep Awake
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Render Keeper & Self-Healing
+        id: keeper
+        env:
+          RENDER_API_KEYS: ${{ secrets.RENDER_API_KEYS || secrets.RENDER_API_KEY }}
+          RENDER_API_KEY_1: ${{ secrets.RENDER_API_KEY_1 }}
+          RENDER_API_KEY_2: ${{ secrets.RENDER_API_KEY_2 }}
+          BACKEND_URL: ${{ vars.BACKEND_URL || 'https://synctube-qg7l.onrender.com' }}
+          FORCE_RECOVERY: ${{ inputs.force_recovery }}
+        run: node scripts/render-keeper.mjs
+
+      - name: Commit & Push New Backend URL (if rotated)
+        if: steps.keeper.outputs.url_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(infra): auto-rotate Render backend to ${{ steps.keeper.outputs.new_url }} [skip ci]"
+          git push origin main

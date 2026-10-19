@@ -82,8 +82,21 @@ import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.j
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor } from 'lucide-react';
-import { playRequestAlertSound, playMessageReceiveSound, playReactSound } from '../utils/soundEffects.js';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, LogOut } from 'lucide-react';
+import {
+  playRequestAlertSound,
+  playMessageReceiveSound,
+  playReactSound,
+  playUserJoinSound,
+  playUserLeaveSound,
+  playLinkCopySound,
+  playSoundboardEffect,
+  SoundboardEffectId,
+} from '../utils/soundEffects.js';
+import { firePartyConfetti } from '../utils/confetti.js';
+import { MobileBottomNav, MobileTab } from '../components/MobileBottomNav.js';
+import { MobileDrawer } from '../components/MobileDrawer.js';
+import { SoundboardModal } from '../components/SoundboardModal.js';
 
 const SettingsModal = lazy(() => import('../components/SettingsModal.js').then(({ SettingsModal }) => ({ default: SettingsModal })));
 const FeatureControlsModal = lazy(() => import('../components/FeatureControlsModal.js').then(({ FeatureControlsModal }) => ({ default: FeatureControlsModal })));
@@ -146,6 +159,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   // Feature Flags & Modular Toggle State
   const [featureFlags, updateFeatureFlag] = useFeatureFlags();
   const [isFeatureControlsOpen, setIsFeatureControlsOpen] = useState<boolean>(false);
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState<boolean>(false);
+  const [mobileDrawerTab, setMobileDrawerTab] = useState<MobileTab | null>(null);
+  const [hasUnreadChat, setHasUnreadChat] = useState<boolean>(false);
 
   // Active Sidebar Tab: 'participants' | 'playlist' | 'chat' | 'requests' | 'activity'
   const [activeSidebarTab, setActiveSidebarTab] = useState<TabId>('participants');
@@ -720,6 +736,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       setParticipants(data.participants);
       if (data.userId === userId) {
         setUserRole(data.role);
+      } else {
+        playUserJoinSound();
       }
       addActivityRef.current(`${data.username} joined the room`, 'joined', {
         username: data.username,
@@ -732,6 +750,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       data.participants?.forEach((p) => {
         rememberParticipantCharacter(p.username, p.userId, p.avatarId);
       });
+      if (data.userId !== userId) {
+        playUserLeaveSound();
+      }
       setParticipants(data.participants);
       const myParticipant = data.participants?.find((p) => p.userId === userId);
       if (myParticipant && myParticipant.role !== userRoleRef.current) {
@@ -882,6 +903,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       rememberParticipantCharacter(data.username, data.userId, data.avatarId);
       if (data.userId !== userId) {
         playMessageReceiveSound();
+        setHasUnreadChat(true);
       }
       setChatMessages((prev) => [...prev.slice(-99), data]);
     };
@@ -944,6 +966,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     // reaction_received: real-time emoji reaction from a viewer
     const onReactionReceived = (data: EmojiReaction) => {
       playReactSound(data.emoji);
+      if (data.emoji === '🎉') {
+        firePartyConfetti({ particleCount: 35 });
+      }
       setActiveReactions((prev) => [...prev, data]);
       addActivity(
         `${data.username} reacted ${data.emoji}${data.videoTime !== undefined ? ` at ${Math.floor(data.videoTime / 60)}:${String(Math.floor(data.videoTime % 60)).padStart(2, '0')}` : ''}`,
@@ -953,6 +978,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       setTimeout(() => {
         setActiveReactions((prev) => prev.filter((r) => r.id !== data.id));
       }, 2800);
+    };
+
+    const onSoundEffectReceived = (data: { soundId: SoundboardEffectId; username: string }) => {
+      playSoundboardEffect(data.soundId);
+      if (data.soundId === 'cheer' || data.soundId === 'applause') {
+        firePartyConfetti({ particleCount: 30 });
+      }
+      onNotifyRef.current(`🔊 @${data.username} played ${data.soundId}!`, 'info');
     };
 
     const onPlaybackSpeedUpdated = (data: { speed: number }) => {
@@ -1035,6 +1068,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     socket.on('poll_updated', onPollUpdated);
     socket.on('message_reaction_updated', onMessageReactionUpdated);
     socket.on('reaction_received', onReactionReceived);
+    socket.on('sound_effect_received', onSoundEffectReceived);
     socket.on('playback_speed_updated', onPlaybackSpeedUpdated);
     socket.on('user_joined', onUserJoined);
     socket.on('user_left', onUserLeft);
@@ -1099,6 +1133,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       socket.off('poll_updated', onPollUpdated);
       socket.off('message_reaction_updated', onMessageReactionUpdated);
       socket.off('reaction_received', onReactionReceived);
+      socket.off('sound_effect_received', onSoundEffectReceived);
       socket.off('playback_speed_updated', onPlaybackSpeedUpdated);
       socket.off('user_joined', onUserJoined);
       socket.off('user_left', onUserLeft);
@@ -1626,6 +1661,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onNotify={onNotify}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenFeatureControls={() => setIsFeatureControlsOpen(true)}
+        onOpenSoundboard={() => setIsSoundboardOpen(true)}
         onOpenInvite={() => setIsInviteModalOpen(true)}
         onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenDiagnostics={featureFlags.syncDiagnostics ? () => setIsDiagnosticsModalOpen(true) : undefined}
@@ -2319,6 +2355,199 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           onNotify={onNotify}
         />
       )}
+
+      {/* Interactive Soundboard Modal */}
+      <SoundboardModal
+        isOpen={isSoundboardOpen}
+        onClose={() => setIsSoundboardOpen(false)}
+        socket={socket}
+        onNotify={onNotify}
+      />
+
+      {/* Mobile-First Bottom Navigation (Viewports <= 768px) */}
+      <MobileBottomNav
+        activeTab={mobileDrawerTab || 'stage'}
+        onSelectTab={(tab) => {
+          if (tab === 'stage') {
+            setMobileDrawerTab(null);
+          } else if (tab === 'soundboard') {
+            setIsSoundboardOpen(true);
+          } else {
+            setMobileDrawerTab(tab);
+            if (tab === 'chat') setHasUnreadChat(false);
+          }
+        }}
+        hasUnreadChat={hasUnreadChat}
+        playlistCount={playlist.length}
+        viewerCount={participants.length}
+      />
+
+      {/* Mobile Bottom Drawers (Vaul-inspired, swipeable, accessible) */}
+      <MobileDrawer
+        isOpen={mobileDrawerTab === 'chat'}
+        onClose={() => setMobileDrawerTab(null)}
+        title="Live Watch Party Chat"
+      >
+        <Chat
+          messages={chatMessages}
+          currentUserId={userId}
+          currentUserAvatarId={userSettings.avatarId}
+          viewerCount={participants.length}
+          userRole={userRole}
+          activePoll={activePoll}
+          onVotePoll={(optionIndex) => socket.emit('vote_poll', { optionIndex })}
+          onCreatePoll={(question, options) => socket.emit('create_poll', { question, options })}
+          onSendMessage={handleSendChat}
+          onToggleReaction={handleToggleMessageReaction}
+          onSendReaction={handleSendReaction}
+          typingUsers={typingUsers}
+          onTypingChange={handleTypingChange}
+        />
+      </MobileDrawer>
+
+      <MobileDrawer
+        isOpen={mobileDrawerTab === 'playlist'}
+        onClose={() => setMobileDrawerTab(null)}
+        title="Room Playlist"
+      >
+        <Playlist
+          playlist={playlist}
+          currentVideoId={videoId}
+          userRole={userRole}
+          currentUserId={userId}
+          onAddToPlaylist={handleAddToPlaylist}
+          onImportPlaylist={handleImportPlaylist}
+          onPlayItem={handlePlayItem}
+          onNextVideo={handleNextVideo}
+          onRemoveItem={handleRemovePlaylistItem}
+          onMoveToTop={handleMoveToTop}
+          onReorderPlaylist={handleReorderPlaylist}
+          onVoteItem={handleVoteItem}
+          onShuffle={handleShufflePlaylist}
+          onClear={handleClearPlaylist}
+          onOpenSearch={() => {
+            setMobileDrawerTab(null);
+            setIsSearchModalOpen(true);
+          }}
+        />
+      </MobileDrawer>
+
+      <MobileDrawer
+        isOpen={mobileDrawerTab === 'viewers'}
+        onClose={() => setMobileDrawerTab(null)}
+        title={`Viewers (${participants.length})`}
+      >
+        <ParticipantList
+          participants={participants}
+          currentUserId={userId}
+          currentUserRole={userRole}
+          currentUserAvatarId={userSettings.avatarId}
+          readinessList={readinessList}
+          onAssignRole={handleAssignRole}
+          onRemoveParticipant={handleRemoveParticipant}
+          onToggleBlockCall={handleToggleBlockCall}
+          onToggleBlockChat={handleToggleBlockChat}
+          onToggleBlockScreenShare={handleToggleBlockScreenShare}
+        />
+      </MobileDrawer>
+
+      <MobileDrawer
+        isOpen={mobileDrawerTab === 'more'}
+        onClose={() => setMobileDrawerTab(null)}
+        title="Watch Party Hub & Tools"
+      >
+        <div className="mobile-hub-grid">
+          <button
+            type="button"
+            className="mobile-hub-btn"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              setIsInviteModalOpen(true);
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+              <Share2 size={24} />
+            </div>
+            <span className="mobile-hub-label">Invite Friends</span>
+            <span className="mobile-hub-subtext">Share link & QR code</span>
+          </button>
+
+          <button
+            type="button"
+            className="mobile-hub-btn"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              setIsSoundboardOpen(true);
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
+              <Volume2 size={24} />
+            </div>
+            <span className="mobile-hub-label">Soundboard FX</span>
+            <span className="mobile-hub-subtext">Applause, cheer, horns</span>
+          </button>
+
+          <button
+            type="button"
+            className="mobile-hub-btn"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              setIsSearchModalOpen(true);
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+              <Search size={24} />
+            </div>
+            <span className="mobile-hub-label">Search YouTube</span>
+            <span className="mobile-hub-subtext">Find & queue videos</span>
+          </button>
+
+          <button
+            type="button"
+            className="mobile-hub-btn"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              setIsSettingsOpen(true);
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
+              <SlidersHorizontal size={24} />
+            </div>
+            <span className="mobile-hub-label">Sound & Audio</span>
+            <span className="mobile-hub-subtext">Volume & chime toggles</span>
+          </button>
+
+          <button
+            type="button"
+            className="mobile-hub-btn"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              setIsFeatureControlsOpen(true);
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+              <Monitor size={24} />
+            </div>
+            <span className="mobile-hub-label">Feature Modules</span>
+            <span className="mobile-hub-subtext">Toggle party switches</span>
+          </button>
+
+          <button
+            type="button"
+            className="mobile-hub-btn danger"
+            onClick={() => {
+              setMobileDrawerTab(null);
+              onLeaveRoom();
+            }}
+          >
+            <div className="mobile-hub-icon-wrapper" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
+              <LogOut size={24} />
+            </div>
+            <span className="mobile-hub-label">Leave Room</span>
+            <span className="mobile-hub-subtext">Exit back to lobby</span>
+          </button>
+        </div>
+      </MobileDrawer>
     </div>
   );
 };

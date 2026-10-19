@@ -3,8 +3,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://synctube-2ar4.onrender.com/api/$1" },
-    { "source": "/socket.io/(.*)", "destination": "https://synctube-2ar4.onrender.com/socket.io/$1" },
+    { "source": "/api/(.*)", "destination": "https://synctube-qg7l.onrender.com/api/$1" },
+    { "source": "/socket.io/(.*)", "destination": "https://synctube-qg7l.onrender.com/socket.io/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
