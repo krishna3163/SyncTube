@@ -66,7 +66,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
         </div>
 
         <button
-          className="header-room-chip"
+          className={`header-room-chip ${copiedCode ? 'copied' : ''}`}
           onClick={handleCopyCode}
           title="Click to copy room code"
           aria-label={`Copy room code ${roomId}`}
@@ -74,7 +74,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <span className="room-chip-dot" />
           <span className="room-chip-label">Room</span>
           <strong className="room-chip-code">{roomId}</strong>
-          {copiedCode ? <Check size={13} className="text-emerald" /> : <Copy size={13} />}
+          {copiedCode ? <Check size={13} className="text-emerald animate-check-bounce" /> : <Copy size={13} />}
         </button>
       </div>
 

@@ -226,7 +226,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
       <div className="stream-info-top">
         <div className="stream-title-group">
           <div className="stream-live-tag-row">
-            <span className="live-status-pill">
+            <span className="live-status-pill magic-shimmer-badge">
               <span className="live-pulse-dot" />
               <span>LIVE</span>
             </span>
@@ -353,7 +353,7 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
             onClick={handleCopyLink}
             title="Copy stream link"
           >
-            {copiedLink ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+            {copiedLink ? <Check size={14} color="#10b981" className="animate-check-bounce" /> : <Copy size={14} />}
             <span>{copiedLink ? 'Copied!' : 'Copy Link'}</span>
           </button>
 

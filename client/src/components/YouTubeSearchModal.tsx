@@ -334,7 +334,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
 
   return (
     <div className={inline ? 'sidebar-youtube-search' : 'modal-backdrop'} onClick={inline ? undefined : onClose}>
-      <div className={inline ? 'sidebar-youtube-search-body' : 'glass-panel modal-card yt-search-modal-card'} onClick={(e) => e.stopPropagation()}>
+      <div className={inline ? 'sidebar-youtube-search-body' : 'glass-panel modal-card yt-search-modal-card motion-scale-in'} onClick={(e) => e.stopPropagation()}>
         {!inline && (
           <div className="modal-header yt-search-modal-header">
             <div className="yt-search-modal-title">
@@ -348,17 +348,32 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
         )}
         <div className={inline ? 'yt-search-modal-body sidebar-youtube-search-content' : 'modal-body yt-search-modal-body'}>
           <form onSubmit={handleSearchSubmit} className="yt-search-form">
-            <div className="yt-search-input-wrap">
-              <Search size={18} className="yt-search-icon" />
+            <div className="origin-search-bar">
+              <Search size={16} className="search-icon-left" />
               <input
                 ref={inputRef}
                 type="text"
-                className="input-field yt-search-input"
+                className="origin-search-input"
                 placeholder="Search songs, titles, or paste YouTube link..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              {isLoading && <Loader2 size={18} className="spin-icon yt-search-loader" />}
+              {isLoading && <Loader2 size={16} className="spin-icon" style={{ marginRight: '8px', color: 'var(--accent)' }} />}
+              {query && !isLoading && (
+                <button
+                  type="button"
+                  className="origin-clear-btn"
+                  onClick={() => {
+                    setQuery('');
+                    inputRef.current?.focus();
+                  }}
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+              <span className="origin-kbd-pill" title="Press Enter to search">↵ Enter</span>
             </div>
             <button type="submit" className="btn btn-primary yt-search-submit-btn" disabled={isLoading || !query.trim()}>
               Search

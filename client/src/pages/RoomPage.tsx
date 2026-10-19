@@ -1786,85 +1786,68 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                   })()
                 ) : (
                   (!isRoomLive && userRole !== 'HOST' && userRole !== 'MODERATOR') ? (
-                    <div className="video-empty-state cinema-waiting-state">
-                      <div className="cinema-waiting-badge">
-                        <span className="live-badge-dot live-dot-dvr" />
-                        <span>STREAM STARTING SOON</span>
+                    <div className="video-empty-state origin-cinema-stage">
+                      <div className="origin-stage-halo">
+                        <Radio size={28} />
                       </div>
-                      <div className="cinema-waiting-icon-wrap">
-                        <span className="cinema-waiting-emoji">🍿</span>
+                      <div className="cinema-waiting-indicator">
+                        <span className="cinema-live-dot" />
+                        <span>BROADCAST STANDBY</span>
                       </div>
-                      <h3 className="cinema-waiting-title">Waiting for the host to start</h3>
+                      <h3 className="origin-stage-title">Waiting for the Host</h3>
+                      <p className="origin-stage-subtitle">
+                        The room host will queue up media shortly. Sit tight or chat with other viewers!
+                      </p>
                     </div>
                   ) : (
-                    <div className="video-empty-state host-prep-state">
-                      <div className="video-empty-icon">
-                        <Film size={32} />
+                    <div className="video-empty-state origin-cinema-stage">
+                      <div className="origin-stage-halo">
+                        <Film size={28} />
                       </div>
-                      <span className="video-empty-title">
+                      <h3 className="origin-stage-title">
                         {userRole === 'HOST' || userRole === 'MODERATOR'
-                          ? "🎬 You're in the Director's Chair, Boss!"
-                          : "🍿 Popcorn Ready! Waiting for Host to Roll Film"}
-                      </span>
-                      {(userRole === 'HOST' || userRole === 'MODERATOR') ? (
-                        <div className="video-empty-actions-row">
+                          ? 'Theater Ready — Choose What to Watch'
+                          : 'Theater Stage Ready'}
+                      </h3>
+                      <p className="origin-stage-subtitle">
+                        {userRole === 'HOST' || userRole === 'MODERATOR'
+                          ? 'Search YouTube, share your device screen, or stream direct web media in real-time synchronization.'
+                          : 'Waiting for the host to select media. You can also share your screen or stream web media.'}
+                      </p>
+                      <div className="origin-stage-actions">
+                        {(userRole === 'HOST' || userRole === 'MODERATOR') && (
                           <button
                             type="button"
-                            className="btn btn-primary video-empty-action-btn"
+                            className="origin-primary-action-btn"
                             onClick={() => setIsSearchModalOpen(true)}
                           >
-                            <Search size={15} />
-                            <span>YouTube Search 🔍</span>
+                            <Search size={16} />
+                            <span>Search YouTube</span>
                           </button>
-                          {featureFlags.screenShare && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary video-empty-action-btn"
-                              onClick={handleStartScreenShare}
-                              title="Share your device screen or browser tab to the room"
-                            >
-                              <Monitor size={15} />
-                              <span>Share Screen 🖥️</span>
-                            </button>
-                          )}
-                          {featureFlags.browserHub && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary video-empty-action-btn"
-                              onClick={() => setIsBrowserHubOpen(true)}
-                              title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
-                            >
-                              <Film size={15} color="#38bdf8" />
-                              <span>Direct Stream & Web Media 🌐</span>
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="video-empty-actions-row">
-                          {featureFlags.screenShare && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary video-empty-action-btn"
-                              onClick={handleStartScreenShare}
-                              title="Share your device screen or browser tab to the room"
-                            >
-                              <Monitor size={15} />
-                              <span>Share Screen 🖥️</span>
-                            </button>
-                          )}
-                          {featureFlags.browserHub && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary video-empty-action-btn"
-                              onClick={() => setIsBrowserHubOpen(true)}
-                              title="Open Direct Stream & Web Media"
-                            >
-                              <Film size={15} color="#38bdf8" />
-                              <span>Direct Stream & Web Media 🌐</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
+                        )}
+                        {featureFlags.screenShare && (
+                          <button
+                            type="button"
+                            className="origin-secondary-action-btn"
+                            onClick={handleStartScreenShare}
+                            title="Share your device screen or browser tab to the room"
+                          >
+                            <Monitor size={16} />
+                            <span>Share Screen</span>
+                          </button>
+                        )}
+                        {featureFlags.browserHub && (
+                          <button
+                            type="button"
+                            className="origin-secondary-action-btn"
+                            onClick={() => setIsBrowserHubOpen(true)}
+                            title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
+                          >
+                            <Globe size={16} />
+                            <span>Direct Stream & Web Media</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 )}
@@ -1877,7 +1860,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                     <RefreshCw size={13} className="spin-icon" />
                     <span>Re-syncing stream…</span>
                     <button type="button" className="btn btn-xs banner-retry-btn" onClick={handleResync}>
-                      Resync ⚡
+                      Resync
                     </button>
                   </div>
                 )}

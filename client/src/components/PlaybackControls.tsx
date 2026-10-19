@@ -126,10 +126,27 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
   const [showQualityOptions, setShowQualityOptions] = useState(false);
   const [showLatencyOptions, setShowLatencyOptions] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverPercent, setHoverPercent] = useState<number>(0);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const isHost = userRole === 'HOST' || userRole === 'MODERATOR';
   const canControl = isHost;
   const effectiveIsLive = Boolean(isLive || (playState === 'playing'));
+
+  const handleTimelineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!timelineRef.current || duration <= 0) return;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = rect.width > 0 ? (x / rect.width) * 100 : 0;
+    const time = (percent / 100) * duration;
+    setHoverPercent(percent);
+    setHoverTime(time);
+  };
+
+  const handleTimelineMouseLeave = () => {
+    setHoverTime(null);
+  };
 
   const handleLiveEdgeClick = () => {
     if (effectiveIsLive) {
@@ -219,26 +236,42 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 
   return (
     <div className={containerClass}>
-      {/* Timeline Slider with glowing progress */}
+      {/* Timeline Slider with glowing progress & precision hover preview */}
       <div className="timeline-container">
         <span className="time-text current">{formatTime(currentTime)}</span>
-        <input
-          type="range"
-          min={0}
-          max={duration > 0 ? duration : 100}
-          step={0.5}
-          value={currentTime}
-          disabled={!hasVideo}
-          onChange={handleSliderChange}
-          className="timeline-slider"
-          aria-label="Video timeline seek"
-          aria-valuemin={0}
-          aria-valuemax={duration > 0 ? duration : 100}
-          aria-valuenow={currentTime}
-          aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
-          style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
-          title={!hasVideo ? 'No video selected' : canControl ? 'Seek to position' : 'Click to request seek position'}
-        />
+        <div
+          className="timeline-slider-wrapper"
+          ref={timelineRef}
+          onMouseMove={handleTimelineMouseMove}
+          onMouseLeave={handleTimelineMouseLeave}
+        >
+          {hoverTime !== null && hasVideo && (
+            <div
+              className="timeline-hover-pill"
+              style={{ left: `${hoverPercent}%` }}
+              aria-hidden="true"
+            >
+              {formatTime(hoverTime)}
+            </div>
+          )}
+          <input
+            type="range"
+            min={0}
+            max={duration > 0 ? duration : 100}
+            step={0.5}
+            value={currentTime}
+            disabled={!hasVideo}
+            onChange={handleSliderChange}
+            className="timeline-slider"
+            aria-label="Video timeline seek"
+            aria-valuemin={0}
+            aria-valuemax={duration > 0 ? duration : 100}
+            aria-valuenow={currentTime}
+            aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
+            style={{ '--progress': `${progressPercent}%` } as React.CSSProperties}
+            title={!hasVideo ? 'No video selected' : canControl ? 'Seek to position' : 'Click to request seek position'}
+          />
+        </div>
         <span className="time-text total">{formatTime(duration)}</span>
       </div>
       {playbackSpeed !== 1 && (

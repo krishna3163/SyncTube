@@ -15318,3 +15318,439 @@ body.is-dragging-reaction iframe {
   transform: translateY(-1px);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   CINEMATIC DESIGN SYSTEM UPGRADE (5-REPO INTEGRATION)
+   shadcn/ui • Magic UI • Motion Primitives • Origin UI • ImageKit
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. ImageKit Video Player Seekbar & Timeline Overlay ───── */
+.timeline-slider-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.timeline-hover-pill {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 10px rgba(255, 210, 31, 0.15);
+  z-index: 40;
+  animation: motionScaleIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.timeline-hover-pill::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(15, 23, 42, 0.96) transparent transparent transparent;
+}
+
+/* ── 2. Magic UI: Border Beam & Cinematic Lighting ─────────── */
+@keyframes borderBeam {
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
+}
+
+.magic-border-beam {
+  position: relative;
+  overflow: hidden;
+}
+
+.magic-border-beam::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 210, 31, 0.6) 50%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+@keyframes shimmerSlide {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.magic-shimmer-badge {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 210, 31, 0.18) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerSlide 4s infinite linear;
+}
+
+/* ── 3. Motion Primitives: Polished Transitions & Accessibility ─ */
+@keyframes motionScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes motionSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkBounce {
+  0% {
+    transform: scale(0.7);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.modal-card,
+.motion-scale-in {
+  animation: motionScaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.sidebar-tab-content > *,
+.motion-tab-pane {
+  animation: motionSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-check-bounce {
+  animation: checkBounce 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Micro-press on all interactive items */
+.btn:active,
+.btn-icon:active,
+.header-btn:active,
+.sidebar-tab-btn:active,
+.header-room-chip:active {
+  transform: scale(0.97) !important;
+  transition: transform 0.06s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .magic-shimmer-badge,
+  .magic-border-beam::after {
+    animation: none !important;
+  }
+}
+
+/* ── 4. Origin UI: Elevated Empty State & Director Stage ───── */
+.video-empty-state.origin-cinema-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  background: radial-gradient(
+    circle at 50% 40%,
+    rgba(255, 210, 31, 0.05) 0%,
+    rgba(14, 18, 27, 0.7) 45%,
+    #090b0e 100%
+  );
+  text-align: center;
+  z-index: 10;
+}
+
+.origin-stage-halo {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 210, 31, 0.08);
+  border: 1px solid rgba(255, 210, 31, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+  box-shadow: 0 0 32px rgba(255, 210, 31, 0.18), inset 0 0 16px rgba(255, 210, 31, 0.1);
+  transition: all 0.25s ease;
+}
+
+.origin-stage-halo:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 40px rgba(255, 210, 31, 0.28);
+}
+
+.origin-stage-title {
+  color: #f8fafc;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.45rem 0;
+  line-height: 1.2;
+}
+
+.origin-stage-desc,
+.origin-stage-subtitle {
+  color: #94a3b8;
+  font-size: 0.88rem;
+  max-width: 440px;
+  line-height: 1.5;
+  margin: 0 0 1.5rem 0;
+}
+
+.origin-stage-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  max-width: 600px;
+}
+
+.origin-primary-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--accent) !important;
+  color: #090b0e !important;
+  font-weight: 700 !important;
+  font-size: 0.9rem !important;
+  padding: 0.62rem 1.4rem !important;
+  border-radius: 10px !important;
+  border: none !important;
+  box-shadow: 0 4px 18px rgba(255, 210, 31, 0.35) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  cursor: pointer;
+}
+
+.origin-primary-action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(255, 210, 31, 0.45) !important;
+  filter: brightness(1.06);
+}
+
+.origin-secondary-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  padding: 0.62rem 1.15rem !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  cursor: pointer;
+}
+
+.origin-secondary-action-btn:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  transform: translateY(-1px);
+}
+
+/* ── 5. Origin UI: Enhanced Search Input & Filter Group ─────── */
+.origin-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.origin-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #64748b;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.origin-search-input {
+  width: 100%;
+  padding: 0.65rem 4.5rem 0.65rem 2.4rem !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 10px !important;
+  color: #f8fafc !important;
+  font-size: 0.9rem !important;
+  transition: all 0.18s ease;
+}
+
+.origin-search-input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(255, 210, 31, 0.25) !important;
+  background: rgba(15, 23, 42, 0.85) !important;
+}
+
+.origin-search-tools {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.origin-kbd-pill {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.origin-clear-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.origin-clear-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ── 6. Top Bar Alignment & Responsive Hierarchy ───────────── */
+.app-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(9, 11, 14, 0.94) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  height: 58px;
+  padding: 0 1.25rem !important;
+}
+
+.header-room-chip {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 9999px !important;
+  padding: 0.28rem 0.75rem !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.header-room-chip:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 210, 31, 0.4) !important;
+  box-shadow: 0 0 14px rgba(255, 210, 31, 0.18) !important;
+}
+
+.header-invite-btn {
+  height: 34px !important;
+  padding: 0 0.9rem !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+}
+
+.header-btn {
+  height: 34px !important;
+  padding: 0 0.85rem !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  color: #f1f5f9 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  transition: all 0.15s ease !important;
+}
+
+.header-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.header-tools-group {
+  height: 34px;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  padding: 2px !important;
+  gap: 2px !important;
+}
+
+.header-tool-btn {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  color: #94a3b8 !important;
+  transition: all 0.14s ease !important;
+}
+
+.header-tool-btn:hover {
+  color: #f8fafc !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.header-tool-btn.active {
+  color: var(--accent) !important;
+  background: rgba(255, 210, 31, 0.12) !important;
+}
+
+
