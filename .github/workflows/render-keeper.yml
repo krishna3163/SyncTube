@@ -34,6 +34,7 @@ jobs:
           RENDER_API_KEYS: ${{ secrets.RENDER_API_KEYS || secrets.RENDER_API_KEY }}
           RENDER_API_KEY_1: ${{ secrets.RENDER_API_KEY_1 }}
           RENDER_API_KEY_2: ${{ secrets.RENDER_API_KEY_2 }}
+          RENDER_API_KEY_3: ${{ secrets.RENDER_API_KEY_3 }}
           BACKEND_URL: ${{ vars.BACKEND_URL || 'https://synctube-qg7l.onrender.com' }}
           FORCE_RECOVERY: ${{ inputs.force_recovery }}
         run: node scripts/render-keeper.mjs
