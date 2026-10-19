@@ -171,4 +171,20 @@ Users have two immediate ways to toggle features like buttons:
   - `npm run build:client` builds Vite production bundle cleanly (0 errors).
   - Socket.IO synchronization, WebRTC calls, YouTube API, and DASH playback untouched and 100% preserved.
 
+### Entry 3: 2026-10-19 — Render Production Build & Playwright Dependency Fix
+- **Author**: Antigravity Assistant (Pair programmer with Krishna)
+- **Objective**:
+  1. Fix Render deployment build failure (`TS2307: Cannot find module 'playwright'`).
+  2. Add `playwright` directly to `server/package.json` dependencies so production installs include it under `NODE_ENV=production`.
+  3. Streamline root `build:server` to avoid redundant duplicate `npx playwright install chromium` executions.
+  4. Configure Render service `srv-dbb4t0mq1p3s73evcakg` build command to `npm install --include=dev && npm run build:server` and set `healthCheckPath: /health`.
+- **Files Touched**:
+  - `server/package.json`: Added `playwright: ^1.63.0` to `dependencies`.
+  - `package.json`: Streamlined `build:server` script.
+  - `package-lock.json`: Synchronized dependency tree.
+  - `PROJECT_MEMORY.md`: Logged Entry 3 ledger update.
+- **Status & Verification**:
+  - `npm run typecheck` passes with zero errors across server, client, and extension.
+  - Render web service configuration successfully updated via Render API.
+
 *(Future AI assistants: Append your changes above this line, keeping exact dates and files touched).*

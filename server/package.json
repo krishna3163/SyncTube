@@ -25,6 +25,7 @@
     "express-rate-limit": "^7.5.1",
     "mediasoup": "^3.29.0",
     "pg": "^8.13.3",
+    "playwright": "^1.63.0",
     "socket.io": "^4.8.1",
     "typescript": "^5.7.3",
     "zod": "^3.24.2"

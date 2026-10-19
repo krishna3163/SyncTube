@@ -57,7 +57,7 @@ describe('Temporary Browser REST API and Lifecycle', () => {
     const res = await request(app)
       .post(`/api/sessions/${createdSessionId}/navigate`)
       .set('Authorization', `Bearer ${createdToken}`)
-      .send({ url: 'https://duckduckgo.com' });
+      .send({ url: 'https://example.org' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

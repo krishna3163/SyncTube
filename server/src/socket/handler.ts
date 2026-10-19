@@ -513,6 +513,40 @@ export function setupSocketHandlers(
         const removed = room.kickParticipant(userId);
 
         if (removed) {
+          // Tear down any active call and SFU resources for kicked participant
+          const roomCalls = activeRoomCalls.get(room.id);
+          if (roomCalls && roomCalls.has(targetSocketId)) {
+            roomCalls.delete(targetSocketId);
+            const decision = callTopologyPolicyManager.evaluateOnLeave(room.id, targetSocketId);
+            mediasoupManager.handleParticipantLeave(room.id, targetSocketId);
+            if (decision.activeCallerCount <= 1) {
+              mediasoupManager.disposeCallRouter(room.id);
+            }
+            io.to(room.id).emit('call:user_left', { socketId: targetSocketId });
+            io.to(room.id).emit('call:participants_updated', {
+              count: roomCalls.size,
+              participants: Array.from(roomCalls.values()),
+            });
+            if (decision.shouldTransition) {
+              io.to(room.id).emit('call:topology_transition', {
+                previousMode: decision.previousMode,
+                mode: decision.targetMode,
+                version: decision.version,
+                activeCallers: decision.callers,
+              });
+            }
+          }
+
+          // If target was sharing screen, clean up screen share
+          const roomShare = activeRoomScreenShares.get(room.id);
+          if (roomShare && roomShare.socketId === targetSocketId) {
+            activeRoomScreenShares.delete(room.id);
+            io.to(room.id).emit('room:tab_stream_stopped', {
+              streamerSocketId: targetSocketId,
+              streamerId: userId,
+            });
+          }
+
           // Notify target socket directly and remove from room
           const targetSocket = io.sockets.sockets.get(targetSocketId);
           if (targetSocket) {
@@ -1951,12 +1985,24 @@ export function setupSocketHandlers(
           const roomCalls = activeRoomCalls.get(room.id);
           if (roomCalls && roomCalls.has(targetPart.socketId)) {
             roomCalls.delete(targetPart.socketId);
-            callTopologyPolicyManager.evaluateOnLeave(room.id, targetPart.socketId);
+            const decision = callTopologyPolicyManager.evaluateOnLeave(room.id, targetPart.socketId);
+            mediasoupManager.handleParticipantLeave(room.id, targetPart.socketId);
+            if (decision.activeCallerCount <= 1) {
+              mediasoupManager.disposeCallRouter(room.id);
+            }
             io.to(room.id).emit('call:user_left', { socketId: targetPart.socketId });
             io.to(room.id).emit('call:participants_updated', {
               count: roomCalls.size,
               callers: Array.from(roomCalls.values()),
             });
+            if (decision.shouldTransition) {
+              io.to(room.id).emit('call:topology_transition', {
+                previousMode: decision.previousMode,
+                mode: decision.targetMode,
+                version: decision.version,
+                activeCallers: decision.callers,
+              });
+            }
           }
         }
 
@@ -2110,8 +2156,12 @@ export function setupSocketHandlers(
     // ==========================================
     socket.on('sfu:get_router_capabilities', async (_payload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
 
         if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
           return callback?.({ success: false, error: 'Caller not in active room call.' });
@@ -2126,8 +2176,12 @@ export function setupSocketHandlers(
 
     socket.on('sfu:create_transport', async (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
 
         if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
           return callback?.({ success: false, error: 'Caller not in active room call.' });
@@ -2147,8 +2201,16 @@ export function setupSocketHandlers(
 
     socket.on('sfu:connect_transport', async (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuConnectTransportSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2166,6 +2228,14 @@ export function setupSocketHandlers(
       try {
         const { room, participant } = getContext();
         if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuProduceSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2198,8 +2268,16 @@ export function setupSocketHandlers(
 
     socket.on('sfu:consume', async (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuConsumeSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2222,8 +2300,16 @@ export function setupSocketHandlers(
 
     socket.on('sfu:consumer_resume', async (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (room.isBlockedFromCall(participant.userId)) {
+          return callback?.({ success: false, error: 'You are blocked from voice & video calls in this room.' });
+        }
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuConsumerResumeSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2239,8 +2325,12 @@ export function setupSocketHandlers(
 
     socket.on('sfu:consumer_preferred_layers', async (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuPreferredLayersSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2262,8 +2352,12 @@ export function setupSocketHandlers(
 
     socket.on('sfu:close_producer', (rawPayload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const parsed = SfuCloseProducerSchema.safeParse(rawPayload);
         if (!parsed.success) {
@@ -2284,8 +2378,12 @@ export function setupSocketHandlers(
 
     socket.on('sfu:get_active_producers', (_payload: unknown, callback?: (res: any) => void) => {
       try {
-        const { room } = getContext();
-        if (!room) return callback?.({ success: false, error: 'Room not found.' });
+        const { room, participant } = getContext();
+        if (!room || !participant) return callback?.({ success: false, error: 'Not authenticated in room.' });
+
+        if (!callTopologyPolicyManager.isCallerInRoom(room.id, socket.id)) {
+          return callback?.({ success: false, error: 'Caller not in active room call.' });
+        }
 
         const producers = mediasoupManager.getActiveProducers(room.id, socket.id);
         callback?.({ success: true, producers });

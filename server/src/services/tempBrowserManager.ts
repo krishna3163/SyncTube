@@ -502,9 +502,15 @@ export class TempBrowserManager {
       session.currentTitle = (await session.page.title()) || session.currentUrl;
       session.isLoading = false;
     } catch (err: any) {
-      session.isLoading = false;
-      session.currentTitle = 'Failed to load page';
-      throw new Error(`Navigation failed: ${err?.message || String(err)}`);
+      if (err?.message?.includes('net::ERR_ABORTED') && session.page) {
+        session.currentUrl = session.page.url();
+        session.currentTitle = (await session.page.title().catch(() => '')) || session.currentUrl;
+        session.isLoading = false;
+      } else {
+        session.isLoading = false;
+        session.currentTitle = 'Failed to load page';
+        throw new Error(`Navigation failed: ${err?.message || String(err)}`);
+      }
     } finally {
       session.emitter.emit('navigation', {
         url: session.currentUrl,

@@ -50,7 +50,7 @@ export interface DriftAssessment {
 
 export const DRIFT_CONFIG = {
   MIN_DRIFT_THRESHOLD_MS: 250,
-  HARD_RESYNC_THRESHOLD_MS: 15000,
+  HARD_RESYNC_THRESHOLD_MS: 2000,
   SOFT_ACCELERATE_RATE: 1.06,
   SOFT_DECELERATE_RATE: 0.94,
 };
@@ -206,12 +206,12 @@ export class UniversalSyncSession {
       };
     }
 
-    // Between 250ms and 15000ms: Smooth rate adjust without jumping forward/backward
+    // Between 250ms and 2000ms: Smooth rate adjust without jumping forward/backward
     let targetRate = 1.0;
     if (driftMs < 0) {
-      targetRate = absDriftMs > 5000 ? 1.12 : DRIFT_CONFIG.SOFT_ACCELERATE_RATE;
+      targetRate = DRIFT_CONFIG.SOFT_ACCELERATE_RATE;
     } else {
-      targetRate = absDriftMs > 5000 ? 0.88 : DRIFT_CONFIG.SOFT_DECELERATE_RATE;
+      targetRate = DRIFT_CONFIG.SOFT_DECELERATE_RATE;
     }
 
     return {

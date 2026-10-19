@@ -9,6 +9,16 @@ function getAdapter() {
 
 let currentAdapter = getAdapter();
 let unsubscribeFromEvents: (() => void) | null = null;
+let isExecutingRemoteCommand = false;
+let remoteCommandTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function setExecutingRemoteCommand(durationMs = 250) {
+  isExecutingRemoteCommand = true;
+  if (remoteCommandTimeout) clearTimeout(remoteCommandTimeout);
+  remoteCommandTimeout = setTimeout(() => {
+    isExecutingRemoteCommand = false;
+  }, durationMs);
+}
 
 function setupActiveAdapter() {
   if (unsubscribeFromEvents) {
@@ -22,6 +32,11 @@ function setupActiveAdapter() {
   console.log(`[SyncTube] Activated ${currentAdapter.platformId} adapter on ${window.location.href}`);
 
   unsubscribeFromEvents = currentAdapter.subscribeToEvents((event: PlaybackEvent) => {
+    // Drop programmatic events to prevent feedback echo loops (Watch Party Sync pattern)
+    if (isExecutingRemoteCommand) {
+      return;
+    }
+
     // Send event to extension background / runtime
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
@@ -94,16 +109,19 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
             break;
           }
           case 'PLAY': {
+            setExecutingRemoteCommand();
             await adapter.play();
             sendResponse({ success: true });
             break;
           }
           case 'PAUSE': {
+            setExecutingRemoteCommand();
             await adapter.pause();
             sendResponse({ success: true });
             break;
           }
           case 'SEEK': {
+            setExecutingRemoteCommand();
             if (typeof message.time === 'number') {
               await adapter.seek(message.time);
             }
@@ -111,6 +129,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
             break;
           }
           case 'SET_RATE': {
+            setExecutingRemoteCommand();
             if (typeof message.rate === 'number') {
               await adapter.setPlaybackRate(message.rate);
             }

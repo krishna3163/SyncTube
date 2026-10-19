@@ -36,38 +36,59 @@ async function startWorker() {
   // Raise max listeners to avoid warnings under high fan-out (rooms × participants)
   server.setMaxListeners(0);
 
-  // Optional Redis adapter for Socket.IO horizontal scaling (10k+)
-  // When REDIS_URL is set (e.g. redis://localhost:6379) every worker will publish
-  // room broadcasts through Redis so a client on worker A receives events emitted on worker B.
-  // Without Redis each worker is isolated — still useful for HTTP scaling but WS rooms won't sync.
-  // Install with: npm i ioredis @socket.io/redis-adapter   then set REDIS_URL
+  // Optional Redis Streams / Pub-Sub adapter for Socket.IO horizontal scaling (10k+)
+  // When REDIS_URL is set (e.g. redis://localhost:6379), workers publish room broadcasts
+  // through Redis Streams or Pub-Sub so clients across instances remain synchronized.
+  // Prioritizes @socket.io/redis-streams-adapter for message durability and connection-state recovery.
   let redisAdapterApplied = false;
   const redisUrl = process.env.REDIS_URL || process.env.REDIS_TLS_URL;
   if (redisUrl) {
     try {
-      // Optional peers — only needed when REDIS_URL is set for 10k horizontal scaling
+      // Optional peers — only needed when REDIS_URL is set for horizontal scaling
       // @ts-ignore - ioredis is an optional peer, not required for single-instance dev
       const ioredisMod: any = await import('ioredis').catch(() => null);
-      // @ts-ignore - @socket.io/redis-adapter is an optional peer
-      const redisAdapterMod: any = await import('@socket.io/redis-adapter').catch(() => null);
-      if (ioredisMod && redisAdapterMod) {
+      // @ts-ignore - prioritize official Redis Streams adapter (Repository E)
+      const redisStreamsMod: any = await import('@socket.io/redis-streams-adapter').catch(() => null);
+      // @ts-ignore - fallback to classic pub-sub adapter if streams adapter not installed
+      const redisAdapterMod: any = !redisStreamsMod ? await import('@socket.io/redis-adapter').catch(() => null) : null;
+
+      if (ioredisMod && (redisStreamsMod || redisAdapterMod)) {
         const Redis = ioredisMod.default || ioredisMod.Redis || ioredisMod;
         const pubClient = new Redis(redisUrl, {
           maxRetriesPerRequest: 3,
           enableReadyCheck: true,
           lazyConnect: false,
         });
-        const subClient = pubClient.duplicate();
-        // Wait briefly for clients to be ready; don't block boot forever
-        await Promise.race([
-          Promise.all([pubClient.ping().catch(() => {}), subClient.ping().catch(() => {})]),
-          new Promise((r) => setTimeout(r, 2000)),
-        ]);
-        // adapter will be attached after io creation
-        (global as any).__synctubeRedisClients = { pubClient, subClient, adapter: redisAdapterMod.createAdapter || redisAdapterMod };
-        console.log('[Server] Redis URL detected — Socket.IO Redis adapter will be enabled.');
-      } else {
-        console.warn('[Server] REDIS_URL is set but ioredis / @socket.io/redis-adapter not installed. Run: npm i ioredis @socket.io/redis-adapter');
+
+        if (redisStreamsMod) {
+          await Promise.race([
+            pubClient.ping().catch(() => {}),
+            new Promise((r) => setTimeout(r, 2000)),
+          ]);
+          const streamName = process.env.REDIS_STREAM_KEY || 'synctube:events';
+          (global as any).__synctubeRedisClients = {
+            redisClient: pubClient,
+            adapter: redisStreamsMod.createAdapter || redisStreamsMod,
+            type: 'streams',
+            streamName,
+          };
+          console.log('[Server] Redis URL detected — Socket.IO Redis Streams adapter selected.');
+        } else {
+          const subClient = pubClient.duplicate();
+          await Promise.race([
+            Promise.all([pubClient.ping().catch(() => {}), subClient.ping().catch(() => {})]),
+            new Promise((r) => setTimeout(r, 2000)),
+          ]);
+          (global as any).__synctubeRedisClients = {
+            pubClient,
+            subClient,
+            adapter: redisAdapterMod.createAdapter || redisAdapterMod,
+            type: 'pubsub',
+          };
+          console.log('[Server] Redis URL detected — Socket.IO classic Redis adapter selected.');
+        }
+      } else if (redisUrl) {
+        console.warn('[Server] REDIS_URL is set but ioredis or adapter not installed. For streams: npm i ioredis @socket.io/redis-streams-adapter');
       }
     } catch (e) {
       console.warn('[Server] Redis adapter setup failed, falling back to in-memory adapter:', (e as Error).message);
@@ -94,12 +115,18 @@ async function startWorker() {
 
   // Apply Redis adapter if clients were created
   const redisCtx: any = (global as any).__synctubeRedisClients;
-  if (redisCtx?.pubClient && redisCtx?.subClient && redisCtx?.adapter) {
+  if (redisCtx) {
     try {
       const createAdapter = redisCtx.adapter.createAdapter || redisCtx.adapter;
-      io.adapter(createAdapter(redisCtx.pubClient, redisCtx.subClient));
-      redisAdapterApplied = true;
-      console.log('[Server] Socket.IO Redis adapter active — horizontal scaling enabled.');
+      if (redisCtx.type === 'streams' && redisCtx.redisClient) {
+        io.adapter(createAdapter(redisCtx.redisClient, { streamName: redisCtx.streamName }));
+        redisAdapterApplied = true;
+        console.log('[Server] Socket.IO Redis Streams adapter active — horizontal scaling & stream buffering enabled.');
+      } else if (redisCtx.pubClient && redisCtx.subClient) {
+        io.adapter(createAdapter(redisCtx.pubClient, redisCtx.subClient));
+        redisAdapterApplied = true;
+        console.log('[Server] Socket.IO classic Redis adapter active — horizontal scaling enabled.');
+      }
     } catch (e) {
       console.warn('[Server] Could not attach Redis adapter:', (e as Error).message);
     }
