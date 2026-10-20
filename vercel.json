@@ -4,16 +4,16 @@
   "outputDirectory": "client/dist",
   "build": {
     "env": {
-      "VITE_API_URL": "https://synctube-qg7l.onrender.com",
-      "VITE_SOCKET_URL": "https://synctube-qg7l.onrender.com"
+      "VITE_API_URL": "https://synctube-vslw.onrender.com",
+      "VITE_SOCKET_URL": "https://synctube-vslw.onrender.com"
     }
   },
   "env": {
-    "VITE_API_URL": "https://synctube-qg7l.onrender.com",
-    "VITE_SOCKET_URL": "https://synctube-qg7l.onrender.com"
+    "VITE_API_URL": "https://synctube-vslw.onrender.com",
+    "VITE_SOCKET_URL": "https://synctube-vslw.onrender.com"
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://synctube-qg7l.onrender.com/api/$1" },
+    { "source": "/api/(.*)", "destination": "https://synctube-vslw.onrender.com/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

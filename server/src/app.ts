@@ -1115,9 +1115,18 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
   }
 
   // 4-argument Express error handling middleware (Semgrep / Sentry / CodeQL standard)
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     serverSentry.captureException(err);
     const status = typeof err.status === 'number' ? err.status : 500;
+    const origin = req.headers.origin;
+    if (origin) {
+      isAllowedOrigin(origin, (corsErr, allowed) => {
+        if (!corsErr && allowed) {
+          res.setHeader('Access-Control-Allow-Origin', origin);
+          res.setHeader('Access-Control-Allow-Credentials', 'true');
+        }
+      });
+    }
     res.status(status).json({
       error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message || 'Internal server error',
     });

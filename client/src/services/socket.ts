@@ -4,6 +4,20 @@ import { Role } from '../types.js';
 const getSocketUrl = (): string => {
   const envUrl = import.meta.env.VITE_SOCKET_URL;
   if (typeof window !== 'undefined') {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryBackend = urlParams.get('backend') || urlParams.get('server');
+      if (queryBackend) {
+        return queryBackend.replace(/\/+$/, '');
+      }
+      const storedBackend = localStorage.getItem('synctube_custom_backend');
+      if (storedBackend) {
+        return storedBackend.replace(/\/+$/, '');
+      }
+    } catch {
+      // ignore storage/url errors
+    }
+
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
 
@@ -12,7 +26,7 @@ const getSocketUrl = (): string => {
       if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
         return envUrl;
       }
-      return 'https://synctube-qg7l.onrender.com';
+      return 'https://synctube-vslw.onrender.com';
     }
 
     // In Vite dev, or when running directly on the backend domain (e.g. Render), connect same-origin
@@ -22,9 +36,9 @@ const getSocketUrl = (): string => {
     if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       return envUrl;
     }
-    return 'https://synctube-qg7l.onrender.com';
+    return 'https://synctube-vslw.onrender.com';
   }
-  return envUrl || 'https://synctube-qg7l.onrender.com';
+  return envUrl || 'https://synctube-vslw.onrender.com';
 };
 
 

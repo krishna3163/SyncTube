@@ -2,6 +2,7 @@ export type OriginCallback = (error: Error | null, allow?: boolean) => void;
 
 // Production trusted domains for SyncTube
 const DEFAULT_TRUSTED_ORIGINS = new Set([
+  'https://synctube-vslw.onrender.com',
   'https://synctube-qg7l.onrender.com',
   'https://synctube-2ar4.onrender.com',
   'https://sync-tube-sage.vercel.app',

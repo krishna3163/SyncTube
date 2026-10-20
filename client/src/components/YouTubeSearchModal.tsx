@@ -184,7 +184,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
         playlistEndpoints.push(`/api/youtube/playlist?url=${encodeURIComponent(q)}`);
       }
       if (!isLocal) {
-        playlistEndpoints.push(`https://synctube-qg7l.onrender.com/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+        playlistEndpoints.push(`https://synctube-vslw.onrender.com/api/youtube/playlist?url=${encodeURIComponent(q)}`);
       }
 
       for (const pUrl of playlistEndpoints) {
@@ -237,13 +237,13 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
     if (!isLocal) {
       const alreadyHasFallback = endpointsToTry.some((endpoint) => {
         try {
-          return new URL(endpoint, window.location.origin).hostname === 'synctube-qg7l.onrender.com';
+          return new URL(endpoint, window.location.origin).hostname === 'synctube-vslw.onrender.com';
         } catch {
           return false;
         }
       });
       if (!alreadyHasFallback) {
-        endpointsToTry.push(`https://synctube-qg7l.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
+        endpointsToTry.push(`https://synctube-vslw.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
       }
     }
 

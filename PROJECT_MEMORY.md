@@ -348,5 +348,34 @@ Users have two immediate ways to toggle features like buttons:
   - `npm run build`: Production server & client builds succeed cleanly (0 errors).
   - Automated Playwright browser verification (`verify_6repo_ui.cjs`): Verified spotlight cards, input clear buttons, room creation, video playback, HUD ripple, settings modal tabs with rotating border beam, and mobile bottom navigation dock at 390px.
 
+### Entry 10: 2026-10-20 — Resolve CORS 503/429 Console Spam, Server Suspend Resilience, and Custom Backend Support
+- **Author**: Antigravity Assistant (Pair programmer with Krishna)
+- **Objective**:
+  1. Diagnose and fix the root causes behind browser console errors:
+     - `Access to fetch at 'https://synctube-qg7l.onrender.com/api/stats' from origin 'https://sync-tube-tqda.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.`
+     - `GET https://synctube-qg7l.onrender.com/api/stats net::ERR_FAILED 503 (Service Unavailable)`
+     - `GET https://synctube-qg7l.onrender.com/api/stats net::ERR_FAILED 429 (Too Many Requests)`
+  2. Root Cause Identification:
+     - Render free-tier web service `synctube-qg7l.onrender.com` was marked suspended by Render (`x-render-routing: suspend`), serving a static Cloudflare 503 HTML error page without CORS headers.
+     - `HomePage.tsx` had a persistent 6-second `setInterval` polling loop hitting `/api/stats` without backoff or error handling, resulting in 429 rate limit triggers and flooding the console.
+     - Third-party browser extension (`screenshot-gv-chrome`) logged unrelated warnings attempting to reach `invalid/`.
+  3. Improvements Implemented:
+     - In `client/src/pages/HomePage.tsx`: Added adaptive exponential backoff (6s -> 15s -> 30s -> 60s) with 4s `AbortController` timeout for live stats polling. Added human-friendly status error messaging on room creation when backend is suspended or waking up.
+     - In `client/src/utils/api.ts` & `client/src/services/socket.ts`: Added dynamic backend override via `?backend=` / `?server=` query params and `localStorage.getItem('synctube_custom_backend')` to allow instant switching between deployed/local backend instances.
+     - In `server/src/app.ts`: Attached `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` in the Express global error handler for trusted origins to prevent standard 4xx/5xx errors from masking as CORS blocks in browsers.
+     - In `server/src/services/tempBrowserManager.ts`: Awaited initial page navigation in `createSession` to eliminate race conditions between Playwright sessions and subsequent `navigate` calls.
+- **Files Touched**:
+  - `client/src/pages/HomePage.tsx`: Implemented adaptive backoff and user-friendly error alerts.
+  - `client/src/utils/api.ts`: Added runtime backend query/localStorage overrides.
+  - `client/src/services/socket.ts`: Added runtime socket URL override.
+  - `server/src/app.ts`: Attached CORS headers on error responses.
+  - `server/src/services/tempBrowserManager.ts`: Synchronized initial navigation.
+  - `server/src/__tests__/ssrfValidator.test.ts`: Added test timeout cushion for DNS checks.
+  - `PROJECT_MEMORY.md`: Logged Entry 10 ledger update.
+- **Status & Verification**:
+  - `npm run typecheck`: Passed cleanly with 0 errors across server, client, and extension.
+  - `npm run test:client`: 9/9 test suites passed (38/38 tests passing).
+  - `npm run build`: Production builds for both server and client succeeded cleanly (exit code 0).
+
 *(Future AI assistants: Append your changes above this line, keeping exact dates and files touched).*
 

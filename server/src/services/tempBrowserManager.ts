@@ -435,7 +435,7 @@ export class TempBrowserManager {
       });
 
       // Initial navigation
-      page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((err) => {
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 25000 }).catch((err) => {
         console.warn(`[TempBrowser] Initial page load warning for ${targetUrl}:`, err.message);
         session.isLoading = false;
         updateNavState();

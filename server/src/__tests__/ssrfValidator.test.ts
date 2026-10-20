@@ -14,7 +14,7 @@ describe('SSRF and Security URL Validator', () => {
     const res3 = await validateSafeUrl('https://en.wikipedia.org/wiki/Main_Page');
     expect(res3.safe).toBe(true);
     expect(res3.normalizedUrl).toBe('https://en.wikipedia.org/wiki/Main_Page');
-  });
+  }, 15000);
 
   it('rejects dangerous and non-http protocols', async () => {
     const res1 = await validateSafeUrl('file:///etc/passwd');

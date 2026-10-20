@@ -13,6 +13,7 @@ import {
   Clock,
   Trash2,
   Copy,
+  Check,
   RotateCcw,
   X,
   ChevronDown,
@@ -110,6 +111,14 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
+  const [copiedExtensionUrl, setCopiedExtensionUrl] = useState(false);
+
+  const handleCopyExtensionUrl = () => {
+    navigator.clipboard.writeText('chrome://extensions');
+    setCopiedExtensionUrl(true);
+    onNotify('Copied chrome://extensions to clipboard!', 'info');
+    setTimeout(() => setCopiedExtensionUrl(false), 2000);
+  };
 
   // Real active users & rooms directly from server
   const [liveUsersCount, setLiveUsersCount] = useState<number>(1);
@@ -117,13 +126,22 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
   useEffect(() => {
     let isMounted = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveFailures = 0;
+
     const fetchLiveStats = async () => {
       try {
         const apiUrl = getApiUrl();
         const endpoint = apiUrl ? `${apiUrl}/api/stats` : '/api/stats';
-        const res = await fetch(endpoint);
+        const controller = new AbortController();
+        const abortTimeout = setTimeout(() => controller.abort(), 4000);
+
+        const res = await fetch(endpoint, { signal: controller.signal });
+        clearTimeout(abortTimeout);
+
         if (res.ok) {
           const data = await res.json();
+          consecutiveFailures = 0;
           if (isMounted) {
             if (typeof data.activeUsers === 'number') {
               setLiveUsersCount(Math.max(1, data.activeUsers));
@@ -132,17 +150,31 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               setActiveRoomsCount(data.activeRooms);
             }
           }
+        } else {
+          consecutiveFailures++;
         }
       } catch {
-        // Fallback gracefully
+        consecutiveFailures++;
+      } finally {
+        if (isMounted) {
+          // Exponential backoff to avoid hammering server or hitting 429 when backend is offline/suspended
+          const nextInterval =
+            consecutiveFailures === 0
+              ? 6000
+              : consecutiveFailures === 1
+              ? 15000
+              : consecutiveFailures === 2
+              ? 30000
+              : 60000;
+          timerId = setTimeout(fetchLiveStats, nextInterval);
+        }
       }
     };
 
     fetchLiveStats();
-    const timer = setInterval(fetchLiveStats, 6000);
     return () => {
       isMounted = false;
-      clearInterval(timer);
+      if (timerId) clearTimeout(timerId);
     };
   }, []);
 
@@ -295,8 +327,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
       });
 
       // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
-      if (res.status === 405 && apiUrl !== 'https://synctube-qg7l.onrender.com') {
-        apiUrl = 'https://synctube-qg7l.onrender.com';
+      if (res.status === 405 && apiUrl !== 'https://synctube-vslw.onrender.com') {
+        apiUrl = 'https://synctube-vslw.onrender.com';
         res = await fetch(`${apiUrl}/api/rooms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -305,6 +337,9 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
       }
 
       if (!res.ok) {
+        if (res.status === 503) {
+          throw new Error('SyncTube backend is suspended or offline on Render (503 Service Unavailable).');
+        }
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to create room');
       }
@@ -326,7 +361,12 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
       onNotify(`Room ${data.roomId} created!`, 'success');
       onEnterRoom(data.roomId, createUsername.trim(), true);
     } catch (err) {
-      onNotify((err as Error).message, 'error');
+      const msg = (err as Error).message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+        onNotify('SyncTube backend is unreachable (Render service suspended or waking up).', 'error');
+      } else {
+        onNotify(msg, 'error');
+      }
     } finally {
       setIsCreating(false);
     }
@@ -679,24 +719,25 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
             type="button"
             className="home-nav-extension-btn"
             onClick={() => setIsExtensionModalOpen(true)}
-            title="Get SyncTube Chrome Extension"
+            title="Get SyncTube Chrome Extension v2.0"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '6px 12px',
+              padding: '6px 13px',
               borderRadius: '20px',
-              background: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-              color: '#38bdf8',
+              background: 'rgba(255, 210, 31, 0.12)',
+              border: '1px solid rgba(255, 210, 31, 0.3)',
+              color: 'var(--accent)',
               fontSize: '0.8rem',
-              fontWeight: 600,
+              fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
           >
-            <img src="/extension/icon16.png" alt="Extension" style={{ width: 15, height: 15, borderRadius: 3 }} />
+            <Download size={13} />
             <span>Extension</span>
+            <span style={{ fontSize: '9px', background: 'rgba(255, 210, 31, 0.25)', padding: '1px 5px', borderRadius: '8px' }}>v2.0</span>
           </button>
 
           <a
@@ -1480,22 +1521,23 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
       {isExtensionModalOpen && (
         <div className="modal-backdrop" onClick={() => setIsExtensionModalOpen(false)}>
           <div
-            className="modal-content"
+            className="glass-panel modal-card extension-install-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="extension-modal-title"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 520, borderRadius: 16, background: '#0f172a', border: '1px solid rgba(139, 92, 246, 0.3)' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <img
-                  src="/extension/icon48.png"
-                  alt="SyncTube Extension"
-                  style={{ width: 40, height: 40, borderRadius: 10, boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)' }}
-                />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
-                    SyncTube Chrome Extension
-                  </h3>
-                  <span style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>v2.0 • Real-Time Tab & Video Sync</span>
+            <div className="extension-modal-header">
+              <div className="extension-brand-cluster">
+                <div className="extension-brand-icon">
+                  <Tv size={22} color="#ffd21f" />
+                </div>
+                <div className="extension-brand-text">
+                  <div className="extension-title-row">
+                    <h3 id="extension-modal-title">Sync<span>Tube</span> Extension</h3>
+                    <span className="extension-version-pill">v2.0 • MV3</span>
+                  </div>
+                  <p className="extension-subtitle">Universal Watch Party Tab & Video Streamer</p>
                 </div>
               </div>
               <button
@@ -1503,68 +1545,97 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
                 className="btn-icon"
                 onClick={() => setIsExtensionModalOpen(false)}
                 title="Close modal"
+                aria-label="Close extension modal"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              Stream any tab, YouTube, Netflix, or web video directly to everyone in your watch party in 1 click!
-            </p>
+            <div className="extension-modal-body">
+              {/* Value Proposition Callout */}
+              <div className="extension-hero-callout">
+                <p className="extension-hero-text">
+                  Stream any browser tab (Netflix, Prime Video, Anime, YouTube, or raw media) with audio directly to everyone in your watch party room in sub-second sync.
+                </p>
+                <div className="extension-features-pills">
+                  <span className="extension-pill">
+                    <Zap size={11} color="var(--accent)" />
+                    <span>Sub-Second Sync</span>
+                  </span>
+                  <span className="extension-pill">
+                    <Radio size={11} color="var(--accent-cyan)" />
+                    <span>Real-Time Tab Audio</span>
+                  </span>
+                  <span className="extension-pill">
+                    <ShieldCheck size={11} color="var(--green)" />
+                    <span>Zero-Log & Safe</span>
+                  </span>
+                </div>
+              </div>
 
-            <div
-              style={{
-                background: 'rgba(15, 23, 42, 0.7)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: 12,
-                padding: '16px',
-                marginBottom: 20,
-              }}
-            >
-              <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>
-                How to Install in 3 Easy Steps:
-              </h4>
-              <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#94a3b8', lineHeight: 1.7 }}>
-                <li>
-                  Click below to download <strong style={{ color: '#38bdf8' }}>synctube-extension.zip</strong> and extract the folder.
-                </li>
-                <li>
-                  In Chrome / Brave / Edge, open <code style={{ color: '#a78bfa', background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4 }}>chrome://extensions</code>.
-                </li>
-                <li>
-                  Enable <strong>Developer mode</strong> (toggle top-right), click <strong>Load unpacked</strong>, and select the extracted folder!
-                </li>
-              </ol>
+              {/* 3 Step Installation Flow */}
+              <div className="extension-steps-container">
+                {/* Step 1 */}
+                <div className="extension-step-card">
+                  <span className="extension-step-badge step-badge-1">1</span>
+                  <div className="extension-step-content">
+                    <h4 className="extension-step-title">Download & Unzip</h4>
+                    <p className="extension-step-desc">
+                      Download <strong>synctube-extension.zip</strong> below and extract the folder on your computer.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="extension-step-card">
+                  <span className="extension-step-badge step-badge-2">2</span>
+                  <div className="extension-step-content">
+                    <h4 className="extension-step-title">Open Chrome Extensions</h4>
+                    <p className="extension-step-desc">
+                      In Chrome, Brave, Edge, or Opera, navigate to the extensions manager page:
+                    </p>
+                    <button
+                      type="button"
+                      className="extension-copy-chip"
+                      onClick={handleCopyExtensionUrl}
+                      title="Click to copy chrome://extensions"
+                    >
+                      <code>chrome://extensions</code>
+                      {copiedExtensionUrl ? <Check size={12} color="var(--green)" /> : <Copy size={12} />}
+                      <span>{copiedExtensionUrl ? 'Copied to clipboard!' : 'Copy URL'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 3 */}
+                <div className="extension-step-card">
+                  <span className="extension-step-badge step-badge-3">3</span>
+                  <div className="extension-step-content">
+                    <h4 className="extension-step-title">Load Unpacked</h4>
+                    <p className="extension-step-desc">
+                      Turn ON <strong>Developer mode</strong> (toggle top-right), click <strong>Load unpacked</strong>, and select the extracted folder!
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <a
-                href="/extension/synctube-extension.zip"
-                download="synctube-extension.zip"
-                className="btn btn-primary"
-                style={{
-                  flex: 1,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  textDecoration: 'none',
-                  padding: '10px 16px',
-                  fontWeight: 600,
-                  fontSize: 14,
-                }}
-              >
-                <Download size={16} />
-                <span>Download Extension (ZIP)</span>
-              </a>
+            <div className="extension-modal-footer">
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setIsExtensionModalOpen(false)}
-                style={{ padding: '10px 18px' }}
               >
                 Done
               </button>
+              <a
+                href="/extension/synctube-extension.zip"
+                download="synctube-extension.zip"
+                className="extension-download-cta"
+              >
+                <Download size={15} />
+                <span>Download Extension (ZIP)</span>
+              </a>
             </div>
           </div>
         </div>

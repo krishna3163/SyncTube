@@ -1366,7 +1366,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         const isLocal = typeof window !== 'undefined' &&
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
         if (!resp.ok && !isLocal) {
-          resp = await fetch(`https://synctube-qg7l.onrender.com/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`);
+          resp = await fetch(`https://synctube-vslw.onrender.com/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`);
         }
         if (!resp.ok) {
           throw new Error(`Failed to fetch playlist (status ${resp.status})`);
