@@ -4,8 +4,9 @@ export type OriginCallback = (error: Error | null, allow?: boolean) => void;
 const DEFAULT_TRUSTED_ORIGINS = new Set([
   'https://synctube-qg7l.onrender.com',
   'https://synctube-2ar4.onrender.com',
-  'https://sync-tube-krishna3163s-projects.vercel.app',
+  'https://sync-tube-sage.vercel.app',
   'https://sync-tube-tqda.vercel.app',
+  'https://sync-tube-krishna3163s-projects.vercel.app',
   'https://synctube.vercel.app',
   'https://sync-tube.vercel.app',
 ]);

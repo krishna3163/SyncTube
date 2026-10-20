@@ -665,21 +665,21 @@ export function TemporaryBrowserPage({ onBackToHome, onNotify }: TemporaryBrowse
           <div className="temp-browser-hero">
             <div className="hero-badge-group">
               <div className="hero-pill">
-                <Shield size={14} color="#38bdf8" />
-                <span>Zero-Trace Remote Sandbox</span>
+                <Globe size={14} color="#38bdf8" />
+                <span>In-App Virtual Browser</span>
               </div>
               <div className="hero-pill hero-pill-latency">
                 <Zap size={14} color="#8b5cf6" />
-                <span>Remote Chromium Compositor</span>
+                <span>Web-in-Web Experience</span>
               </div>
             </div>
 
             <h1 className="hero-title" style={{ fontSize: '2.5rem', marginBottom: '12px' }}>
-              Browse Any Site with <span className="hero-highlight">Total Ephemeral Privacy</span>
+              Browse Any Website <span className="hero-highlight">Inside SyncTube</span>
             </h1>
 
             <p style={{ maxWidth: 640, margin: '0 auto 28px', color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.6 }}>
-              Spawns an isolated Chromium browser instance on our server, streams live interactive frames to your screen, and completely wipes cookies, cache, and history the second you close the session.
+              Run another website directly inside your SyncTube window! Explore sites, stream media, and cast live interactive pages right into your watch party room for all your friends to watch together.
             </p>
 
             {/* Quick URL Start Form */}
@@ -697,7 +697,7 @@ export function TemporaryBrowserPage({ onBackToHome, onNotify }: TemporaryBrowse
               }}
             >
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '8px', textAlign: 'left' }}>
-                Enter Starting Website URL
+                Enter Website URL to Open Inside SyncTube
               </label>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
@@ -789,31 +789,31 @@ export function TemporaryBrowserPage({ onBackToHome, onNotify }: TemporaryBrowse
             >
               <div className="card" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: '#38bdf8' }}>
-                  <Shield size={16} />
-                  <h4 style={{ margin: 0, fontSize: '14px' }}>100% Isolated Sandbox</h4>
+                  <Globe size={16} />
+                  <h4 style={{ margin: 0, fontSize: '14px' }}>Web-in-Web Browser</h4>
                 </div>
                 <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.5 }}>
-                  Every session launches a fresh Chromium profile with independent storage and clean cookies.
+                  Surf any external website seamlessly inside SyncTube without opening separate windows or apps.
                 </p>
               </div>
 
               <div className="card" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: '#a78bfa' }}>
-                  <Trash2 size={16} />
-                  <h4 style={{ margin: 0, fontSize: '14px' }}>Immediate Auto-Wipe</h4>
+                  <Tv size={16} />
+                  <h4 style={{ margin: 0, fontSize: '14px' }}>1-Click Cast to Watch Party</h4>
                 </div>
                 <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.5 }}>
-                  Closing the session terminates the process and erases all temporary files and tokens from memory.
+                  Share your active browsing session directly on the main stage so everyone in the room can watch along.
                 </p>
               </div>
 
               <div className="card" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: '#34d399' }}>
-                  <CheckCircle size={16} />
-                  <h4 style={{ margin: 0, fontSize: '14px' }}>SSRF & LAN Protected</h4>
+                  <Trash2 size={16} />
+                  <h4 style={{ margin: 0, fontSize: '14px' }}>Zero-Trace Auto Wipe</h4>
                 </div>
                 <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.5 }}>
-                  Internal networks, localhost, private IPs, and cloud metadata endpoints are strictly blocked.
+                  Closing the session erases all temporary browsing data, cookies, and tokens immediately.
                 </p>
               </div>
             </div>

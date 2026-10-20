@@ -80,6 +80,38 @@ const enhanceAudioSdp = (sdp: string): string => {
   return lines.join('\r\n');
 };
 
+// Prioritize H264 and VP8 on the video m-line so mobile devices (iOS Safari, Android Chrome) decode hardware video without black screen
+const prioritizeMobileCompatibleCodecs = (sdp: string): string => {
+  if (!sdp) return sdp;
+  const lines = sdp.split('\r\n');
+  const mVideoIdx = lines.findIndex((l) => l.startsWith('m=video '));
+  if (mVideoIdx === -1) return sdp;
+
+  const mVideoParts = lines[mVideoIdx].split(' ');
+  if (mVideoParts.length <= 3) return sdp;
+  const header = mVideoParts.slice(0, 3);
+  const pts = mVideoParts.slice(3);
+
+  const ptToCodec = new Map<string, string>();
+  for (const line of lines) {
+    const match = line.match(/^a=rtpmap:(\d+)\s+([^\/]+)/i);
+    if (match) {
+      ptToCodec.set(match[1], match[2].toUpperCase());
+    }
+  }
+
+  const preferred = pts.filter((pt) => {
+    const codec = ptToCodec.get(pt);
+    return codec === 'H264' || codec === 'VP8';
+  });
+  const others = pts.filter((pt) => !preferred.includes(pt));
+
+  if (preferred.length > 0) {
+    lines[mVideoIdx] = [...header, ...preferred, ...others].join(' ');
+  }
+  return lines.join('\r\n');
+};
+
 export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
   userRole,
   userId,
@@ -175,7 +207,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
       const offer = await pc.createOffer();
       if (offer.sdp) {
-        offer.sdp = enhanceAudioSdp(offer.sdp);
+        offer.sdp = prioritizeMobileCompatibleCodecs(enhanceAudioSdp(offer.sdp));
       }
       await pc.setLocalDescription(offer);
 
@@ -337,6 +369,12 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
               remoteStreamRef.current = stream;
             }
 
+            event.track.onunmute = () => {
+              if (videoRef.current) {
+                videoRef.current.play().catch(() => {});
+              }
+            };
+
             setRemoteStream(stream);
             setIsSharing(true);
             if (stream) {
@@ -388,7 +426,7 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
 
           const answer = await pc.createAnswer();
           if (answer.sdp) {
-            answer.sdp = enhanceAudioSdp(answer.sdp);
+            answer.sdp = prioritizeMobileCompatibleCodecs(enhanceAudioSdp(answer.sdp));
           }
           await pc.setLocalDescription(answer);
 
@@ -681,7 +719,8 @@ export const RoomTabPlayer: React.FC<RoomTabPlayerProps> = ({
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isStreamer || isMuted}
+        webkit-playsinline="true"
+        muted={isStreamer || isMuted || autoplayBlocked}
         style={{
           width: '100%',
           height: '100%',

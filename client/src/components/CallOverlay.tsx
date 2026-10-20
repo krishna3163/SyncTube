@@ -148,6 +148,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         if (!res?.success) {
           onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
         } else {
+          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
           const shareRes = await webrtcCallManager.startScreenShare();
           if (!shareRes.success) {
             emitStopTabStream();

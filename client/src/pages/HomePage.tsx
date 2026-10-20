@@ -35,6 +35,7 @@ import {
   Smartphone,
   Activity,
   ListMusic,
+  Download,
 } from 'lucide-react';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { detectClientMedia } from '../utils/media.js';
@@ -108,42 +109,41 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authStorage.getUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  // Dynamic daily visitors / viewers count with persistence & live ticker
-  const [dailyViewers, setDailyViewers] = useState<number>(() => {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const stored = localStorage.getItem('synctube_daily_visitors_data');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.date === today && typeof parsed.count === 'number') {
-          const updated = parsed.count + 1;
-          localStorage.setItem('synctube_daily_visitors_data', JSON.stringify({ date: today, count: updated }));
-          return updated;
-        }
-      }
-      const initialBase = 2840 + Math.floor(Math.random() * 80);
-      localStorage.setItem('synctube_daily_visitors_data', JSON.stringify({ date: today, count: initialBase }));
-      return initialBase;
-    } catch {
-      return 2847;
-    }
-  });
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
 
-  // Auto-updating live visitors ticker (updates every 4.5s)
+  // Real active users & rooms directly from server
+  const [liveUsersCount, setLiveUsersCount] = useState<number>(1);
+  const [, setActiveRoomsCount] = useState<number>(0);
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setDailyViewers((prev) => {
-        const delta = Math.random() > 0.35 ? Math.floor(Math.random() * 3) + 1 : -1;
-        const next = Math.max(2800, prev + delta);
-        try {
-          const today = new Date().toISOString().slice(0, 10);
-          localStorage.setItem('synctube_daily_visitors_data', JSON.stringify({ date: today, count: next }));
-        } catch {}
-        return next;
-      });
-    }, 4500);
+    let isMounted = true;
+    const fetchLiveStats = async () => {
+      try {
+        const apiUrl = getApiUrl();
+        const endpoint = apiUrl ? `${apiUrl}/api/stats` : '/api/stats';
+        const res = await fetch(endpoint);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            if (typeof data.activeUsers === 'number') {
+              setLiveUsersCount(Math.max(1, data.activeUsers));
+            }
+            if (typeof data.activeRooms === 'number') {
+              setActiveRoomsCount(data.activeRooms);
+            }
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    };
 
-    return () => clearInterval(timer);
+    fetchLiveStats();
+    const timer = setInterval(fetchLiveStats, 6000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
   }, []);
 
   const [activeTbSession, setActiveTbSession] = useState<{ session: any; token: string } | null>(() => {
@@ -675,6 +675,30 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
             <span>{currentUser ? currentUser.username : 'Sign In'}</span>
           </button>
 
+          <button
+            type="button"
+            className="home-nav-extension-btn"
+            onClick={() => setIsExtensionModalOpen(true)}
+            title="Get SyncTube Chrome Extension"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: 'rgba(56, 189, 248, 0.12)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              color: '#38bdf8',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <img src="/extension/icon16.png" alt="Extension" style={{ width: 15, height: 15, borderRadius: 3 }} />
+            <span>Extension</span>
+          </button>
+
           <a
             href="https://github.com/krishna3163/SyncTube"
             target="_blank"
@@ -731,9 +755,9 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <Zap size={13} color="#38bdf8" />
               <span>Ultra-Low Latency Sync</span>
             </div>
-            <div className="hero-pill hero-pill-live-viewers" title="Live daily viewers count - updates in real time">
+            <div className="hero-pill hero-pill-live-viewers" title="Real-time users currently on the server">
               <Users size={13} color="#22c55e" />
-              <span><strong style={{ color: '#4ade80' }}>{dailyViewers.toLocaleString()}</strong> Daily Viewers</span>
+              <span><strong style={{ color: '#4ade80' }}>{liveUsersCount.toLocaleString()}</strong> Active Online</span>
               <span className="live-pulse-dot" aria-hidden="true" />
             </div>
           </div>
@@ -1451,6 +1475,100 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
         }}
         onNotify={onNotify}
       /></Suspense>}
+
+      {/* SyncTube Chrome Extension Modal */}
+      {isExtensionModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsExtensionModalOpen(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 520, borderRadius: 16, background: '#0f172a', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <img
+                  src="/extension/icon48.png"
+                  alt="SyncTube Extension"
+                  style={{ width: 40, height: 40, borderRadius: 10, boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)' }}
+                />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
+                    SyncTube Chrome Extension
+                  </h3>
+                  <span style={{ fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>v2.0 • Real-Time Tab & Video Sync</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => setIsExtensionModalOpen(false)}
+                title="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+              Stream any tab, YouTube, Netflix, or web video directly to everyone in your watch party in 1 click!
+            </p>
+
+            <div
+              style={{
+                background: 'rgba(15, 23, 42, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 12,
+                padding: '16px',
+                marginBottom: 20,
+              }}
+            >
+              <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>
+                How to Install in 3 Easy Steps:
+              </h4>
+              <ol style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#94a3b8', lineHeight: 1.7 }}>
+                <li>
+                  Click below to download <strong style={{ color: '#38bdf8' }}>synctube-extension.zip</strong> and extract the folder.
+                </li>
+                <li>
+                  In Chrome / Brave / Edge, open <code style={{ color: '#a78bfa', background: 'rgba(255,255,255,0.08)', padding: '2px 6px', borderRadius: 4 }}>chrome://extensions</code>.
+                </li>
+                <li>
+                  Enable <strong>Developer mode</strong> (toggle top-right), click <strong>Load unpacked</strong>, and select the extracted folder!
+                </li>
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <a
+                href="/extension/synctube-extension.zip"
+                download="synctube-extension.zip"
+                className="btn btn-primary"
+                style={{
+                  flex: 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  textDecoration: 'none',
+                  padding: '10px 16px',
+                  fontWeight: 600,
+                  fontSize: 14,
+                }}
+              >
+                <Download size={16} />
+                <span>Download Extension (ZIP)</span>
+              </a>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsExtensionModalOpen(false)}
+                style={{ padding: '10px 18px' }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

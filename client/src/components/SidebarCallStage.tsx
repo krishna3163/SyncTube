@@ -168,7 +168,8 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
         if (!res?.success) {
           onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
         } else {
-          // Now capture the screen and stream via WebRTC call
+          // Now capture the screen and stream via WebRTC call and notify main stage
+          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
           const shareRes = await webrtcCallManager.startScreenShare();
           if (!shareRes.success) {
             // Abort server-side share if local capture failed

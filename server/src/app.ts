@@ -111,11 +111,16 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     });
   });
 
-  // Lightweight liveness probe for load balancers (no JSON parsing needed)
-  app.get('/healthz', (_req: Request, res: Response) => res.status(200).send('ok'));
-  app.get('/readyz', (_req: Request, res: Response) => {
-    // In future: check DB/Redis reachability; for now always ready if process is up
-    res.status(200).send('ready');
+  // Real-time server usage stats (active rooms and participants)
+  app.get('/api/stats', (_req: Request, res: Response) => {
+    const activeRooms = roomManager.getRoomCount();
+    const activeUsers = roomManager.getTotalParticipantCount();
+    res.status(200).json({
+      activeRooms,
+      activeUsers,
+      totalConnected: Math.max(activeUsers, 1),
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // Create room endpoint (protected by rate limiter) — tunable for 10k bursts via ROOM_CREATE_RATE_LIMIT

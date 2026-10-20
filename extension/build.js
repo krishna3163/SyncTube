@@ -47,6 +47,16 @@ async function build() {
   // 4. Copy static assets to dist/
   fs.copyFileSync(path.join(__dirname, 'src/popup/popup.html'), path.join(distDir, 'popup.html'));
   fs.copyFileSync(path.join(__dirname, 'src/popup/popup.css'), path.join(distDir, 'popup.css'));
+  const distIconsDir = path.join(distDir, 'icons');
+  if (!fs.existsSync(distIconsDir)) {
+    fs.mkdirSync(distIconsDir, { recursive: true });
+  }
+  const iconsSrcDir = path.join(__dirname, 'icons');
+  if (fs.existsSync(iconsSrcDir)) {
+    for (const f of fs.readdirSync(iconsSrcDir)) {
+      fs.copyFileSync(path.join(iconsSrcDir, f), path.join(distIconsDir, f));
+    }
+  }
 
   // 5. Read root manifest.json
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf-8'));

@@ -59,6 +59,14 @@ export class RoomManager {
     return this.rooms.size;
   }
 
+  public getTotalParticipantCount(): number {
+    let total = 0;
+    for (const room of this.rooms.values()) {
+      total += room.getParticipantCount();
+    }
+    return total;
+  }
+
   /**
    * Cleans up rooms that have no participants and have been inactive for maxInactiveMs.
    * Default timeout: 1 hour.
