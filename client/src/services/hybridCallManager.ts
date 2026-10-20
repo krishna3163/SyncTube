@@ -167,7 +167,7 @@ export class HybridCallManager {
     });
 
     // Remote user joined call
-    socket.on('call:user_joined', (caller: CallParticipantState) => {
+    socket.on('call:user_joined', async (caller: CallParticipantState) => {
       if (Boolean(socket && Boolean(socket && caller.socketId === socket.id))) return;
       this.participants.set(caller.socketId, {
         ...caller,
@@ -177,6 +177,10 @@ export class HybridCallManager {
         networkQuality: 'good',
       });
       this.notifyPeersChange();
+      // If we're already in the call and in P2P mode, initiate connection to the new peer
+      if (this.isInCall && this.topologyMode === 'p2p') {
+        await this.coordinateTopology();
+      }
     });
 
     // Topology shift broadcast from server (e.g. 2 callers -> P2P, 3 callers -> SFU)
@@ -967,12 +971,32 @@ export class HybridCallManager {
         pc.getTransceivers().find((t) => t.receiver.track?.kind === 'video' || t.sender.track?.kind === 'video')?.sender;
 
       if (videoSender) {
-        await videoSender.replaceTrack(!this.isCameraOff && videoTrack ? videoTrack : null).catch((err) => {
+        const newTrack = !this.isCameraOff && videoTrack ? videoTrack : null;
+        await videoSender.replaceTrack(newTrack).catch((err) => {
           console.warn('[P2P] replaceTrack error:', err);
         });
+        // If we're turning camera ON and added a real track, force renegotiation
+        // because replaceTrack from null->track doesn't always trigger onnegotiationneeded
+        if (newTrack && pc.signalingState === 'stable') {
+          try {
+            this.isMakingOffer = true;
+            await pc.setLocalDescription();
+            if (socket && pc.localDescription && this.p2pRemoteSocketId) {
+              socket.emit('call:p2p:offer', {
+                targetSocketId: this.p2pRemoteSocketId,
+                offer: pc.localDescription,
+              });
+            }
+          } catch (err) {
+            console.warn('[P2P] Force renegotiation error:', err);
+          } finally {
+            this.isMakingOffer = false;
+          }
+        }
       } else if (!this.isCameraOff && videoTrack) {
         try {
           pc.addTrack(videoTrack, this.localStream!);
+          // addTrack triggers onnegotiationneeded automatically
         } catch (err) {
           console.warn('[P2P] addTrack error:', err);
         }
@@ -1021,12 +1045,104 @@ export class HybridCallManager {
     }
   }
 
+  public async startScreenShare(): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        return { success: false, error: 'Screen sharing is not supported on this browser or device.' };
+      }
+      let mediaStream: MediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 } } as any,
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } as any,
+        });
+      } catch {
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      }
+      this.screenStream = mediaStream;
+      this.isScreenSharing = true;
+
+      // Replace video track in P2P connection with screen share track
+      if (this.topologyMode === 'p2p' && this.p2pPeerConnection) {
+        const pc = this.p2pPeerConnection;
+        const screenTrack = mediaStream.getVideoTracks()[0];
+        const videoSender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (videoSender && screenTrack) {
+          await videoSender.replaceTrack(screenTrack).catch(() => {});
+        } else if (screenTrack) {
+          pc.addTrack(screenTrack, mediaStream);
+        }
+      } else if (this.topologyMode === 'sfu' && this.sfuSendTransport) {
+        const screenTrack = mediaStream.getVideoTracks()[0];
+        if (this.sfuVideoProducer && screenTrack) {
+          await (this.sfuVideoProducer as any).replaceTrack?.({ track: screenTrack }).catch(() => {});
+        }
+      }
+
+      const localKey = (socket && socket.id) ? socket.id : 'local';
+      const local = this.participants.get(localKey);
+      if (local) {
+        local.isScreenSharing = true;
+        this.notifyPeersChange();
+      }
+      if (socket) {
+        socket.emit('call:media_state', {
+          isMuted: this.isMuted,
+          isCameraOff: this.isCameraOff,
+          isScreenSharing: true,
+        });
+      }
+
+      // Auto-stop when user stops screen share via browser UI
+      mediaStream.getVideoTracks()[0].onended = () => {
+        this.stopScreenShare();
+        if (socket) {
+          socket.emit('call:media_state', {
+            isMuted: this.isMuted,
+            isCameraOff: this.isCameraOff,
+            isScreenSharing: false,
+          });
+        }
+      };
+
+      return { success: true };
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError') {
+        return { success: false, error: 'Screen share permission denied.' };
+      }
+      return { success: false, error: err?.message || 'Failed to start screen share.' };
+    }
+  }
+
   public stopScreenShare(): void {
     if (this.screenStream) {
       this.screenStream.getTracks().forEach((t) => t.stop());
       this.screenStream = null;
     }
     this.isScreenSharing = false;
+
+    // Restore camera track in P2P
+    if (this.topologyMode === 'p2p' && this.p2pPeerConnection && !this.isCameraOff && this.localStream) {
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      const videoSender = this.p2pPeerConnection.getSenders().find((s) => s.track?.kind === 'video');
+      if (videoSender && videoTrack) {
+        videoSender.replaceTrack(videoTrack).catch(() => {});
+      }
+    }
+
+    const localKey = (socket && socket.id) ? socket.id : 'local';
+    const local = this.participants.get(localKey);
+    if (local) {
+      local.isScreenSharing = false;
+      this.notifyPeersChange();
+    }
+    if (socket) {
+      socket.emit('call:media_state', {
+        isMuted: this.isMuted,
+        isCameraOff: this.isCameraOff,
+        isScreenSharing: false,
+      });
+    }
   }
 
   public isCallActive(): boolean {

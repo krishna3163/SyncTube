@@ -100,11 +100,11 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
       thumbnail: 'https://img.youtube.com/vi/RxabLA7UQ9k/hqdefault.jpg',
     },
     {
-      videoId: 'z2X2nXBahrk',
-      title: 'Rebel Foods Story - Building the World’s Largest Cloud Kitchen',
-      channel: 'Rebel Foods',
-      duration: '12:45',
-      thumbnail: 'https://img.youtube.com/vi/z2X2nXBahrk/hqdefault.jpg',
+      videoId: 'HReiHwYEK5w',
+      title: 'Why is Rebel Foods Struggling to Survive?',
+      channel: 'Backstage with Millionaires',
+      duration: '12:18',
+      thumbnail: 'https://img.youtube.com/vi/HReiHwYEK5w/hqdefault.jpg',
     },
     {
       videoId: 'cl0a3i2wFcc',
@@ -114,11 +114,11 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
       thumbnail: 'https://img.youtube.com/vi/cl0a3i2wFcc/hqdefault.jpg',
     },
     {
-      videoId: 'jfKfPfyJRdk',
+      videoId: '5qap5aO4i9A',
       title: 'Lofi Hip Hop Radio - Beats to Relax/Study to',
       channel: 'Lofi Girl',
       duration: 'LIVE',
-      thumbnail: 'https://img.youtube.com/vi/jfKfPfyJRdk/hqdefault.jpg',
+      thumbnail: 'https://img.youtube.com/vi/5qap5aO4i9A/hqdefault.jpg',
     },
     {
       videoId: '2S4qGKmzBJE',
@@ -128,11 +128,11 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
       thumbnail: 'https://img.youtube.com/vi/2S4qGKmzBJE/hqdefault.jpg',
     },
     {
-      videoId: 'mpCOh_J_uOU',
+      videoId: 'oomE4oltFRo',
       title: 'LiSA - Gurenge (Demon Slayer Kimetsu no Yaiba OP)',
       channel: 'LiSA Official',
       duration: '3:56',
-      thumbnail: 'https://img.youtube.com/vi/mpCOh_J_uOU/hqdefault.jpg',
+      thumbnail: 'https://img.youtube.com/vi/oomE4oltFRo/hqdefault.jpg',
     },
     {
       videoId: 'KvMY1uzSC1E',
@@ -168,6 +168,9 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
     const q = searchTerm.trim();
     if (!q) return;
 
+    const isLocal = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
     // 1. Check if user entered a playlist link or ID
     const playlistId = extractYouTubePlaylistId(q);
     if (playlistId) {
@@ -180,12 +183,14 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
       } else {
         playlistEndpoints.push(`/api/youtube/playlist?url=${encodeURIComponent(q)}`);
       }
-      playlistEndpoints.push(`https://synctube-2ar4.onrender.com/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+      if (!isLocal) {
+        playlistEndpoints.push(`https://synctube-qg7l.onrender.com/api/youtube/playlist?url=${encodeURIComponent(q)}`);
+      }
 
       for (const pUrl of playlistEndpoints) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
+          const timer = setTimeout(() => controller.abort(), 10000);
           const resp = await fetch(pUrl, { signal: controller.signal });
           clearTimeout(timer);
           if (resp.ok) {
@@ -229,15 +234,17 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
       endpointsToTry.push(`/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
-    const alreadyHasFallback = endpointsToTry.some((endpoint) => {
-      try {
-        return new URL(endpoint, window.location.origin).hostname === 'synctube-2ar4.onrender.com';
-      } catch {
-        return false;
+    if (!isLocal) {
+      const alreadyHasFallback = endpointsToTry.some((endpoint) => {
+        try {
+          return new URL(endpoint, window.location.origin).hostname === 'synctube-qg7l.onrender.com';
+        } catch {
+          return false;
+        }
+      });
+      if (!alreadyHasFallback) {
+        endpointsToTry.push(`https://synctube-qg7l.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
       }
-    });
-    if (!alreadyHasFallback) {
-      endpointsToTry.push(`https://synctube-2ar4.onrender.com/api/youtube/search?q=${encodeURIComponent(q)}`);
     }
 
     let loadedVideos: SearchResultItem[] | null = null;
@@ -245,7 +252,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
     for (const url of endpointsToTry) {
       try {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 6000);
+        const timer = setTimeout(() => controller.abort(), 12000);
         const resp = await fetch(url, { signal: controller.signal });
         clearTimeout(timer);
         if (resp.ok) {
@@ -485,6 +492,15 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
                       alt={item.title}
                       className="yt-search-item-thumb"
                       loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.dataset.fallbackTried && item.videoId) {
+                          target.dataset.fallbackTried = 'true';
+                          target.src = `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`;
+                        } else {
+                          target.src = '/video-placeholder.svg';
+                        }
+                      }}
                     />
                     {item.duration && (
                       <span className="yt-search-duration-badge">{item.duration}</span>

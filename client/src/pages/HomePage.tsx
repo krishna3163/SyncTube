@@ -295,8 +295,8 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
       });
 
       // If relative URL returned 405 (e.g. Vercel static rewrite), fallback directly to Render backend
-      if (res.status === 405 && apiUrl !== 'https://synctube-2ar4.onrender.com') {
-        apiUrl = 'https://synctube-2ar4.onrender.com';
+      if (res.status === 405 && apiUrl !== 'https://synctube-qg7l.onrender.com') {
+        apiUrl = 'https://synctube-qg7l.onrender.com';
         res = await fetch(`${apiUrl}/api/rooms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

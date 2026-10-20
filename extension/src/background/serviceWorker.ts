@@ -5,7 +5,7 @@ let partyState: ExtensionPartyState = {
   roomId: null,
   isHost: false,
   userId: null,
-  serverUrl: 'https://synctube-2ar4.onrender.com',
+  serverUrl: 'https://synctube-qg7l.onrender.com',
   readiness: 'not_connected',
 };
 

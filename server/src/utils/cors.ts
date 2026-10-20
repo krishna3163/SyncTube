@@ -2,6 +2,7 @@ export type OriginCallback = (error: Error | null, allow?: boolean) => void;
 
 // Production trusted domains for SyncTube
 const DEFAULT_TRUSTED_ORIGINS = new Set([
+  'https://synctube-qg7l.onrender.com',
   'https://synctube-2ar4.onrender.com',
   'https://sync-tube-krishna3163s-projects.vercel.app',
   'https://sync-tube-tqda.vercel.app',
@@ -17,6 +18,17 @@ export function isAllowedOrigin(origin: string | undefined, callback: OriginCall
   if (!origin || process.env.NODE_ENV !== 'production') {
     callback(null, true);
     return;
+  }
+
+  // Allow localhost / 127.0.0.1 on any port
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      callback(null, true);
+      return;
+    }
+  } catch {
+    // Malformed origin string
   }
 
   // Allow browser extensions (Chrome, Firefox)

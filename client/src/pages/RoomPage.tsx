@@ -116,6 +116,7 @@ import { StreamInfoBar } from '../components/StreamInfoBar.js';
 import { CallOverlay } from '../components/CallOverlay.js';
 import { SidebarCallStage } from '../components/SidebarCallStage.js';
 import { webrtcCallManager } from '../services/webrtcCallManager.js';
+import type { CallParticipantState } from '../services/hybridCallManager.js';
 import { extractYouTubePlaylistId } from '../utils/youtube.js';
 
 interface RoomPageProps {
@@ -413,6 +414,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [extensionInstalled, setExtensionInstalled] = useState<boolean>(false);
   const apiUrl = getApiUrl();
 
+  // Call state for PiP overlay during screen share
+  const [isInCall, setIsInCall] = useState(false);
+  const [callParticipants, setCallParticipants] = useState<CallParticipantState[]>([]);
+
   // Extension detection bridge
   useEffect(() => {
     const handleWindowMessage = (event: MessageEvent) => {
@@ -432,6 +437,15 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       clearInterval(interval);
     };
   }, [roomId]);
+
+  // Subscribe to call state for PiP overlay
+  useEffect(() => {
+    const unsubPeers = webrtcCallManager.subscribePeers((peers) => {
+      setCallParticipants(peers);
+      setIsInCall(webrtcCallManager.isCallActive());
+    });
+    return () => unsubPeers();
+  }, []);
 
 
   const handleTypingChange = useCallback((isTyping: boolean) => {
@@ -1349,8 +1363,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           : `/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`;
 
         let resp = await fetch(endpoint);
-        if (!resp.ok) {
-          resp = await fetch(`https://synctube-2ar4.onrender.com/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`);
+        const isLocal = typeof window !== 'undefined' &&
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        if (!resp.ok && !isLocal) {
+          resp = await fetch(`https://synctube-qg7l.onrender.com/api/youtube/playlist?url=${encodeURIComponent(playlistUrlOrId)}`);
         }
         if (!resp.ok) {
           throw new Error(`Failed to fetch playlist (status ${resp.status})`);
@@ -1738,7 +1754,27 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               <div className="video-wrapper">
                 {featureFlags.floatingReactions && <ReactionOverlay reactions={activeReactions} />}
 
-                
+                {/* Zoom-style PiP call tiles — shown when screen sharing + in call */}
+                {isInCall && callParticipants.length > 0 && (videoId?.startsWith('tab:') || syncState?.videoId?.startsWith('tab:')) && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '72px',
+                      right: '12px',
+                      zIndex: 30,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      maxHeight: '60%',
+                      overflowY: 'auto',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {callParticipants.slice(0, 6).map((p) => (
+                      <PiPCallTile key={p.socketId} participant={p} />
+                    ))}
+                  </div>
+                )}
 
                 {videoId ? (
                   (() => {
@@ -2444,6 +2480,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onClose={() => setMobileDrawerTab(null)}
         title={`Viewers (${participants.length})`}
       >
+        {featureFlags.voiceVideoCall && (
+          <SidebarCallStage
+            currentUserId={userId}
+            currentUsername={username}
+            currentUserAvatarId={userSettings.avatarId}
+            userRole={userRole}
+            isBlockedFromCall={participants.find((p) => p.userId === userId)?.isBlockedFromCall}
+            onRequestAction={(type) => handleRequestAction(type)}
+            onNotify={onNotify}
+          />
+        )}
         <ParticipantList
           participants={participants}
           currentUserId={userId}
@@ -2464,6 +2511,20 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         title="Watch Party Hub & Tools"
       >
         <div className="mobile-hub-grid">
+          {featureFlags.voiceVideoCall && (
+            <button
+              type="button"
+              className="mobile-hub-btn"
+              onClick={() => setMobileDrawerTab('viewers' as MobileTab)}
+            >
+              <div className="mobile-hub-icon-wrapper" style={{ background: isInCall ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.15)', color: isInCall ? '#34d399' : '#a5b4fc' }}>
+                <Users size={24} />
+              </div>
+              <span className="mobile-hub-label">{isInCall ? 'In Call ✓' : 'Voice & Video'}</span>
+              <span className="mobile-hub-subtext">{isInCall ? 'Tap to manage' : 'Join voice/video call'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="mobile-hub-btn"
@@ -2555,6 +2616,115 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           </button>
         </div>
       </MobileDrawer>
+    </div>
+  );
+};
+
+/** Zoom-style Picture-in-Picture tile for a single call participant shown over the screen share */
+const PiPCallTile: React.FC<{ participant: CallParticipantState }> = ({ participant }) => {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  React.useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !participant.stream) return;
+    if (el.srcObject !== participant.stream) {
+      el.srcObject = participant.stream;
+      el.play().catch(() => {});
+    }
+  }, [participant.stream, participant.isCameraOff]);
+
+  const hasVideo = Boolean(
+    participant.stream &&
+    participant.stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') &&
+    !participant.isCameraOff
+  );
+
+  return (
+    <div
+      style={{
+        width: '120px',
+        height: '90px',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        background: '#0f172a',
+        border: participant.isSpeaking ? '2px solid #10b981' : '1.5px solid rgba(255,255,255,0.15)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+        position: 'relative',
+        pointerEvents: 'auto',
+        flexShrink: 0,
+      }}
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: hasVideo ? 'block' : 'none',
+          transform: participant.isLocal && !participant.isScreenSharing ? 'scaleX(-1)' : 'none',
+        }}
+      />
+      {!hasVideo && (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'radial-gradient(circle, #1e293b 0%, #0f172a 100%)',
+          }}
+        >
+          <div
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: '#334155',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: '14px',
+              color: '#f8fafc',
+            }}
+          >
+            {participant.username.charAt(0).toUpperCase()}
+          </div>
+        </div>
+      )}
+      {!participant.isLocal && participant.stream && (
+        <audio
+          ref={(el) => {
+            if (el && participant.stream && el.srcObject !== participant.stream) {
+              el.srcObject = participant.stream;
+              el.play().catch(() => {});
+            }
+          }}
+          autoPlay
+          playsInline
+        />
+      )}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '2px',
+          left: '4px',
+          right: '4px',
+          fontSize: '9px',
+          fontWeight: 600,
+          color: '#f8fafc',
+          textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {participant.username}{participant.isLocal ? ' (You)' : ''}
+      </div>
     </div>
   );
 };

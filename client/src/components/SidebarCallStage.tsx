@@ -153,8 +153,8 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
 
   const handleToggleScreenShare = async () => {
     if (isScreenSharing) {
-      emitStopTabStream();
       webrtcCallManager.stopScreenShare();
+      emitStopTabStream();
       setIsScreenSharing(false);
       onNotify?.('Stopped screen sharing.', 'info');
     } else {
@@ -163,19 +163,21 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
         return;
       }
       const title = `${currentUsername}'s Screen`;
-      try {
-        sessionStorage.setItem('synctube_pending_screen_share', 'true');
-      } catch {}
-      emitStartTabStream(title, (res) => {
+      // First register with server so others know a share is starting
+      emitStartTabStream(title, async (res) => {
         if (!res?.success) {
-          try {
-            sessionStorage.removeItem('synctube_pending_screen_share');
-          } catch {}
           onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
         } else {
-          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
-          setIsScreenSharing(true);
-          onNotify?.('Sharing your screen on the main stage!', 'success');
+          // Now capture the screen and stream via WebRTC call
+          const shareRes = await webrtcCallManager.startScreenShare();
+          if (!shareRes.success) {
+            // Abort server-side share if local capture failed
+            emitStopTabStream();
+            onNotify?.(shareRes.error || 'Could not capture screen.', 'error');
+          } else {
+            setIsScreenSharing(true);
+            onNotify?.('Sharing your screen on the main stage!', 'success');
+          }
         }
       });
     }

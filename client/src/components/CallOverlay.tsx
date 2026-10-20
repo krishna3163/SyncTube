@@ -134,20 +134,28 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   // Screen share triggers main theater stage stream
   const handleToggleScreenShare = async () => {
     if (isScreenSharing) {
-      emitStopTabStream();
       webrtcCallManager.stopScreenShare();
+      emitStopTabStream();
       setIsScreenSharing(false);
       onNotify?.('Stopped screen sharing.', 'info');
     } else {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        onNotify?.('Screen sharing is not supported on this browser or mobile device.', 'error');
+        return;
+      }
       const title = `${currentUsername}'s Screen`;
-      emitStartTabStream(title, (res) => {
+      emitStartTabStream(title, async (res) => {
         if (!res?.success) {
           onNotify?.(res?.error || 'Could not start screen share. Another participant may already be sharing.', 'error');
         } else {
-          // Trigger local capture
-          window.postMessage({ type: 'SYNCTUBE_START_TAB_SHARE', tabTitle: title }, '*');
-          setIsScreenSharing(true);
-          onNotify?.('Sharing your screen on the main stage!', 'success');
+          const shareRes = await webrtcCallManager.startScreenShare();
+          if (!shareRes.success) {
+            emitStopTabStream();
+            onNotify?.(shareRes.error || 'Could not capture screen.', 'error');
+          } else {
+            setIsScreenSharing(true);
+            onNotify?.('Sharing your screen on the main stage!', 'success');
+          }
         }
       });
     }
