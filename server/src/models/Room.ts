@@ -61,25 +61,6 @@ export class Room {
   public tags: string[] = ['#WatchParty', '#SyncTubeLive', '#CinemaHub'];
   public likedUserIds: Set<string> = new Set();
   public isLive: boolean = false;
-  public browserSessionId: string | null = null;
-  public browserSessionToken: string | null = null;
-  public browserGuestControl: boolean = false;
-
-  public attachBrowserSession(sessionId: string, sessionToken?: string, guestControl: boolean = false): void {
-    this.browserSessionId = sessionId;
-    this.browserSessionToken = sessionToken || null;
-    this.browserGuestControl = guestControl;
-    this.videoId = `tb:${sessionId}`;
-  }
-
-  public detachBrowserSession(): void {
-    this.browserSessionId = null;
-    this.browserSessionToken = null;
-    this.browserGuestControl = false;
-    if (this.videoId.startsWith('tb:')) {
-      this.videoId = '';
-    }
-  }
 
   public setIsLive(live: boolean): void {
     this.isLive = live;
@@ -538,12 +519,6 @@ export class Room {
       description: this.description,
       tags: this.tags,
       isLive: this.isLive,
-      browserSession: this.browserSessionId
-        ? {
-            sessionId: this.browserSessionId,
-            guestControl: this.browserGuestControl,
-          }
-        : undefined,
       mediaIdentity: media
         ? {
             platform: media.platform,

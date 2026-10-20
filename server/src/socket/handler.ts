@@ -22,8 +22,6 @@ import { canPerformAction } from '../services/permissions.js';
 import { extractYouTubeId } from '../utils/youtube.js';
 import { detectMediaSource } from '../utils/media.js';
 import { serverSentry } from '../services/sentry.js';
-import { roomBrowserStreamService } from '../services/roomBrowserStreamService.js';
-import { tempBrowserManager } from '../services/tempBrowserManager.js';
 import {
   ExtensionStatusSchema,
   AssignRoleSchema,
@@ -59,9 +57,6 @@ import {
   SyncDriftCheckSchema,
   MediaChangedSchema,
   ChatTypingSchema,
-  RoomStartBrowserStreamSchema,
-  RoomBrowserGuestControlSchema,
-  RoomBrowserInputSchema,
   RoomStartTabStreamSchema,
   ToggleLikeSchema,
   SetCategorySchema,
@@ -227,19 +222,6 @@ export function setupSocketHandlers(
           });
         }
 
-        // Send active browser stream if one is currently in progress
-        if (room.browserSessionId) {
-          const tbSession = tempBrowserManager.getSession(room.browserSessionId);
-          socket.emit('room:browser_stream_started', {
-            sessionId: room.browserSessionId,
-            currentUrl: tbSession?.currentUrl || '',
-            currentTitle: tbSession?.currentTitle || 'Temporary Browser Cinema Stream',
-            guestControl: room.browserGuestControl,
-          });
-          if (tbSession?.lastFrame) {
-            socket.emit('room:browser_frame', tbSession.lastFrame);
-          }
-        }
 
         // Broadcast to everyone in the room that a user joined
         io.to(normalizedRoomId).emit('user_joined', {
@@ -1408,94 +1390,6 @@ export function setupSocketHandlers(
       }
     });
 
-    // 25. ROOM BROWSER STREAMING (Temporary Browser Remote Sandbox)
-    socket.on('room:start_browser_stream', (rawPayload: unknown, callback?: (res: any) => void) => {
-      try {
-        const { room, participant } = getContext();
-        if (!room || !participant) {
-          const err = 'You must join a room first.';
-          callback?.({ success: false, error: err });
-          return sendError('NOT_FOUND', err);
-        }
-
-        if (!canPerformAction(participant.role, 'change_video')) {
-          const err = 'Only Host or Moderator can stream a temporary browser to the room.';
-          callback?.({ success: false, error: err });
-          return sendError('FORBIDDEN', err);
-        }
-
-        const parsed = RoomStartBrowserStreamSchema.safeParse(rawPayload);
-        if (!parsed.success) {
-          const err = 'Invalid start browser stream payload.';
-          callback?.({ success: false, error: err });
-          return sendError('BAD_REQUEST', err);
-        }
-
-        const { sessionId, sessionToken, guestControl } = parsed.data;
-        const res = roomBrowserStreamService.startStreaming(io, room, sessionId, sessionToken, guestControl);
-        if (!res.success) {
-          callback?.({ success: false, error: res.error });
-          return sendError('FORBIDDEN', res.error || 'Failed to start browser stream.');
-        }
-
-        callback?.({ success: true, sessionId, roomId: room.id });
-      } catch (err: any) {
-        callback?.({ success: false, error: err?.message });
-        sendError('INTERNAL_ERROR', err?.message || 'Failed to start temporary browser stream.');
-      }
-    });
-
-    socket.on('room:stop_browser_stream', () => {
-      try {
-        const { room, participant } = getContext();
-        if (!room || !participant) return;
-
-        if (!canPerformAction(participant.role, 'change_video')) {
-          return sendError('FORBIDDEN', 'Only Host or Moderator can stop the browser stream.');
-        }
-
-        roomBrowserStreamService.stopStreaming(io, room, 'stopped_by_host');
-      } catch (err: any) {
-        sendError('INTERNAL_ERROR', err?.message || 'Failed to stop temporary browser stream.');
-      }
-    });
-
-    socket.on('room:browser_set_guest_control', (rawPayload: unknown) => {
-      try {
-        const { room, participant } = getContext();
-        if (!room || !participant) return;
-
-        if (!canPerformAction(participant.role, 'change_video')) {
-          return sendError('FORBIDDEN', 'Only Host or Moderator can toggle guest control.');
-        }
-
-        const parsed = RoomBrowserGuestControlSchema.safeParse(rawPayload);
-        if (!parsed.success) return;
-
-        roomBrowserStreamService.setGuestControl(io, room, parsed.data.guestControl);
-      } catch (err: any) {
-        sendError('INTERNAL_ERROR', err?.message || 'Failed to update guest control.');
-      }
-    });
-
-    socket.on('room:browser_input', (rawPayload: unknown) => {
-      try {
-        const { room, participant } = getContext();
-        if (!room || !participant || !room.browserSessionId) return;
-
-        const isPrivileged = canPerformAction(participant.role, 'change_video');
-        if (!isPrivileged && !room.browserGuestControl) {
-          return sendError('FORBIDDEN', 'Guest control is currently disabled by the Host.');
-        }
-
-        const parsed = RoomBrowserInputSchema.safeParse(rawPayload);
-        if (!parsed.success) return;
-
-        roomBrowserStreamService.dispatchInput(room, parsed.data);
-      } catch {
-        // non-fatal input error
-      }
-    });
 
     // 26. ROOM TAB / SCREEN SHARING (SINGLE STREAMER ENFORCEMENT)
     socket.on('room:start_tab_stream', (rawPayload: unknown, callback?: (res: any) => void) => {

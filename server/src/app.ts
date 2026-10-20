@@ -16,10 +16,6 @@ import { serverSentry } from './services/sentry.js';
 import { AuthService, UserProfile } from './services/auth.js';
 import { isAllowedOrigin } from './utils/cors.js';
 import { isClusterEnabled } from './utils/cluster.js';
-import { tempBrowserManager } from './services/tempBrowserManager.js';
-
-
-
 
 const ALLOWED_MOVIE_PROXY_ORIGINS: Record<string, string> = {
   'macdn.aoneroom.com': 'https://macdn.aoneroom.com',
@@ -883,112 +879,6 @@ export function createApp(roomManager: RoomManager, dbService?: DatabaseService,
     }
   });
 
-  // ── Temporary Browser Sandbox Endpoints ──────────────────────────────
-  // POST /api/sessions — Create isolated browser session
-  app.post('/api/sessions', async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { initialUrl, viewport } = req.body || {};
-      const result = await tempBrowserManager.createSession(initialUrl, viewport);
-      return res.status(201).json({ success: true, ...result });
-    } catch (err: any) {
-      const isClientError = err?.message && (err.message.includes('not allowed') || err.message.includes('blocked') || err.message.includes('SSRF') || err.message.includes('limit reached'));
-      return res.status(isClientError ? 400 : 500).json({ success: false, error: err?.message || 'Failed to initialize browser session.' });
-    }
-  });
-
-  // GET /api/sessions/:id — Get session status and navigation metadata
-  app.get('/api/sessions/:id', (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    const session = tempBrowserManager.getSessionPublicInfo(sessionId);
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found or already closed' });
-    }
-
-    return res.json({ success: true, session });
-  });
-
-  // POST /api/sessions/:id/navigate — Navigate to URL
-  app.post('/api/sessions/:id/navigate', async (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    const { url } = req.body || {};
-    if (!url) {
-      return res.status(400).json({ success: false, error: 'URL is required' });
-    }
-
-    try {
-      const session = await tempBrowserManager.navigate(sessionId, url);
-      return res.json({ success: true, session });
-    } catch (err: any) {
-      const isClientError = err?.message && (err.message.includes('not allowed') || err.message.includes('blocked') || err.message.includes('policy') || err.message.includes('SSRF') || err.message.includes('Invalid'));
-      return res.status(isClientError ? 400 : 500).json({ success: false, error: err?.message || 'Navigation failed' });
-    }
-  });
-
-  // DELETE /api/sessions/:id — Delete and wipe session
-  app.delete('/api/sessions/:id', async (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    await tempBrowserManager.closeSession(sessionId);
-    return res.json({ success: true });
-  });
-
-  // POST /api/sessions/:id/print — Print current page to PDF
-  app.post('/api/sessions/:id/print', async (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    try {
-      const result = await tempBrowserManager.printToPdf(sessionId);
-      return res.json({ success: true, ...result });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err?.message || 'Print to PDF failed' });
-    }
-  });
-
-  // GET /api/sessions/:id/downloads — Get downloaded files
-  app.get('/api/sessions/:id/downloads', (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    const files = tempBrowserManager.getDownloadedFiles(sessionId);
-    return res.json({ success: true, files });
-  });
-
-  // GET /api/sessions/:id/downloads/:filename — Download file
-  app.get('/api/sessions/:id/downloads/:filename', (req: Request, res: Response) => {
-    const sessionId = req.params.id;
-    const token = (req.query.token as string) || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    if (!token || !tempBrowserManager.verifyToken(sessionId, token)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized: Invalid session token' });
-    }
-
-    const filePath = tempBrowserManager.getDownloadedFilePath(sessionId, req.params.filename);
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, error: 'File not found' });
-    }
-
-    return res.download(filePath, req.params.filename);
-  });
 
   // Serve static client build if it exists (e.g. monolithic or Render deployment)
   const candidateClientDirs = [

@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && npx playwright install chromium",
+    "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
     "build:client": "npm run build -w client",
@@ -25,7 +25,6 @@
     "express-rate-limit": "^7.5.1",
     "mediasoup": "^3.29.0",
     "pg": "^8.13.3",
-    "playwright": "^1.63.0",
     "socket.io": "^4.8.1",
     "typescript": "^5.7.3",
     "zod": "^3.24.2"

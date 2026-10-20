@@ -61,11 +61,10 @@ const AuthModal = lazy(() => import('../components/AuthModal.js').then(({ AuthMo
 interface HomePageProps {
   userId: string;
   onEnterRoom: (roomId: string, username: string, isCreator?: boolean) => void;
-  onOpenBrowser?: () => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenBrowser, onNotify }) => {
+export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotify }) => {
   // Saved user profile from localStorage
   const savedSettings = (() => {
     try {
@@ -178,32 +177,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
     };
   }, []);
 
-  const [activeTbSession, setActiveTbSession] = useState<{ session: any; token: string } | null>(() => {
-    try {
-      const raw = sessionStorage.getItem('synctube_active_tb_session');
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    const checkActiveSession = () => {
-      try {
-        const raw = sessionStorage.getItem('synctube_active_tb_session');
-        setActiveTbSession(raw ? JSON.parse(raw) : null);
-      } catch {
-        setActiveTbSession(null);
-      }
-    };
-    checkActiveSession();
-    window.addEventListener('focus', checkActiveSession);
-    window.addEventListener('storage', checkActiveSession);
-    return () => {
-      window.removeEventListener('focus', checkActiveSession);
-      window.removeEventListener('storage', checkActiveSession);
-    };
-  }, []);
   // Form inline validation states (form-design & error-handling-ux)
   const [createNameError, setCreateNameError] = useState<string | null>(null);
   const [joinNameError, setJoinNameError] = useState<string | null>(null);
@@ -660,21 +633,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
               <Sparkles size={14} />
               <span>Features</span>
             </button>
-            <button
-              type="button"
-              className="home-nav-pill"
-              onClick={() => {
-                if (onOpenBrowser) {
-                  onOpenBrowser();
-                } else {
-                  window.history.pushState({ path: '/browser' }, '', '/browser');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                }
-              }}
-            >
-              <Globe size={14} />
-              <span>Temporary Browser</span>
-            </button>
           </div>
         </nav>
 
@@ -720,51 +678,13 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
             className="home-nav-extension-btn"
             onClick={() => setIsExtensionModalOpen(true)}
             title="Get SyncTube Chrome Extension v2.0"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 13px',
-              borderRadius: '20px',
-              background: 'rgba(255, 210, 31, 0.12)',
-              border: '1px solid rgba(255, 210, 31, 0.3)',
-              color: 'var(--accent)',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
           >
-            <Download size={13} />
+            <span className="ext-icon-wrap">
+              <Download size={13} />
+            </span>
             <span>Extension</span>
-            <span style={{ fontSize: '9px', background: 'rgba(255, 210, 31, 0.25)', padding: '1px 5px', borderRadius: '8px' }}>v2.0</span>
+            <span className="ext-version-badge">v2.0</span>
           </button>
-
-          <a
-            href="https://github.com/krishna3163/SyncTube"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="home-nav-github-btn"
-            title="View SyncTube GitHub repository"
-            aria-label="View SyncTube GitHub repository"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              color: 'var(--text-secondary, #cbd5e1)',
-              textDecoration: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              flexShrink: 0,
-            }}
-          >
-            <Github size={18} />
-          </a>
 
           <div
             className="home-header-profile"
@@ -779,6 +699,17 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
             </div>
             <ChevronDown size={14} className="home-header-profile-arrow" />
           </div>
+
+          <a
+            href="https://github.com/krishna3163/SyncTube"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="home-nav-github-btn"
+            title="View SyncTube GitHub repository"
+            aria-label="View SyncTube GitHub repository"
+          >
+            <Github size={18} />
+          </a>
         </div>
       </header>
 
@@ -809,93 +740,6 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onOpenB
 
         </div>
 
-        {/* ACTIVE TEMPORARY BROWSER WORKSPACES BANNER */}
-        {activeTbSession && (
-          <div
-            className="active-tb-session-banner"
-            style={{
-              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(129, 140, 248, 0.15))',
-              border: '1px solid rgba(56, 189, 248, 0.35)',
-              borderRadius: '12px',
-              padding: '14px 20px',
-              marginBottom: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  background: 'rgba(56, 189, 248, 0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#38bdf8',
-                }}
-              >
-                <Globe size={20} />
-              </div>
-              <div>
-                <div
-                  style={{
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    color: '#f8fafc',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <span>Temporary Browser Session Active</span>
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      padding: '2px 8px',
-                      borderRadius: '10px',
-                      background: 'rgba(16, 185, 129, 0.2)',
-                      color: '#34d399',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Running
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                  {activeTbSession.session?.currentTitle || activeTbSession.session?.currentUrl || 'Isolated Chromium Sandbox'}
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  sessionStorage.removeItem('synctube_active_tb_session');
-                  setActiveTbSession(null);
-                }}
-                style={{ fontSize: '0.8rem' }}
-              >
-                Discard
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  onOpenBrowser?.();
-                }}
-                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Play size={14} /> Resume Session
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* YOUR PROFILE CHARACTER Banner (temporarily hidden per user request) */}
         {false && (

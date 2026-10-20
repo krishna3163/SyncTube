@@ -17,7 +17,6 @@ interface RoomHeaderProps {
   onOpenDiagnostics?: () => void;
   showDiagnostics?: boolean;
   onOpenAuth?: () => void;
-  onOpenBrowserHub?: () => void;
   currentUser?: UserProfile | null;
   isTheaterMode?: boolean;
   onToggleTheater?: () => void;
@@ -39,7 +38,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   onOpenDiagnostics,
   showDiagnostics = true,
   onOpenAuth,
-  onOpenBrowserHub,
   currentUser,
   isTheaterMode,
   onToggleTheater,
@@ -118,18 +116,6 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           </button>
         )}
 
-        {onOpenBrowserHub && (
-          <button
-            className="btn btn-secondary header-btn"
-            onClick={onOpenBrowserHub}
-            title="Open Direct Stream & Web Media Hub (Direct MP4/m3u8, Screen Share, Netflix, Prime)"
-            aria-label="Direct Stream & Web Media"
-            id="browser-hub-header-btn"
-          >
-            <Film size={14} color="#38bdf8" />
-            <span className="header-btn-text">Direct Stream & Web Media</span>
-          </button>
-        )}
 
         {/* Quick Tools Cluster */}
         <div className="header-tools-group">

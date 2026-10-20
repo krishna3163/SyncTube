@@ -109,7 +109,6 @@ import { BrowserHubModal } from '../components/BrowserHubModal.js';
 import { DirectVideoPlayer } from '../components/DirectVideoPlayer.js';
 import { CinemaStageCard } from '../components/CinemaStageCard.js';
 import { RoomTabPlayer } from '../components/RoomTabPlayer.js';
-import { RoomBrowserPlayer } from '../components/RoomBrowserPlayer.js';
 import { ShareStreamModal } from '../components/ShareStreamModal.js';
 import { ReportStreamModal } from '../components/ReportStreamModal.js';
 import { StreamInfoBar } from '../components/StreamInfoBar.js';
@@ -1687,7 +1686,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         onOpenDiagnostics={featureFlags.syncDiagnostics ? () => setIsDiagnosticsModalOpen(true) : undefined}
         showDiagnostics={featureFlags.syncDiagnostics}
         onOpenAuth={() => setIsAuthModalOpen(true)}
-        onOpenBrowserHub={featureFlags.browserHub ? () => setIsBrowserHubOpen(true) : undefined}
         currentUser={currentUser}
         isTheaterMode={isTheaterMode || featureFlags.theaterMode}
         onToggleTheater={handleToggleTheaterMode}
@@ -1778,22 +1776,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
                 {videoId ? (
                   (() => {
-                    // 1. Temporary Browser Cloud Stream
-                    if (videoId.startsWith('tb:') || syncState?.browserSession?.sessionId) {
-                      const sId = syncState?.browserSession?.sessionId || videoId.replace(/^tb:/, '');
-                      return (
-                        <RoomBrowserPlayer
-                          roomId={roomId}
-                          sessionId={sId}
-                          userRole={userRole}
-                          guestControl={!!syncState?.browserSession?.guestControl}
-                          currentUrl={syncState?.browserSession?.currentUrl}
-                          currentTitle={syncState?.browserSession?.currentTitle}
-                          onNotify={onNotify}
-                          onOpenBrowserHub={() => setIsBrowserHubOpen(true)}
-                        />
-                      );
-                    }
 
                     const detectedMedia = detectClientMedia(videoId);
 

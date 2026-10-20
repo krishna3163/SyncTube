@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HomePage } from './pages/HomePage.js';
 import { RoomPage } from './pages/RoomPage.js';
-import { TemporaryBrowserPage } from './pages/TemporaryBrowserPage.js';
 import { CinematicBackground } from './components/CinematicBackground.js';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { getOrCreateUserId } from './utils/identity.js';
@@ -17,23 +16,12 @@ export function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [username, setUsername] = useState<string>('');
   const [userId] = useState<string>(getOrCreateUserId);
-  const [isBrowserView, setIsBrowserView] = useState<boolean>(() => {
-    return typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/browser';
-  });
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Check URL on load (supports ?room=ABC123, path /ABC123, and path /browser)
+  // Check URL on load (supports ?room=ABC123, path /ABC123)
   useEffect(() => {
     const handleLocation = () => {
-      const isBrowser = window.location.pathname.toLowerCase() === '/browser';
-      setIsBrowserView(isBrowser);
-
-      if (isBrowser) {
-        setRoomId(null);
-        return;
-      }
-
       const params = new URLSearchParams(window.location.search);
       const urlRoom = params.get('room');
 
@@ -82,7 +70,6 @@ export function App() {
   }, []);
 
   const handleEnterRoom = React.useCallback((targetRoomId: string, user: string) => {
-    setIsBrowserView(false);
     setRoomId(targetRoomId);
     setUsername(user);
     sessionStorage.setItem('synctube_username', user);
@@ -92,19 +79,6 @@ export function App() {
   }, []);
 
   const handleLeaveRoom = React.useCallback(() => {
-    setRoomId(null);
-    setIsBrowserView(false);
-    window.history.pushState({ path: '/' }, '', '/');
-  }, []);
-
-  const handleOpenBrowser = React.useCallback(() => {
-    setRoomId(null);
-    setIsBrowserView(true);
-    window.history.pushState({ path: '/browser' }, '', '/browser');
-  }, []);
-
-  const handleBackToHome = React.useCallback(() => {
-    setIsBrowserView(false);
     setRoomId(null);
     window.history.pushState({ path: '/' }, '', '/');
   }, []);
@@ -121,15 +95,9 @@ export function App() {
             onLeaveRoom={handleLeaveRoom}
             onNotify={showToast}
           />
-        ) : isBrowserView ? (
-          <TemporaryBrowserPage
-            onBackToHome={handleBackToHome}
-            onNotify={showToast}
-          />
         ) : (
           <HomePage
             onEnterRoom={handleEnterRoom}
-            onOpenBrowser={handleOpenBrowser}
             onNotify={showToast}
             userId={userId}
           />

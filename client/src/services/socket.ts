@@ -286,37 +286,6 @@ export const emitChatTyping = (isTyping: boolean) => {
   socket.emit('chat:typing', { isTyping });
 };
 
-// ── Room Browser Streaming Emitters ─────────────────────────
-export const emitStartBrowserStream = (
-  sessionId: string,
-  sessionToken: string,
-  guestControl = false,
-  callback?: (res: { success: boolean; sessionId?: string; roomId?: string; error?: string }) => void
-) => {
-  socket.emit('room:start_browser_stream', { sessionId, sessionToken, guestControl }, callback);
-};
-
-export const emitBrowserInput = (input: any) => {
-  socket.emit('room:browser_input', input);
-};
-
-export const emitStopBrowserStream = () => {
-  socket.emit('room:browser_stop_stream', {});
-};
-
-export const emitBrowserSetGuestControl = (guestControl: boolean) => {
-  socket.emit('room:browser_set_guest_control', { guestControl });
-};
-
-export const emitStopCastBrowser = (
-  sessionId: string,
-  sessionToken: string,
-  roomId: string,
-  callback?: (res: { success: boolean }) => void
-) => {
-  socket.emit('browser:stop_cast', { sessionId, sessionToken, roomId }, callback);
-};
-
 export const emitStartTabStream = (
   title?: string,
   callback?: (res: { success: boolean; title?: string; error?: string }) => void
