@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const REPO_URL = 'https://github.com/krishna3163/SyncTube';
-const DEFAULT_URL = 'https://synctube-qg7l.onrender.com';
+const DEFAULT_URL = 'https://synctube-vslw.onrender.com';
 const GITHUB_OUTPUT = process.env.GITHUB_OUTPUT;
 
 function log(msg) {
