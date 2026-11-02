@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ListMusic,
-  Plus,
   Play,
   Trash2,
   ArrowUp,
@@ -180,8 +179,9 @@ export const Playlist: React.FC<PlaylistProps> = ({
               className="btn btn-primary btn-sm upnext-add-btn"
               onClick={onOpenSearch}
               title="Search and add video to playlist"
+              aria-label="Search and add video to playlist"
             >
-              <Plus size={13} />
+              <Search size={13} />
               <span>Add Video</span>
             </button>
           )}
@@ -289,9 +289,10 @@ export const Playlist: React.FC<PlaylistProps> = ({
           <button
             type="submit"
             disabled={!importInput.trim() || isImporting}
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm playlist-import-btn"
             style={{ padding: '0 10px', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
             title="Import all songs/videos from YouTube playlist"
+            aria-label={isImporting ? 'Importing playlist' : 'Import playlist'}
           >
             <Sparkles size={12} />
             <span>{isImporting ? 'Importing...' : 'Import Playlist'}</span>
@@ -308,11 +309,14 @@ export const Playlist: React.FC<PlaylistProps> = ({
             {onOpenSearch && (
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm upnext-empty-add-btn"
                 onClick={onOpenSearch}
                 style={{ marginTop: '0.6rem' }}
+                title="Search and add a video"
+                aria-label="Search and add a video"
               >
-                <Plus size={14} /> Add First Video
+                <Search size={14} />
+                <span>Add First Video</span>
               </button>
             )}
           </div>

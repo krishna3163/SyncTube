@@ -167,7 +167,6 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
       >
         <Clock size={13} className="text-amber-400" />
         <span className="live-clock-time">{timeStr}</span>
-        <span className="clock-format-pill">{is12Hour ? '12h' : '24h'}</span>
       </div>
 
       <div className="study-clock-divider" />
