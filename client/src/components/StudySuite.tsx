@@ -934,12 +934,12 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
             title="Download all captured lecture slides in a single organized PDF (.pdf)"
           >
             <FileDown size={13} />
-            <span>Export PDF {capturedSlides.length > 0 ? `(${capturedSlides.length})` : ''}</span>
+            <span>Export PDF{capturedSlides.length > 0 ? ` (${capturedSlides.length})` : ''}</span>
           </button>
 
           <button
             type="button"
-            className="btn-study-action"
+            className="btn-study-action btn-export-notes"
             onClick={handleExportNotes}
             title="Download Notes & Summary (.md)"
           >

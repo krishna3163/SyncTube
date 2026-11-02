@@ -299,6 +299,7 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                 disabled={joining}
                 className="sidebar-call-join-btn primary"
                 title="Join Voice Chat"
+                aria-label={joining ? 'Connecting to voice chat' : 'Join voice chat'}
               >
                 <Mic size={12} />
                 <span>{joining ? 'Connecting...' : 'Join Call'}</span>
