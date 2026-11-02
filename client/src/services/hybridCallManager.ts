@@ -822,33 +822,49 @@ export class HybridCallManager {
   // MEDIA CONTROL & JOIN / LEAVE
   // ==========================================
 
-  public async joinCall(options: { audio: boolean; video: boolean }): Promise<{ success: boolean; error?: string }> {
+  public async joinCall(options: { audio: boolean; video: boolean }): Promise<{ success: boolean; error?: string; mediaUnavailable?: boolean }> {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (this.isInCall) {
+        return { success: false, error: 'You are already in a call.' };
+      }
+
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        return { success: false, error: 'SECURE_CONTEXT_REQUIRED' };
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
         return { success: false, error: 'MediaDevices API not supported on this browser.' };
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true },
-          // @ts-ignore
-          googEchoCancellation: { ideal: true },
-          // @ts-ignore
-          googAutoGainControl: { ideal: true },
-          // @ts-ignore
-          googNoiseSuppression: { ideal: true },
-          // @ts-ignore
-          googHighpassFilter: { ideal: true },
-        },
-        video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
-      });
+      let stream: MediaStream;
+      let mediaUnavailable = false;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: options.audio ? {
+            echoCancellation: { ideal: true },
+            noiseSuppression: { ideal: true },
+            autoGainControl: { ideal: true },
+            // @ts-ignore
+            googEchoCancellation: { ideal: true },
+            // @ts-ignore
+            googAutoGainControl: { ideal: true },
+            // @ts-ignore
+            googNoiseSuppression: { ideal: true },
+            // @ts-ignore
+            googHighpassFilter: { ideal: true },
+          } : false,
+          video: options.video ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false,
+        });
+      } catch (err) {
+        if ((err as DOMException)?.name !== 'NotFoundError' || typeof MediaStream === 'undefined') throw err;
+        stream = new MediaStream();
+        mediaUnavailable = true;
+      }
 
       this.localStream = stream;
       this.isInCall = true;
-      this.isMuted = !options.audio;
-      this.isCameraOff = !options.video;
+      this.isMuted = !options.audio || stream.getAudioTracks().length === 0;
+      this.isCameraOff = !options.video || stream.getVideoTracks().length === 0;
 
       this.localStream.getAudioTracks().forEach((t) => (t.enabled = !this.isMuted));
       this.localStream.getVideoTracks().forEach((t) => (t.enabled = !this.isCameraOff));
@@ -886,9 +902,12 @@ export class HybridCallManager {
         });
       }
 
-      return { success: true };
+      return { success: true, mediaUnavailable };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Permission denied or media device unavailable.' };
+      const error = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'
+        ? 'PERMISSION_DENIED'
+        : err?.message || 'Permission denied or media device unavailable.';
+      return { success: false, error };
     }
   }
 
@@ -942,8 +961,9 @@ export class HybridCallManager {
     }
   }
 
-  public async toggleCamera(): Promise<boolean> {
+  public async toggleCamera(): Promise<{ isCameraOff: boolean; error?: string }> {
     this.isCameraOff = !this.isCameraOff;
+    let error: string | undefined;
 
     if (!this.isCameraOff && (!this.localStream || this.localStream.getVideoTracks().length === 0)) {
       try {
@@ -957,6 +977,7 @@ export class HybridCallManager {
       } catch (err) {
         console.warn('[HybridCall] Failed to access camera:', err);
         this.isCameraOff = true;
+        error = err instanceof Error ? err.message : 'Could not access camera.';
       }
     } else if (this.localStream) {
       this.localStream.getVideoTracks().forEach((t) => (t.enabled = !this.isCameraOff));
@@ -1030,7 +1051,7 @@ export class HybridCallManager {
       });
     }
 
-    return this.isCameraOff;
+    return { isCameraOff: this.isCameraOff, error };
   }
 
   public hostMuteUser(targetSocketId: string, targetUserId: string): void {

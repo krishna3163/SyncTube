@@ -91,7 +91,10 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
 
   const [pomoMode, setPomoMode] = useState<'focus' | 'break'>('focus');
   const [timeLeft, setTimeLeft] = useState<number>(() => focusMinutes * 60);
+  const [cycleDuration, setCycleDuration] = useState<number>(() => focusMinutes * 60);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [isProgressOpen, setIsProgressOpen] = useState<boolean>(false);
+  const [extensionMinutes, setExtensionMinutes] = useState('10');
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -99,11 +102,11 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
         setIsConfigOpen(false);
       }
     };
-    if (isConfigOpen) {
+    if (isConfigOpen || isProgressOpen) {
       document.addEventListener('mousedown', handleOutside);
     }
     return () => document.removeEventListener('mousedown', handleOutside);
-  }, [isConfigOpen]);
+  }, [isConfigOpen, isProgressOpen]);
 
   useEffect(() => {
     let interval: any = null;
@@ -114,8 +117,10 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
     } else if (isRunning && timeLeft === 0) {
       setIsRunning(false);
       const nextMode = pomoMode === 'focus' ? 'break' : 'focus';
+      const nextDuration = (nextMode === 'focus' ? focusMinutes : breakMinutes) * 60;
       setPomoMode(nextMode);
-      setTimeLeft(nextMode === 'focus' ? focusMinutes * 60 : breakMinutes * 60);
+      setCycleDuration(nextDuration);
+      setTimeLeft(nextDuration);
       if (onPomodoroEnd) {
         onPomodoroEnd(pomoMode);
       }
@@ -127,7 +132,9 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
 
   const resetTimer = () => {
     setIsRunning(false);
-    setTimeLeft(pomoMode === 'focus' ? focusMinutes * 60 : breakMinutes * 60);
+    const duration = (pomoMode === 'focus' ? focusMinutes : breakMinutes) * 60;
+    setCycleDuration(duration);
+    setTimeLeft(duration);
   };
 
   const handleSelectFocusPreset = (mins: number) => {
@@ -138,6 +145,7 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
     } catch {}
     if (pomoMode === 'focus') {
       setIsRunning(false);
+      setCycleDuration(mins * 60);
       setTimeLeft(mins * 60);
     }
     setIsConfigOpen(false);
@@ -157,6 +165,15 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  const addTimerMinutes = (mins: number) => {
+    if (!Number.isFinite(mins) || mins < 1 || mins > 180) return;
+    setTimeLeft((time) => time + mins * 60);
+    setCycleDuration((duration) => duration + mins * 60);
+  };
+
+  const remainingPercent = Math.min(100, Math.max(0, (timeLeft / cycleDuration) * 100));
+  const remainingColor = remainingPercent <= 20 ? 'pomo-low-time' : remainingPercent <= 50 ? 'pomo-mid-time' : '';
+
   return (
     <div className="study-header-clock-container" title="Study Mode Focus Bar">
       {/* 1. Real-time Clock with 12h/24h Click Toggle */}
@@ -173,7 +190,7 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
 
       {/* 2. Pomodoro Focus Timer with Changeable Focus Duration */}
       <div className="study-pomo-wrapper" ref={configRef}>
-        <div className={`study-pomo-badge ${pomoMode === 'focus' ? 'pomo-focus' : 'pomo-break'}`}>
+        <div className={`study-pomo-badge ${pomoMode === 'focus' ? 'pomo-focus' : 'pomo-break'} ${pomoMode === 'focus' ? remainingColor : ''}`}>
           {pomoMode === 'focus' ? (
             <BookOpen size={12} className="text-emerald-400" />
           ) : (
@@ -184,14 +201,28 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
           <button
             type="button"
             className="pomo-duration-edit-btn"
-            onClick={() => setIsConfigOpen((prev) => !prev)}
+            onClick={() => {
+              setIsProgressOpen(false);
+              setIsConfigOpen((prev) => !prev);
+            }}
             title={`Focus time is ${focusMinutes}m. Click to change focus duration.`}
           >
             <span className="pomo-label">{pomoMode === 'focus' ? 'Focus' : 'Break'}:</span>
             <ChevronDown size={10} className="pomo-arrow-icon" />
           </button>
 
-          <span className="pomo-time">{formatPomoTime(timeLeft)}</span>
+          <button
+            type="button"
+            className="pomo-time pomo-progress-toggle"
+            onClick={() => {
+              setIsConfigOpen(false);
+              setIsProgressOpen((prev) => !prev);
+            }}
+            aria-expanded={isProgressOpen}
+            aria-label={`Show ${pomoMode} timer progress`}
+          >
+            {formatPomoTime(timeLeft)}
+          </button>
 
           <button
             type="button"
@@ -213,6 +244,53 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
             <RotateCcw size={11} />
           </button>
         </div>
+
+        {isProgressOpen && (
+          <div className="pomo-progress-popover animate-scale-in">
+            <div className="pomo-progress-heading">
+              <span>{pomoMode === 'focus' ? 'Focus progress' : 'Break progress'}</span>
+              <strong>{Math.round(100 - remainingPercent)}% complete</strong>
+            </div>
+            <div
+              className={`pomo-progress-track ${pomoMode === 'focus' ? remainingColor : 'pomo-break-progress'}`}
+              role="progressbar"
+              aria-label={`${pomoMode} timer progress`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(100 - remainingPercent)}
+            >
+              <span style={{ width: `${100 - remainingPercent}%` }} />
+            </div>
+            <div className="pomo-add-time-row">
+              <button type="button" className="preset-btn" onClick={() => addTimerMinutes(5)}>
+                +5 min
+              </button>
+              <form
+                className="pomo-input-row"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const minutes = Number(extensionMinutes);
+                  if (Number.isInteger(minutes) && minutes >= 1 && minutes <= 180) {
+                    addTimerMinutes(minutes);
+                    setExtensionMinutes('10');
+                  }
+                }}
+              >
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  step="1"
+                  required
+                  value={extensionMinutes}
+                  onChange={(e) => setExtensionMinutes(e.target.value)}
+                  aria-label="Minutes to add"
+                />
+                <button type="submit" className="btn-apply-mins">Add min</button>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* Changeable Focus Duration Popover */}
         {isConfigOpen && (

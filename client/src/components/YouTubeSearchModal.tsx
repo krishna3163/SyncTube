@@ -383,6 +383,7 @@ export const YouTubeSearchModal: React.FC<YouTubeSearchModalProps> = ({
               <span className="origin-kbd-pill" title="Press Enter to search">↵ Enter</span>
             </div>
             <button type="submit" className="btn btn-primary yt-search-submit-btn" disabled={isLoading || !query.trim()}>
+              <Search size={14} />
               Search
             </button>
           </form>

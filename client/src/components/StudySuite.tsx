@@ -25,6 +25,8 @@ import {
   Pencil,
   FileDown,
   X,
+  ListMusic,
+  Search,
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { StudyNote, StudyTodo, StudyRule, StudyPlan, CapturedSlide } from '../types/study.js';
@@ -37,9 +39,12 @@ import {
   RoomPoll,
   ActivityItem,
   RoomSettingsData,
+  ActionRequestType,
 } from '../types.js';
 import { formatTime } from '../utils/youtube.js';
 import { SyncAI } from './SyncAI.js';
+import { Playlist } from './Playlist.js';
+import { YouTubeSearchModal } from './YouTubeSearchModal.js';
 
 export interface StudySuiteProps {
   roomId: string;
@@ -69,23 +74,39 @@ export interface StudySuiteProps {
   onSetPlaybackSpeed?: (speed: number) => void;
   onSetVolume?: (volume: number) => void;
   onToggleMute?: () => void;
-  onPlayVideo?: (videoId: string, title?: string) => void;
+  onPlayVideo: (videoId: string, title?: string) => void;
   onNextVideo?: () => void;
-  onAddToPlaylist?: (
+  onAddToPlaylist: (
     videoId: string,
     title?: string,
     duration?: string,
     channel?: string,
     thumbnail?: string
   ) => void;
-  onMoveToTop?: (itemId: string) => void;
+  onMoveToTop: (itemId: string) => void;
   onShufflePlaylist?: () => void;
   onClearPlaylist?: () => void;
+  onImportPlaylist: (url: string) => Promise<void> | void;
+  onPlayPlaylistItem: (videoId: string, itemId: string) => void;
+  onRemovePlaylistItem: (itemId: string) => void;
+  onReorderPlaylist: (fromIndex: number, toIndex: number) => void;
+  onVotePlaylistItem: (itemId: string) => void;
+  onRequestAction: (
+    type: ActionRequestType,
+    data?: { time?: number; videoId?: string; title?: string; duration?: string; channel?: string }
+  ) => void;
+  onAddPlaylistBatch: (items: {
+    videoId: string;
+    title?: string;
+    duration?: string;
+    channel?: string;
+    thumbnail?: string;
+  }[]) => void;
   onSendMessage?: (text: string) => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-type StudyTab = 'notes' | 'tasks' | 'planner' | 'docs' | 'ai';
+type StudyTab = 'notes' | 'tasks' | 'planner' | 'docs' | 'ai' | 'playlist' | 'search';
 
 const DEFAULT_RULES: StudyRule[] = [
   {
@@ -170,6 +191,13 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
   onMoveToTop,
   onShufflePlaylist,
   onClearPlaylist,
+  onImportPlaylist,
+  onPlayPlaylistItem,
+  onRemovePlaylistItem,
+  onReorderPlaylist,
+  onVotePlaylistItem,
+  onRequestAction,
+  onAddPlaylistBatch,
   onSendMessage,
   onNotify,
 }) => {
@@ -187,7 +215,8 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
   });
 
   const [noteInput, setNoteInput] = useState<string>('');
-  const [noteTag, setNoteTag] = useState<StudyNote['tag']>('concept');
+  const [noteTag, setNoteTag] = useState<NonNullable<StudyNote['tag']>>('concept');
+  const [customNoteTag, setCustomNoteTag] = useState('');
 
   useEffect(() => {
     try {
@@ -431,6 +460,11 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
   const handleAddNote = () => {
     const text = noteInput.trim();
     if (!text) return;
+    const customTag = customNoteTag.trim();
+    if (noteTag === 'other' && !customTag) {
+      onNotify('Enter a label for the Other note tag.', 'error');
+      return;
+    }
 
     const newNote: StudyNote = {
       id: `note-${Date.now()}`,
@@ -441,10 +475,12 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
       text,
       createdAt: Date.now(),
       tag: noteTag,
+      customTag: noteTag === 'other' ? customTag : undefined,
     };
 
     setNotes((prev) => [newNote, ...prev]);
     setNoteInput('');
+    setCustomNoteTag('');
     onNotify(`📝 Note saved at [${newNote.timestampFormatted}]!`, 'success');
   };
 
@@ -474,7 +510,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
     if (notes.length > 0) {
       content += `## 📝 Timestamped Lecture Notes\n\n`;
       notes.forEach((n, idx) => {
-        content += `### ${idx + 1}. [${n.timestampFormatted}] ${n.videoTitle} (${n.tag?.toUpperCase() || 'NOTE'})\n`;
+        content += `### ${idx + 1}. [${n.timestampFormatted}] ${n.videoTitle} (${n.customTag || n.tag?.toUpperCase() || 'NOTE'})\n`;
         content += `${n.text}\n\n`;
       });
     }
@@ -511,7 +547,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
       return;
     }
     const text = notes
-      .map((n) => `[${n.timestampFormatted}] ${n.videoTitle} (${n.tag?.toUpperCase()}):\n${n.text}\n`)
+      .map((n) => `[${n.timestampFormatted}] ${n.videoTitle} (${n.customTag || n.tag?.toUpperCase()}):\n${n.text}\n`)
       .join('\n');
     navigator.clipboard.writeText(text);
     onNotify('📋 Copied all notes to clipboard!', 'success');
@@ -953,6 +989,8 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
       <div className="study-subtabs-bar" role="tablist">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'notes'}
           className={`study-subtab-btn ${activeTab === 'notes' ? 'active' : ''}`}
           onClick={() => setActiveTab('notes')}
         >
@@ -961,6 +999,8 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'tasks'}
           className={`study-subtab-btn ${activeTab === 'tasks' ? 'active' : ''}`}
           onClick={() => setActiveTab('tasks')}
         >
@@ -969,6 +1009,8 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'planner'}
           className={`study-subtab-btn ${activeTab === 'planner' ? 'active' : ''}`}
           onClick={() => setActiveTab('planner')}
         >
@@ -977,6 +1019,8 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'docs'}
           className={`study-subtab-btn ${activeTab === 'docs' ? 'active' : ''}`}
           onClick={() => setActiveTab('docs')}
         >
@@ -985,6 +1029,28 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'playlist'}
+          className={`study-subtab-btn ${activeTab === 'playlist' ? 'active' : ''}`}
+          onClick={() => setActiveTab('playlist')}
+        >
+          <ListMusic size={13} />
+          <span>Playlist</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'search'}
+          className={`study-subtab-btn ${activeTab === 'search' ? 'active' : ''}`}
+          onClick={() => setActiveTab('search')}
+        >
+          <Search size={13} />
+          <span>Video Search</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'ai'}
           className={`study-subtab-btn ${activeTab === 'ai' ? 'active' : ''}`}
           onClick={() => setActiveTab('ai')}
         >
@@ -994,7 +1060,41 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
       </div>
 
       {/* Tab Panels */}
-      <div className="study-suite-content">
+      <div className={`study-suite-content ${activeTab === 'playlist' ? 'study-suite-playlist-content' : ''} ${activeTab === 'search' ? 'study-suite-search-content' : ''}`}>
+
+        {activeTab === 'playlist' && (
+          <Playlist
+            playlist={playlist}
+            currentVideoId={currentVideoId || ''}
+            userRole={currentUserRole}
+            currentUserId={currentUserId}
+            onAddToPlaylist={onAddToPlaylist}
+            onImportPlaylist={onImportPlaylist}
+            onPlayItem={onPlayPlaylistItem}
+            onNextVideo={onNextVideo}
+            onRemoveItem={onRemovePlaylistItem}
+            onMoveToTop={onMoveToTop}
+            onReorderPlaylist={onReorderPlaylist}
+            onVoteItem={onVotePlaylistItem}
+            onShuffle={onShufflePlaylist}
+            onClear={onClearPlaylist}
+            onOpenSearch={() => setActiveTab('search')}
+          />
+        )}
+
+        {activeTab === 'search' && (
+          <YouTubeSearchModal
+            isOpen
+            inline
+            onClose={() => setActiveTab('notes')}
+            userRole={currentUserRole}
+            onPlayVideo={onPlayVideo}
+            onAddToPlaylist={onAddToPlaylist}
+            onAddPlaylistBatch={onAddPlaylistBatch}
+            onRequestAction={onRequestAction}
+            onNotify={onNotify}
+          />
+        )}
 
         {/* 1. NOTES TAB */}
         {activeTab === 'notes' && (
@@ -1007,27 +1107,30 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
                   <span>{formatTime(currentPlaybackTime)}</span>
                 </span>
 
-                <button
-                  type="button"
-                  className="btn-note-snap"
-                  onClick={handleTakeScreenshot}
-                  title="Capture lecture video slide screenshot at current timestamp"
-                >
-                  <Camera size={11} className="text-amber-400" />
-                  <span>Capture Slide</span>
-                </button>
-
                 <select
                   className="note-tag-select"
                   value={noteTag}
-                  onChange={(e) => setNoteTag(e.target.value as any)}
+                  onChange={(e) => setNoteTag(e.target.value as NonNullable<StudyNote['tag']>)}
                 >
                   <option value="concept">💡 Concept</option>
                   <option value="formula">⚡ Formula</option>
                   <option value="doubt">❓ Question / Doubt</option>
                   <option value="general">📝 General</option>
+                  <option value="other">✏️ Other</option>
                 </select>
               </div>
+
+              {noteTag === 'other' && (
+                <input
+                  type="text"
+                  className="note-other-tag-input"
+                  value={customNoteTag}
+                  onChange={(e) => setCustomNoteTag(e.target.value)}
+                  placeholder="Enter your own tag..."
+                  aria-label="Custom note tag"
+                  maxLength={40}
+                />
+              )}
 
               <textarea
                 className="study-note-textarea"
@@ -1093,7 +1196,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
                       </button>
 
                       <span className={`note-tag-pill tag-${note.tag || 'general'}`}>
-                        {note.tag || 'concept'}
+                        {note.tag === 'other' ? note.customTag || 'Other' : note.tag || 'concept'}
                       </span>
 
                       <div className="note-actions-group">
@@ -1649,4 +1752,3 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
     </div>
   );
 };
-

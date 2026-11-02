@@ -118,7 +118,14 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
     setJoining(false);
     if (res.success) {
       setInCall(true);
-      onNotify?.(withVideo ? 'Connected to Voice & Video chat! 🎙️📹' : 'Connected to Voice chat! 🎙️', 'success');
+      onNotify?.(
+        res.mediaUnavailable
+          ? 'You joined the call, but no microphone or camera was found on this device.'
+          : withVideo
+            ? 'Connected to Voice & Video chat! 🎙️📹'
+            : 'Connected to Voice chat! 🎙️',
+        res.mediaUnavailable ? 'info' : 'success',
+      );
     } else {
       if (res.error === 'SECURE_CONTEXT_REQUIRED') {
         onNotify?.('Microphone requires HTTPS or localhost! On LAN IP (http://...), open chrome://flags/#unsafely-treat-insecure-origin-as-secure to allow.', 'error');
@@ -147,8 +154,9 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
   };
 
   const handleToggleCamera = async () => {
-    const off = await webrtcCallManager.toggleCamera();
-    setIsCameraOff(off);
+    const result = await webrtcCallManager.toggleCamera();
+    setIsCameraOff(result.isCameraOff);
+    if (result.error) onNotify?.(result.error, 'error');
   };
 
   const handleToggleScreenShare = async () => {
@@ -298,18 +306,19 @@ export const SidebarCallStage: React.FC<SidebarCallStageProps> = ({
                 onClick={() => handleJoinCall(false)}
                 disabled={joining}
                 className="sidebar-call-join-btn primary"
-                title="Join Voice Chat"
-                aria-label={joining ? 'Connecting to voice chat' : 'Join voice chat'}
+                title={callCount === 0 ? 'Start Voice Chat' : 'Join Voice Chat'}
+                aria-label={joining ? 'Connecting to voice chat' : callCount === 0 ? 'Start voice chat' : 'Join voice chat'}
               >
                 <Mic size={12} />
-                <span>{joining ? 'Connecting...' : 'Join Call'}</span>
+                <span>{joining ? 'Connecting...' : callCount === 0 ? 'Start Call' : 'Join Call'}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleJoinCall(true)}
                 disabled={joining}
                 className="sidebar-call-join-video-btn"
-                title="Join with Camera"
+                title={callCount === 0 ? 'Start Call with Camera' : 'Join with Camera'}
+                aria-label={callCount === 0 ? 'Start call with camera' : 'Join with Camera'}
               >
                 <Video size={12} />
               </button>

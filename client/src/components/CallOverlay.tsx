@@ -22,6 +22,7 @@ interface CallOverlayProps {
   currentUsername: string;
   currentUserAvatarId?: string;
   userRole?: string;
+  isBlockedFromCall?: boolean;
   onNotify?: (message: string, type: 'info' | 'success' | 'error') => void;
 }
 
@@ -30,6 +31,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   currentUsername,
   currentUserAvatarId,
   userRole,
+  isBlockedFromCall = false,
   onNotify,
 }) => {
   const [inCall, setInCall] = useState(false);
@@ -96,13 +98,25 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   }, [currentUserId, currentUsername, currentUserAvatarId, onNotify]);
 
   const handleJoinCall = async (withVideo = false) => {
+    if (isBlockedFromCall) {
+      onNotify?.('You have been restricted from joining voice & video calls by the room host.', 'error');
+      return;
+    }
+
     setJoining(true);
     const res = await webrtcCallManager.joinCall({ audio: true, video: withVideo });
     setJoining(false);
     if (res.success) {
       setInCall(true);
       if (onNotify) {
-        onNotify(withVideo ? 'Connected to Voice & Video chat! 🎙️📹' : 'Connected to Voice chat! 🎙️', 'success');
+        onNotify(
+          res.mediaUnavailable
+            ? 'You joined the call, but no microphone or camera was found on this device.'
+            : withVideo
+              ? 'Connected to Voice & Video chat! 🎙️📹'
+              : 'Connected to Voice chat! 🎙️',
+          res.mediaUnavailable ? 'info' : 'success',
+        );
       }
     } else if (onNotify) {
       if (res.error === 'SECURE_CONTEXT_REQUIRED') {
@@ -127,8 +141,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   };
 
   const handleToggleCamera = async () => {
-    const off = await webrtcCallManager.toggleCamera();
-    setIsCameraOff(off);
+    const result = await webrtcCallManager.toggleCamera();
+    setIsCameraOff(result.isCameraOff);
+    if (result.error) onNotify?.(result.error, 'error');
   };
 
   // Screen share triggers main theater stage stream
@@ -203,6 +218,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
           onClick={() => handleJoinCall(false)}
           disabled={joining}
           className="btn btn-sm"
+          aria-label={joining ? 'Connecting to voice chat' : callCount === 0 ? 'Start voice chat' : 'Join voice chat'}
           style={{
             background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
             color: '#fff',
@@ -217,14 +233,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             cursor: 'pointer',
           }}
         >
-          <Mic size={13} /> {joining ? 'Joining...' : 'Join Call'}
+          <Mic size={13} /> {joining ? 'Joining...' : callCount === 0 ? 'Start Call' : 'Join Call'}
         </button>
 
         <button
           type="button"
           onClick={() => handleJoinCall(true)}
           disabled={joining}
-          title="Join with Camera"
+          title={callCount === 0 ? 'Start Call with Camera' : 'Join with Camera'}
+          aria-label={callCount === 0 ? 'Start call with camera' : 'Join with Camera'}
           className="btn btn-sm"
           style={{
             background: 'rgba(255, 255, 255, 0.08)',

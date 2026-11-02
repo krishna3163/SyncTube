@@ -8,7 +8,8 @@ export interface StudyNote {
   timestampFormatted: string;
   text: string;
   createdAt: number;
-  tag?: 'concept' | 'doubt' | 'formula' | 'general';
+  tag?: 'concept' | 'doubt' | 'formula' | 'general' | 'other';
+  customTag?: string;
   screenshotDataUrl?: string;
 }
 
@@ -63,4 +64,3 @@ export interface StudyPlan {
   pomodoroMinutes: number;
   breakMinutes: number;
 }
-

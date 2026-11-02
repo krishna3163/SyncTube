@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HybridCallManager } from '../services/hybridCallManager.js';
+import { CallParticipantState, HybridCallManager } from '../services/hybridCallManager.js';
 
 describe('HybridCallManager (Client)', () => {
   let manager: HybridCallManager;
@@ -59,13 +59,63 @@ describe('HybridCallManager (Client)', () => {
   });
 
   it('joins a call and sets up local participant state', async () => {
+    let localParticipant: CallParticipantState | undefined;
+    let activeParticipants: CallParticipantState[] = [];
+    const unsubscribe = manager.subscribePeers((participants) => {
+      activeParticipants = participants;
+      localParticipant = participants.find((participant) => participant.isLocal);
+    });
+
     const res = await manager.joinCall({ audio: true, video: true });
     expect(res.success).toBe(true);
     expect(manager.isCallActive()).toBe(true);
+    expect(activeParticipants).toHaveLength(1);
+    expect(manager.getTopologyMode()).toBe('idle');
+    expect(localParticipant?.stream?.getAudioTracks()).toHaveLength(1);
+    expect(localParticipant?.stream?.getVideoTracks()).toHaveLength(1);
+    expect(localParticipant?.isCameraOff).toBe(false);
 
     const mediaState = manager.getLocalMediaState();
     expect(mediaState.isMuted).toBe(false);
     expect(mediaState.isCameraOff).toBe(false);
+
+    expect(await manager.toggleCamera()).toEqual({ isCameraOff: true });
+    expect(manager.getLocalMediaState().isCameraOff).toBe(true);
+    expect(await manager.toggleCamera()).toEqual({ isCameraOff: false });
+    expect(manager.getLocalMediaState().isCameraOff).toBe(false);
+    unsubscribe();
+  });
+
+  it('reports denied microphone or camera permissions clearly', async () => {
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(
+      new DOMException('Permission denied', 'NotAllowedError'),
+    );
+
+    const result = await manager.joinCall({ audio: true, video: true });
+
+    expect(result).toEqual({ success: false, error: 'PERMISSION_DENIED' });
+    expect(manager.isCallActive()).toBe(false);
+  });
+
+  it('joins the call without media devices and marks mic and camera unavailable', async () => {
+    vi.stubGlobal('MediaStream', class {
+      getTracks() { return []; }
+      getAudioTracks() { return []; }
+      getVideoTracks() { return []; }
+    });
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(
+      new DOMException('Requested device not found', 'NotFoundError'),
+    );
+
+    const result = await manager.joinCall({ audio: true, video: true });
+
+    expect(result).toEqual({ success: true, mediaUnavailable: true });
+    expect(manager.isCallActive()).toBe(true);
+    expect(manager.getLocalMediaState()).toEqual({
+      isMuted: true,
+      isCameraOff: true,
+      isScreenSharing: false,
+    });
   });
 
   it('toggles microphone mute state correctly', async () => {

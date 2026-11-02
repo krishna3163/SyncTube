@@ -1125,7 +1125,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
     const onCallJoinApproved = (data: { approvedBy?: string }) => {
       onNotifyRef.current(`🎉 ${data.approvedBy || 'Host'} approved your request to join the call! Connecting...`, 'success');
-      webrtcCallManager.joinCall({ audio: true, video: false });
+      void webrtcCallManager.joinCall({ audio: true, video: false }).then((result) => {
+        if (result.mediaUnavailable) {
+          onNotifyRef.current('You joined the call, but no microphone was found on this device.', 'info');
+        } else if (!result.success) {
+          onNotifyRef.current(result.error || 'Could not join the call.', 'error');
+        }
+      });
     };
     const onCallJoinDenied = (data: { deniedBy?: string }) => {
       onNotifyRef.current(`❌ ${data.deniedBy || 'Host'} declined your request to join the call.`, 'error');
@@ -2197,6 +2203,13 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onMoveToTop={handleMoveToTop}
               onShufflePlaylist={handleShufflePlaylist}
               onClearPlaylist={handleClearPlaylist}
+              onImportPlaylist={handleImportPlaylist}
+              onPlayPlaylistItem={handlePlayItem}
+              onRemovePlaylistItem={handleRemovePlaylistItem}
+              onReorderPlaylist={handleReorderPlaylist}
+              onVotePlaylistItem={handleVoteItem}
+              onRequestAction={handleRequestAction}
+              onAddPlaylistBatch={(items) => emitPlaylistAddBatch(items)}
               onSendMessage={handleSendChat}
               onNotify={onNotify}
             />
@@ -2230,6 +2243,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                     type="button"
                     role="tab"
                     aria-selected={isActive}
+                    aria-label={tab.label}
+                    title={tab.label}
                     className={`sidebar-tab-btn motion-tab-pill ${isActive ? 'active' : ''}`}
                     onClick={() => setActiveSidebarTab(tab.id)}
                   >
@@ -2528,6 +2543,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           currentUsername={username}
           currentUserAvatarId={participants.find((p) => p.userId === userId)?.avatarId}
           userRole={userRole}
+          isBlockedFromCall={participants.find((p) => p.userId === userId)?.isBlockedFromCall}
           onNotify={onNotify}
         />
       )}

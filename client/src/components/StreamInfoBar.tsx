@@ -332,8 +332,9 @@ export const StreamInfoBar: React.FC<StreamInfoBarProps> = ({
             className={`btn btn-secondary stream-action-btn like-btn ${localHasLiked ? 'has-liked' : ''}`}
             onClick={handleLike}
             title={localHasLiked ? 'Unlike' : 'Like Stream'}
+            aria-pressed={localHasLiked}
           >
-            <ThumbsUp size={15} color={localHasLiked ? 'var(--accent)' : 'inherit'} />
+            <ThumbsUp size={15} color={localHasLiked ? 'var(--accent)' : 'currentColor'} />
             <span className="stream-action-count">{localLikes}</span>
           </button>
 

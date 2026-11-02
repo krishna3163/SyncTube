@@ -10,14 +10,9 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Music,
-  FastForward,
   Play,
   Pause,
   MessageSquare,
-  Shield,
-  Crown,
-  User,
   Zap,
 } from 'lucide-react';
 import {
@@ -38,7 +33,6 @@ import {
   sendPromptToGemini,
   RoomContextSnapshot,
 } from '../services/geminiService.js';
-import { formatTime } from '../utils/youtube.js';
 
 export interface SyncAIProps {
   roomId: string;
@@ -392,25 +386,29 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
         </div>
 
         <div className="sync-ai-actions">
-          <button
-            type="button"
-            className="sync-ai-btn-ghost"
-            onClick={() => {
-              setKeyInput(apiKey);
-              setIsEditingKey(!isEditingKey);
-            }}
-            title={apiKey ? 'Change Google AI Studio API Key' : 'Enter API Key'}
-          >
-            <Key size={14} />
-          </button>
-          <button
-            type="button"
-            className="sync-ai-btn-ghost"
-            onClick={handleClearChat}
-            title="Clear AI Conversation"
-          >
-            <Trash2 size={14} />
-          </button>
+          {apiKey && (
+            <>
+              <button
+                type="button"
+                className="sync-ai-btn-ghost"
+                onClick={() => {
+                  setKeyInput(apiKey);
+                  setIsEditingKey(!isEditingKey);
+                }}
+                title="Change Google AI Studio API Key"
+              >
+                <Key size={14} />
+              </button>
+              <button
+                type="button"
+                className="sync-ai-btn-ghost"
+                onClick={handleClearChat}
+                title="Clear AI Conversation"
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -518,144 +516,125 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
         </div>
       )}
 
-      {/* Real-time Room Snapshot Bar */}
-      <div className="sync-ai-room-context-bar">
-        <div className="context-item" title={currentVideoTitle || 'No active video'}>
-          <Music size={12} />
-          <span className="context-text">
-            {currentVideoTitle ? currentVideoTitle.slice(0, 22) + (currentVideoTitle.length > 22 ? '…' : '') : 'No video'}
-          </span>
-        </div>
-        <div className="context-item">
-          <FastForward size={12} />
-          <span>{formatTime(currentPlaybackTime)} / {formatTime(currentVideoDuration || 0)} ({playbackSpeed}x)</span>
-        </div>
-        <div className="context-item role-badge">
-          {currentUserRole === 'HOST' ? <Crown size={12} color="#ffd21f" /> : currentUserRole === 'MODERATOR' ? <Shield size={12} color="#60a5fa" /> : <User size={12} />}
-          <span>{currentUserRole}</span>
-        </div>
-      </div>
+      {apiKey && (
+        <>
+          {/* Quick Suggestion Chips */}
+          <div className="sync-ai-chips-scroll">
+            {DEFAULT_SUGGESTIONS.map((s, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="sync-ai-chip"
+                onClick={() => handleSendMessage(s.prompt)}
+                disabled={isLoading}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
 
-      {/* Quick Suggestion Chips */}
-      <div className="sync-ai-chips-scroll">
-        {DEFAULT_SUGGESTIONS.map((s, idx) => (
-          <button
-            key={idx}
-            type="button"
-            className="sync-ai-chip"
-            onClick={() => handleSendMessage(s.prompt)}
-            disabled={isLoading}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+          {/* Chat Messages Feed */}
+          <div className="sync-ai-feed">
+            {messages.map((msg) => {
+              const isUser = msg.sender === 'user';
+              return (
+                <div key={msg.id} className={`sync-ai-message-row ${isUser ? 'user-row' : 'ai-row'}`}>
+                  {!isUser && (
+                    <div className="sync-ai-avatar">
+                      <Sparkles size={14} color="#ffd21f" />
+                    </div>
+                  )}
 
-      {/* Chat Messages Feed */}
-      <div className="sync-ai-feed">
-        {messages.map((msg) => {
-          const isUser = msg.sender === 'user';
-          return (
-            <div key={msg.id} className={`sync-ai-message-row ${isUser ? 'user-row' : 'ai-row'}`}>
-              {!isUser && (
+                  <div className={`sync-ai-bubble ${isUser ? 'user-bubble' : 'ai-bubble'}`}>
+                    <div className="sync-ai-bubble-header">
+                      <span className="bubble-sender">{isUser ? currentUsername : 'SyncAI'}</span>
+                      <span className="bubble-time">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="sync-ai-bubble-content">
+                      {msg.text.split('\n').map((line, i) => (
+                        <p key={i}>{line}</p>
+                      ))}
+                    </div>
+
+                    {/* Render Executed Actions */}
+                    {msg.actions && msg.actions.length > 0 && (
+                      <div className="sync-ai-actions-executed">
+                        {msg.actions.map((act, i) => (
+                          <div
+                            key={i}
+                            className={`action-pill ${act.success ? 'action-success' : 'action-failed'}`}
+                          >
+                            {act.success ? (
+                              <CheckCircle2 size={13} color="#34d399" />
+                            ) : (
+                              <AlertCircle size={13} color="#f87171" />
+                            )}
+                            <span>{act.description}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {isUser && (
+                    <div className="sync-ai-user-avatar">
+                      <AnimeAvatarDisplay
+                        username={currentUsername}
+                        avatarId={currentUserAvatarId}
+                        size={28}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {isLoading && (
+              <div className="sync-ai-message-row ai-row">
                 <div className="sync-ai-avatar">
                   <Sparkles size={14} color="#ffd21f" />
                 </div>
-              )}
-
-              <div className={`sync-ai-bubble ${isUser ? 'user-bubble' : 'ai-bubble'}`}>
-                <div className="sync-ai-bubble-header">
-                  <span className="bubble-sender">{isUser ? currentUsername : 'SyncAI'}</span>
-                  <span className="bubble-time">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                <div className="sync-ai-bubble ai-bubble loading-bubble">
+                  <Loader2 size={16} className="sync-ai-spin" />
+                  <span>SyncAI is analyzing room & executing actions...</span>
                 </div>
-
-                <div className="sync-ai-bubble-content">
-                  {msg.text.split('\n').map((line, i) => (
-                    <p key={i}>{line}</p>
-                  ))}
-                </div>
-
-                {/* Render Executed Actions */}
-                {msg.actions && msg.actions.length > 0 && (
-                  <div className="sync-ai-actions-executed">
-                    {msg.actions.map((act, i) => (
-                      <div
-                        key={i}
-                        className={`action-pill ${act.success ? 'action-success' : 'action-failed'}`}
-                      >
-                        {act.success ? (
-                          <CheckCircle2 size={13} color="#34d399" />
-                        ) : (
-                          <AlertCircle size={13} color="#f87171" />
-                        )}
-                        <span>{act.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
+            )}
 
-              {isUser && (
-                <div className="sync-ai-user-avatar">
-                  <AnimeAvatarDisplay
-                    username={currentUsername}
-                    avatarId={currentUserAvatarId}
-                    size={28}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {isLoading && (
-          <div className="sync-ai-message-row ai-row">
-            <div className="sync-ai-avatar">
-              <Sparkles size={14} color="#ffd21f" />
-            </div>
-            <div className="sync-ai-bubble ai-bubble loading-bubble">
-              <Loader2 size={16} className="sync-ai-spin" />
-              <span>SyncAI is analyzing room & executing actions...</span>
-            </div>
+            <div ref={messagesEndRef} />
           </div>
-        )}
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Form */}
-      <form
-        className="sync-ai-input-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendMessage();
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder={
-            apiKey
-              ? 'Ask SyncAI to play songs, summarize chat, adjust speed...'
-              : 'Add API key above to start chatting...'
-          }
-          value={inputPrompt}
-          onChange={(e) => setInputPrompt(e.target.value)}
-          disabled={isLoading}
-          className="sync-ai-input"
-        />
-        <button
-          type="submit"
-          disabled={!inputPrompt.trim() || isLoading}
-          className="sync-ai-send-btn"
-          title="Send message to SyncAI"
-        >
-          {isLoading ? <Loader2 size={15} className="sync-ai-spin" /> : <Send size={15} />}
-        </button>
-      </form>
+          {/* Input Form */}
+          <form
+            className="sync-ai-input-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Ask SyncAI to play songs, summarize chat, adjust speed..."
+              value={inputPrompt}
+              onChange={(e) => setInputPrompt(e.target.value)}
+              disabled={isLoading}
+              className="sync-ai-input"
+            />
+            <button
+              type="submit"
+              disabled={!inputPrompt.trim() || isLoading}
+              className="sync-ai-send-btn"
+              title="Send message to SyncAI"
+            >
+              {isLoading ? <Loader2 size={15} className="sync-ai-spin" /> : <Send size={15} />}
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 };
-
