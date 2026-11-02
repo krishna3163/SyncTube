@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal, Volume2, BookOpen, PartyPopper } from 'lucide-react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal, Volume2, BookOpen, PartyPopper, ChevronDown } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
 import { RoomExperienceMode } from '../types/study.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
@@ -158,25 +158,39 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <div className="header-mode-dropdown-wrap" ref={modeMenuRef}>
             <button
               type="button"
-              className={`btn-icon header-tool-btn header-mode-btn ${roomMode === 'study' ? 'mode-study-active' : roomMode === 'cinema' ? 'mode-cinema-active' : ''}`}
+              className={`header-mode-pill-btn ${roomMode === 'study' ? 'mode-study-active' : roomMode === 'cinema' ? 'mode-cinema-active' : 'mode-party-active'}`}
               onClick={(e) => {
                 e.stopPropagation();
-                setIsModeMenuOpen(!isModeMenuOpen);
+                setIsModeMenuOpen((prev) => !prev);
               }}
               title={`Mode: ${roomMode === 'study' ? 'Study & Focus' : roomMode === 'cinema' ? 'Cinema Theater' : 'Party Mode (Default)'}. Click to switch.`}
-              aria-label="Toggle Mode Menu"
+              aria-label="Toggle Watch Party Mode Menu"
             >
               {roomMode === 'study' ? (
-                <BookOpen size={15} color="#34d399" />
+                <>
+                  <BookOpen size={14} color="#34d399" />
+                  <span className="mode-pill-label">Study</span>
+                </>
               ) : roomMode === 'cinema' ? (
-                <Clapperboard size={15} color="#ffd21f" />
+                <>
+                  <Clapperboard size={14} color="#ffd21f" />
+                  <span className="mode-pill-label">Cinema</span>
+                </>
               ) : (
-                <PartyPopper size={15} color="#f59e0b" />
+                <>
+                  <PartyPopper size={14} color="#f59e0b" />
+                  <span className="mode-pill-label">Party</span>
+                </>
               )}
+              <ChevronDown size={12} className={`mode-pill-arrow ${isModeMenuOpen ? 'arrow-open' : ''}`} />
             </button>
 
             {isModeMenuOpen && (
-              <div className="header-mode-menu-dropdown animate-scale-in">
+              <div
+                className="header-mode-menu-dropdown animate-scale-in"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="mode-menu-header">
                   <span>Room Mode</span>
                 </div>
@@ -184,13 +198,14 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
                 <button
                   type="button"
                   className={`mode-menu-option ${roomMode === 'party' ? 'active' : ''}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onSelectRoomMode?.('party');
                     setIsModeMenuOpen(false);
                     onNotify('🍿 Switched to Party Mode (Full Social Watch Party)', 'info');
                   }}
                 >
-                  <PartyPopper size={15} className="text-amber-400" />
+                  <PartyPopper size={16} className="text-amber-400" />
                   <div className="mode-option-text">
                     <strong>Party Mode (Default)</strong>
                     <span>Live chat, queue, video call, and reactions</span>
@@ -200,13 +215,14 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
                 <button
                   type="button"
                   className={`mode-menu-option ${roomMode === 'cinema' ? 'active' : ''}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onSelectRoomMode?.('cinema');
                     setIsModeMenuOpen(false);
                     onNotify('🎬 Switched to Cinema Mode (Dim Lights & Theater Stage)', 'info');
                   }}
                 >
-                  <Clapperboard size={15} className="text-yellow-400" />
+                  <Clapperboard size={16} className="text-yellow-400" />
                   <div className="mode-option-text">
                     <strong>Cinema Theater Mode</strong>
                     <span>Dim background lights & maximized player</span>
@@ -216,13 +232,14 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
                 <button
                   type="button"
                   className={`mode-menu-option ${roomMode === 'study' ? 'active' : ''}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onSelectRoomMode?.('study');
                     setIsModeMenuOpen(false);
                     onNotify('📚 Switched to Study Mode: Distractions hidden, focus tools enabled!', 'success');
                   }}
                 >
-                  <BookOpen size={15} className="text-emerald-400" />
+                  <BookOpen size={16} className="text-emerald-400" />
                   <div className="mode-option-text">
                     <strong>Study & Focus Mode</strong>
                     <span>Focus clock, timestamped notes, tasks & PDF</span>

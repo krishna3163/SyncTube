@@ -388,7 +388,7 @@ body {
   top: 0;
   z-index: 50;
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow: visible !important;
   gap: 0.75rem;
 }
 
@@ -563,7 +563,7 @@ body {
   .app-header .header-actions {
     min-width: 0;
     gap: 0.25rem;
-    overflow: hidden;
+    overflow: visible !important;
   }
 
   .app-header .header-btn {
@@ -4844,7 +4844,7 @@ body {
 
   .app-header .header-actions {
     min-width: 0;
-    overflow: hidden;
+    overflow: visible !important;
     gap: 0.3rem;
   }
 
@@ -7784,17 +7784,29 @@ body.is-dragging-reaction iframe {
   box-shadow: 0 0 80px rgba(0, 0, 0, 0.9), 0 0 120px rgba(255, 210, 31, 0.12);
 }
 
-.theater-dimmed .sidebar,
-.theater-dimmed .app-header {
+.theater-dimmed .sidebar {
   opacity: 0.25;
   filter: grayscale(0.5);
   transition: opacity 0.3s ease, filter 0.3s ease;
 }
 
-.theater-dimmed .sidebar:hover,
-.theater-dimmed .app-header:hover {
+.theater-dimmed .sidebar:hover {
   opacity: 0.95;
   filter: none;
+}
+
+.theater-dimmed .app-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 860 !important;
+  opacity: 0.5;
+  filter: grayscale(0.2);
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.theater-dimmed .app-header:hover {
+  opacity: 1 !important;
+  filter: none !important;
 }
 
 /* ============================================================
@@ -8990,7 +9002,7 @@ body.is-dragging-reaction iframe {
 
   .app-header .header-actions {
     min-width: 0;
-    overflow: hidden;
+    overflow: visible !important;
     gap: 0.3rem;
   }
 
@@ -17973,36 +17985,76 @@ body.is-dragging-reaction iframe {
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 100;
 }
 
-.header-mode-btn {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+.header-mode-pill-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.38rem !important;
+  padding: 0.28rem 0.65rem !important;
+  border-radius: 9999px !important;
+  font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-.header-mode-btn.mode-study-active {
-  background: rgba(16, 185, 129, 0.18) !important;
-  border-color: rgba(16, 185, 129, 0.45) !important;
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3) !important;
+.header-mode-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-1px) !important;
 }
 
-.header-mode-btn.mode-cinema-active {
-  background: rgba(255, 210, 31, 0.18) !important;
+.header-mode-pill-btn.mode-party-active {
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  color: #fde68a !important;
+}
+
+.header-mode-pill-btn.mode-cinema-active {
+  background: rgba(255, 210, 31, 0.14) !important;
   border-color: rgba(255, 210, 31, 0.45) !important;
-  box-shadow: 0 0 12px rgba(255, 210, 31, 0.3) !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 10px rgba(255, 210, 31, 0.2) !important;
+}
+
+.header-mode-pill-btn.mode-study-active {
+  background: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  color: #a7f3d0 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2) !important;
+}
+
+.mode-pill-label {
+  letter-spacing: 0.02em;
+}
+
+.mode-pill-arrow {
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.mode-pill-arrow.arrow-open {
+  transform: rotate(180deg);
 }
 
 .header-mode-menu-dropdown {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 250px;
-  background: rgba(15, 23, 42, 0.96);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: 260px;
+  background: rgba(13, 17, 23, 0.98) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 12px;
   padding: 0.45rem;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  z-index: 1000;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  z-index: 999999 !important;
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
