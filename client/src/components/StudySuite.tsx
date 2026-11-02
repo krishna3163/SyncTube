@@ -22,20 +22,66 @@ import {
   Coffee,
   Droplet,
   Camera,
+  Pencil,
+  FileDown,
+  X,
 } from 'lucide-react';
-import { StudyNote, StudyTodo, StudyRule, StudyPlan } from '../types/study.js';
+import { jsPDF } from 'jspdf';
+import { StudyNote, StudyTodo, StudyRule, StudyPlan, CapturedSlide } from '../types/study.js';
+import {
+  Role,
+  PlayState,
+  PlaylistItem,
+  ChatMessage,
+  ParticipantPublic,
+  RoomPoll,
+  ActivityItem,
+  RoomSettingsData,
+} from '../types.js';
 import { formatTime } from '../utils/youtube.js';
+import { SyncAI } from './SyncAI.js';
 
 export interface StudySuiteProps {
   roomId: string;
   roomName?: string;
+  roomSettings?: RoomSettingsData;
+  currentUserId?: string;
+  currentUsername?: string;
+  currentUserRole?: Role;
+  currentUserAvatarId?: string;
+  participants?: ParticipantPublic[];
   currentVideoId?: string;
   currentVideoTitle?: string;
   currentPlaybackTime: number;
   duration?: number;
-  onSeek: (seconds: number) => void;
+  playState?: PlayState;
+  playbackSpeed?: number;
+  volume?: number;
+  isMuted?: boolean;
+  playlist?: PlaylistItem[];
+  watchHistory?: { videoId: string; title: string; timestamp: number }[];
+  chatMessages?: ChatMessage[];
+  activePoll?: RoomPoll | null;
+  recentActivities?: ActivityItem[];
+  onPlay?: () => void;
   onPause?: () => void;
-  onOpenSyncAI?: (prompt?: string) => void;
+  onSeek: (seconds: number) => void;
+  onSetPlaybackSpeed?: (speed: number) => void;
+  onSetVolume?: (volume: number) => void;
+  onToggleMute?: () => void;
+  onPlayVideo?: (videoId: string, title?: string) => void;
+  onNextVideo?: () => void;
+  onAddToPlaylist?: (
+    videoId: string,
+    title?: string,
+    duration?: string,
+    channel?: string,
+    thumbnail?: string
+  ) => void;
+  onMoveToTop?: (itemId: string) => void;
+  onShufflePlaylist?: () => void;
+  onClearPlaylist?: () => void;
+  onSendMessage?: (text: string) => void;
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
@@ -74,13 +120,57 @@ const DEFAULT_RULES: StudyRule[] = [
 export const StudySuite: React.FC<StudySuiteProps> = ({
   roomId,
   roomName,
+  roomSettings = {
+    name: 'SyncTube Cinema',
+    theme: 'midnight',
+    accentColor: '#ffd21f',
+    permissions: {
+      add: { viewer: true, moderator: true, owner: true },
+      remove: { viewer: false, moderator: true, owner: true },
+      move: { viewer: false, moderator: true, owner: true },
+      playPause: { viewer: true, moderator: true, owner: true },
+      seek: { viewer: true, moderator: true, owner: true },
+      skip: { viewer: false, moderator: true, owner: true },
+      chatSend: { viewer: true, moderator: true, owner: true },
+      chatDelete: { viewer: false, moderator: true, owner: true },
+      ban: { viewer: false, moderator: true, owner: true },
+    },
+    autoRemovePlayed: false,
+    shuffle: false,
+    allowLinks: true,
+    allowEmbeddedLinks: true,
+  },
+  currentUserId = 'anonymous',
+  currentUsername = 'Guest',
+  currentUserRole = 'PARTICIPANT',
+  currentUserAvatarId,
+  participants = [],
   currentVideoId,
   currentVideoTitle,
   currentPlaybackTime,
-  duration,
-  onSeek,
+  duration = 0,
+  playState = 'paused',
+  playbackSpeed = 1,
+  volume = 100,
+  isMuted = false,
+  playlist = [],
+  watchHistory = [],
+  chatMessages = [],
+  activePoll = null,
+  recentActivities = [],
+  onPlay,
   onPause,
-  onOpenSyncAI,
+  onSeek,
+  onSetPlaybackSpeed,
+  onSetVolume,
+  onToggleMute,
+  onPlayVideo,
+  onNextVideo,
+  onAddToPlaylist,
+  onMoveToTop,
+  onShufflePlaylist,
+  onClearPlaylist,
+  onSendMessage,
   onNotify,
 }) => {
   const [activeTab, setActiveTab] = useState<StudyTab>('notes');
@@ -128,7 +218,33 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
     } catch {}
   }, [tasks, storageTasksKey]);
 
-  // 3. AUTOMATION RULES STATE
+  // 3. CAPTURED SLIDES / SCREENSHOTS STATE
+  const storageSlidesKey = `synctube_slides_${roomId}`;
+  const [capturedSlides, setCapturedSlides] = useState<CapturedSlide[]>(() => {
+    try {
+      const saved = localStorage.getItem(storageSlidesKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageSlidesKey, JSON.stringify(capturedSlides));
+    } catch {}
+  }, [capturedSlides, storageSlidesKey]);
+
+  // 4. INLINE EDITING STATES (Notes & Tasks)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState<string>('');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskText, setEditingTaskText] = useState<string>('');
+
+  // 5. EMBEDDED STUDY AI PROMPT STATE
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string>('');
+
+  // 6. AUTOMATION RULES STATE
   const storageRulesKey = `synctube_rules_${roomId}`;
   const [rules, setRules] = useState<StudyRule[]>(() => {
     try {
@@ -430,81 +546,357 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
     }
   };
 
-  // Lecture Screenshot Handler
-  const handleTakeScreenshot = () => {
+  // Handlers for Note Editing
+  const handleStartEditNote = (note: StudyNote) => {
+    setEditingNoteId(note.id);
+    setEditingNoteText(note.text);
+  };
+
+  const handleSaveEditNote = (id: string) => {
+    if (!editingNoteText.trim()) return;
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, text: editingNoteText.trim() } : n))
+    );
+    setEditingNoteId(null);
+    onNotify('✏️ Note updated successfully!', 'success');
+  };
+
+  const handleCancelEditNote = () => {
+    setEditingNoteId(null);
+  };
+
+  // Handlers for Task Editing
+  const handleStartEditTask = (task: StudyTodo) => {
+    setEditingTaskId(task.id);
+    setEditingTaskText(task.text);
+  };
+
+  const handleSaveEditTask = (id: string) => {
+    if (!editingTaskText.trim()) return;
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, text: editingTaskText.trim() } : t))
+    );
+    setEditingTaskId(null);
+    onNotify('✏️ Task updated successfully!', 'success');
+  };
+
+  const handleCancelEditTask = () => {
+    setEditingTaskId(null);
+  };
+
+  // Helper to save slide and trigger download
+  const saveAndRecordSlide = (dataUrl: string, fileName: string, timestampFormatted: string, currentSeconds: number) => {
+    const slideId = `slide-${Date.now()}`;
+    const newSlide: CapturedSlide = {
+      id: slideId,
+      timestampSeconds: currentSeconds,
+      timestampFormatted,
+      videoTitle: currentVideoTitle || 'Lecture Video',
+      dataUrl,
+      createdAt: Date.now(),
+      noteText: `Lecture slide captured at ${timestampFormatted}`,
+    };
+
+    setCapturedSlides((prev) => [...prev, newSlide]);
+
+    // Download PNG immediately
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Also record in notes
+    setNotes((prev) => [
+      {
+        id: `note-${Date.now()}`,
+        videoId: currentVideoId || 'general',
+        videoTitle: currentVideoTitle || 'Lecture Video',
+        timestampSeconds: currentSeconds,
+        timestampFormatted,
+        text: `📸 [Lecture Slide]: Captured at ${timestampFormatted}`,
+        createdAt: Date.now(),
+        tag: 'formula',
+        screenshotDataUrl: dataUrl,
+      },
+      ...prev,
+    ]);
+
+    onNotify(`📸 Saved slide at [${timestampFormatted}]! Added to PDF export queue.`, 'success');
+  };
+
+  // Lecture Screenshot Handler (Live frame capture from active video or current tab)
+  const handleTakeScreenshot = async () => {
     const timestampFormatted = formatTime(currentPlaybackTime);
+    const currentSeconds = Math.floor(currentPlaybackTime);
     const cleanTitle = (currentVideoTitle || 'Lecture_Slide').replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `${cleanTitle}_${timestampFormatted.replace(':', 'm')}s.png`;
 
-    // 1. Check for HTML5 <video> element on stage
-    const videoEl = document.querySelector('video') as HTMLVideoElement | null;
-    if (videoEl && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+    // 1. Try foreground HTML5 <video> elements first (DirectVideoPlayer, RoomTabPlayer, WebRTC)
+    const videoElements = Array.from(document.querySelectorAll('video')) as HTMLVideoElement[];
+    const activeVideo = videoElements.find((v) => v.videoWidth > 0 && v.readyState >= 2);
+
+    if (activeVideo && activeVideo.videoWidth > 0 && activeVideo.videoHeight > 0) {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = videoEl.videoWidth;
-        canvas.height = videoEl.videoHeight;
+        canvas.width = activeVideo.videoWidth;
+        canvas.height = activeVideo.videoHeight;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-          ctx.fillRect(canvas.width - 200, canvas.height - 40, 190, 32);
+          ctx.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
+
+          // Watermark timestamp badge
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.fillRect(canvas.width - 220, canvas.height - 44, 210, 36);
           ctx.font = 'bold 16px sans-serif';
           ctx.fillStyle = '#ffd21f';
-          ctx.fillText(`⏱️ ${timestampFormatted}`, canvas.width - 180, canvas.height - 18);
+          ctx.fillText(`⏱️ ${timestampFormatted}`, canvas.width - 195, canvas.height - 20);
 
           const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = fileName;
-          link.click();
-          onNotify(`📸 Saved lecture screenshot at [${timestampFormatted}]!`, 'success');
-
-          setNotes((prev) => [
-            {
-              id: `note-${Date.now()}`,
-              videoId: currentVideoId || 'general',
-              videoTitle: currentVideoTitle || 'Lecture Video',
-              timestampSeconds: Math.floor(currentPlaybackTime),
-              timestampFormatted,
-              text: `📸 [Screenshot Slide]: Captured at ${timestampFormatted}`,
-              createdAt: Date.now(),
-              tag: 'formula',
-            },
-            ...prev,
-          ]);
+          saveAndRecordSlide(dataUrl, fileName, timestampFormatted, currentSeconds);
           return;
         }
       } catch (e) {
-        console.warn('Canvas capture fallback', e);
+        console.warn('Direct video canvas draw failed', e);
       }
     }
 
-    // 2. YouTube Fallback: If YouTube iframe is used, capture high-res frame from HQ CDN
-    if (currentVideoId && !currentVideoId.startsWith('tb:') && !currentVideoId.startsWith('tab:')) {
-      const link = document.createElement('a');
-      link.href = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
-      link.target = '_blank';
-      link.download = fileName;
-      link.click();
+    // 2. YouTube / Cross-Origin Iframe: Capture the exact lecture frame via getDisplayMedia
+    if (navigator.mediaDevices?.getDisplayMedia) {
+      try {
+        onNotify('📷 Taking screenshot of playing lecture frame...', 'info');
 
-      setNotes((prev) => [
-        {
-          id: `note-${Date.now()}`,
-          videoId: currentVideoId,
-          videoTitle: currentVideoTitle || 'Lecture Video',
-          timestampSeconds: Math.floor(currentPlaybackTime),
-          timestampFormatted,
-          text: `📸 [Lecture Frame Snapshot]: Captured at ${timestampFormatted}`,
-          createdAt: Date.now(),
-          tag: 'concept',
-        },
-        ...prev,
-      ]);
-      onNotify(`📸 Lecture screenshot captured at [${timestampFormatted}]!`, 'success');
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: 'browser',
+          },
+          // @ts-ignore
+          preferCurrentTab: true,
+          selfBrowserSurface: 'include',
+          surfaceSwitching: 'include',
+          systemAudio: 'exclude',
+        });
+
+        const track = stream.getVideoTracks()[0];
+        const captureVideo = document.createElement('video');
+        captureVideo.srcObject = stream;
+        captureVideo.muted = true;
+        await captureVideo.play();
+
+        // Wait a brief moment for the frame to decode
+        await new Promise((res) => setTimeout(res, 140));
+
+        const canvas = document.createElement('canvas');
+        const stageEl = (document.querySelector('.stage-card') || document.querySelector('.video-wrapper')) as HTMLElement | null;
+
+        if (stageEl) {
+          const rect = stageEl.getBoundingClientRect();
+          const scaleX = captureVideo.videoWidth / window.innerWidth;
+          const scaleY = captureVideo.videoHeight / window.innerHeight;
+
+          const sx = Math.max(0, rect.left * scaleX);
+          const sy = Math.max(0, rect.top * scaleY);
+          const sw = Math.min(captureVideo.videoWidth - sx, rect.width * scaleX);
+          const sh = Math.min(captureVideo.videoHeight - sy, rect.height * scaleY);
+
+          canvas.width = Math.max(100, sw);
+          canvas.height = Math.max(100, sh);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(captureVideo, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          }
+        } else {
+          canvas.width = captureVideo.videoWidth;
+          canvas.height = captureVideo.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(captureVideo, 0, 0);
+          }
+        }
+
+        // Add Watermark Timestamp Badge
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          ctx.fillRect(canvas.width - 220, canvas.height - 44, 210, 36);
+          ctx.font = 'bold 16px sans-serif';
+          ctx.fillStyle = '#ffd21f';
+          ctx.fillText(`⏱️ ${timestampFormatted}`, canvas.width - 195, canvas.height - 20);
+        }
+
+        // Stop all media tracks immediately
+        track.stop();
+        stream.getTracks().forEach((t) => t.stop());
+
+        const dataUrl = canvas.toDataURL('image/png');
+        saveAndRecordSlide(dataUrl, fileName, timestampFormatted, currentSeconds);
+        return;
+      } catch (err) {
+        console.warn('Tab capture was dismissed or not permitted', err);
+        onNotify('Screenshot cancelled. Timestamp bookmarked in notes.', 'info');
+      }
+    }
+
+    // 3. Fallback: Save timestamped bookmark
+    setNotes((prev) => [
+      {
+        id: `note-${Date.now()}`,
+        videoId: currentVideoId || 'general',
+        videoTitle: currentVideoTitle || 'Lecture Video',
+        timestampSeconds: currentSeconds,
+        timestampFormatted,
+        text: `⏱️ [Lecture Bookmark]: Timestamp ${timestampFormatted}`,
+        createdAt: Date.now(),
+        tag: 'concept',
+      },
+      ...prev,
+    ]);
+    onNotify(`⏱️ Bookmark saved at [${timestampFormatted}] in notes!`, 'info');
+  };
+
+  // Export all captured slides into a single organized PDF document
+  const handleExportSlidesPdf = () => {
+    // Gather all slides from capturedSlides state and notes with screenshotDataUrl
+    const slidesToExport: CapturedSlide[] = [...capturedSlides];
+
+    notes.forEach((n) => {
+      if (n.screenshotDataUrl && !slidesToExport.some((s) => s.dataUrl === n.screenshotDataUrl)) {
+        slidesToExport.push({
+          id: n.id,
+          timestampSeconds: n.timestampSeconds,
+          timestampFormatted: n.timestampFormatted,
+          videoTitle: n.videoTitle,
+          dataUrl: n.screenshotDataUrl,
+          createdAt: n.createdAt,
+          noteText: n.text,
+        });
+      }
+    });
+
+    if (slidesToExport.length === 0) {
+      onNotify('ℹ️ No lecture slides captured yet. Click "Screenshot" during the lecture to capture slides!', 'info');
       return;
     }
 
-    onNotify(`📸 Snapshot recorded at [${timestampFormatted}] in notes!`, 'info');
+    try {
+      // Sort slides chronologically by video timestamp
+      const sortedSlides = slidesToExport.sort((a, b) => a.timestampSeconds - b.timestampSeconds);
+
+      // Create Landscape A4 PDF (841.89 x 595.28 pt)
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'pt',
+        format: 'a4',
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      // Cover Page
+      pdf.setFillColor(11, 15, 23);
+      pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(26);
+      pdf.setTextColor(255, 210, 31);
+      pdf.text('SyncTube Study Suite', 40, 80);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(16);
+      pdf.setTextColor(241, 245, 249);
+      pdf.text('Lecture Slides & Study Notes Summary', 40, 110);
+
+      pdf.setFontSize(11);
+      pdf.setTextColor(148, 163, 184);
+      pdf.text(`📺 Lecture: ${currentVideoTitle || 'Study Session Video'}`, 40, 145);
+      pdf.text(`🏛️ Room: ${roomName || roomId}`, 40, 165);
+      pdf.text(`📅 Date: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 40, 185);
+      pdf.text(`📸 Total Slides Captured: ${sortedSlides.length}`, 40, 205);
+      pdf.text(`📝 Total Notes: ${notes.length}`, 40, 225);
+
+      pdf.setDrawColor(255, 210, 31);
+      pdf.setLineWidth(1.5);
+      pdf.line(40, 245, pageWidth - 40, 245);
+
+      const completedTasks = tasks.filter((t) => t.completed);
+      if (tasks.length > 0) {
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(13);
+        pdf.setTextColor(52, 211, 153);
+        pdf.text(`✅ Study Goals Completed (${completedTasks.length}/${tasks.length})`, 40, 275);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(203, 213, 225);
+        tasks.slice(0, 6).forEach((task, idx) => {
+          pdf.text(`[${task.completed ? 'x' : ' '}]  ${task.text}`, 50, 298 + idx * 18);
+        });
+      }
+
+      // Add each slide chronologically
+      sortedSlides.forEach((slide, index) => {
+        pdf.addPage('a4', 'landscape');
+
+        // Background
+        pdf.setFillColor(15, 20, 28);
+        pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+        // Top Header Bar
+        pdf.setFillColor(25, 33, 44);
+        pdf.rect(0, 0, pageWidth, 42, 'F');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(13);
+        pdf.setTextColor(255, 210, 31);
+        pdf.text(`Slide ${index + 1} of ${sortedSlides.length}`, 30, 26);
+
+        // Timestamp pill
+        pdf.setFillColor(16, 185, 129);
+        pdf.roundedRect(pageWidth - 140, 10, 110, 22, 4, 4, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`⏱️ ${slide.timestampFormatted}`, pageWidth - 128, 25);
+
+        // Draw Slide Image
+        const imgX = 30;
+        const imgY = 52;
+        const imgWidth = pageWidth - 60;
+        const imgHeight = pageHeight - 135;
+
+        try {
+          pdf.addImage(slide.dataUrl, 'PNG', imgX, imgY, imgWidth, imgHeight, undefined, 'FAST');
+        } catch (imgErr) {
+          console.warn('Failed to add slide image to PDF', imgErr);
+        }
+
+        // Bottom Note Section
+        pdf.setFillColor(20, 26, 36);
+        pdf.rect(30, pageHeight - 75, pageWidth - 60, 55, 'F');
+        pdf.setDrawColor(255, 255, 255, 0.1);
+        pdf.rect(30, pageHeight - 75, pageWidth - 60, 55, 'S');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(148, 163, 184);
+        pdf.text(`📝 Notes taken at [${slide.timestampFormatted}]:`, 40, pageHeight - 57);
+
+        const relatedNote = notes.find((n) => Math.abs(n.timestampSeconds - slide.timestampSeconds) <= 20) || { text: slide.noteText || 'Lecture slide captured during focus study session.' };
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.setTextColor(241, 245, 249);
+        const splitText = pdf.splitTextToSize(relatedNote.text || 'Lecture slide captured during focus study session.', pageWidth - 90);
+        pdf.text(splitText.slice(0, 2), 40, pageHeight - 38);
+      });
+
+      const cleanTitle = (currentVideoTitle || 'Lecture').replace(/[^a-zA-Z0-9_-]/g, '_');
+      pdf.save(`SyncTube_${cleanTitle}_Slides_${roomId}.pdf`);
+      onNotify(`📥 Exported ${sortedSlides.length} lecture slides to PDF!`, 'success');
+    } catch (err: any) {
+      console.error('PDF export failed', err);
+      onNotify('Failed to generate PDF: ' + (err?.message || 'Unknown error'), 'error');
+    }
   };
 
   const completedTasksCount = tasks.filter((t) => t.completed).length;
@@ -533,6 +925,16 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
           >
             <Camera size={13} className="text-amber-400" />
             <span>Screenshot</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-study-action btn-export-pdf"
+            onClick={handleExportSlidesPdf}
+            title="Download all captured lecture slides in a single organized PDF (.pdf)"
+          >
+            <FileDown size={13} />
+            <span>Export PDF {capturedSlides.length > 0 ? `(${capturedSlides.length})` : ''}</span>
           </button>
 
           <button
@@ -694,20 +1096,74 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
                         {note.tag || 'concept'}
                       </span>
 
-                      <button
-                        type="button"
-                        className="note-delete-btn"
-                        onClick={() => handleDeleteNote(note.id)}
-                        title="Delete note"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      <div className="note-actions-group">
+                        <button
+                          type="button"
+                          className="btn-note-edit"
+                          onClick={() => handleStartEditNote(note)}
+                          title="Edit note"
+                        >
+                          <Pencil size={12} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="note-delete-btn"
+                          onClick={() => handleDeleteNote(note.id)}
+                          title="Delete note"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
 
-                    <p className="note-item-text">{note.text}</p>
-                    <span className="note-item-video-title" title={note.videoTitle}>
-                      📺 {note.videoTitle}
-                    </span>
+                    {editingNoteId === note.id ? (
+                      <div className="note-edit-container animate-scale-in">
+                        <textarea
+                          className="note-edit-textarea"
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                              handleSaveEditNote(note.id);
+                            }
+                            if (e.key === 'Escape') handleCancelEditNote();
+                          }}
+                          autoFocus
+                          placeholder="Edit your note..."
+                        />
+                        <div className="note-edit-buttons">
+                          <button
+                            type="button"
+                            className="btn-save-edit"
+                            onClick={() => handleSaveEditNote(note.id)}
+                          >
+                            <Check size={12} />
+                            <span>Save</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-cancel-edit"
+                            onClick={handleCancelEditNote}
+                          >
+                            <X size={12} />
+                            <span>Cancel</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="note-item-text">{note.text}</p>
+                        {note.screenshotDataUrl && (
+                          <div className="note-screenshot-preview" title="Captured lecture slide">
+                            <img src={note.screenshotDataUrl} alt="Slide preview" />
+                          </div>
+                        )}
+                        <span className="note-item-video-title" title={note.videoTitle}>
+                          📺 {note.videoTitle}
+                        </span>
+                      </>
+                    )}
                   </div>
                 ))
               )}
@@ -769,17 +1225,64 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
                     >
                       {task.completed && <Check size={12} />}
                     </button>
-                    <span className="task-text" onClick={() => handleToggleTask(task.id)}>
-                      {task.text}
-                    </span>
-                    <button
-                      type="button"
-                      className="task-delete-btn"
-                      onClick={() => handleDeleteTask(task.id)}
-                      title="Delete task"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+
+                    {editingTaskId === task.id ? (
+                      <div className="task-edit-container animate-scale-in">
+                        <input
+                          type="text"
+                          className="task-edit-input"
+                          value={editingTaskText}
+                          onChange={(e) => setEditingTaskText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditTask(task.id);
+                            if (e.key === 'Escape') handleCancelEditTask();
+                          }}
+                          autoFocus
+                        />
+                        <div className="task-edit-buttons">
+                          <button
+                            type="button"
+                            className="btn-save-edit"
+                            onClick={() => handleSaveEditTask(task.id)}
+                            title="Save task"
+                          >
+                            <Check size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-cancel-edit"
+                            onClick={handleCancelEditTask}
+                            title="Cancel"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="task-text" onClick={() => handleToggleTask(task.id)}>
+                          {task.text}
+                        </span>
+                        <div className="task-actions-group">
+                          <button
+                            type="button"
+                            className="btn-task-edit"
+                            onClick={() => handleStartEditTask(task)}
+                            title="Edit task"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="task-delete-btn"
+                            onClick={() => handleDeleteTask(task.id)}
+                            title="Delete task"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))
               )}
@@ -1050,7 +1553,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
           </div>
         )}
 
-        {/* 5. STUDY AI TAB */}
+        {/* 5. STUDY AI TAB (Embedded Directly Inside Study Suite Without Leaving Study Mode) */}
         {activeTab === 'ai' && (
           <div className="study-ai-panel">
             <div className="study-ai-hero">
@@ -1063,7 +1566,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
               <button
                 type="button"
                 className="study-ai-btn"
-                onClick={() => onOpenSyncAI?.('Summarise this lecture in 3 clear bullet points')}
+                onClick={() => setAiInitialPrompt('Summarise this lecture in 3 clear bullet points')}
               >
                 <span>💡 Summarise Lecture</span>
                 <p>Get a quick 3-point takeaway of the current lecture video.</p>
@@ -1072,7 +1575,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
               <button
                 type="button"
                 className="study-ai-btn"
-                onClick={() => onOpenSyncAI?.(`Explain the concept or formula shown around ${formatTime(currentPlaybackTime)} in simple terms`)}
+                onClick={() => setAiInitialPrompt(`Explain the concept or formula shown around ${formatTime(currentPlaybackTime)} in simple terms`)}
               >
                 <span>⚡ Explain Concept at [{formatTime(currentPlaybackTime)}]</span>
                 <p>Understand the tricky point at the current video timestamp.</p>
@@ -1081,7 +1584,7 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
               <button
                 type="button"
                 className="study-ai-btn"
-                onClick={() => onOpenSyncAI?.('Generate 3 practice multiple choice questions based on this video topic to test my knowledge')}
+                onClick={() => setAiInitialPrompt('Generate 3 practice multiple choice questions based on this video topic to test my knowledge')}
               >
                 <span>❓ Quiz Me on This Topic</span>
                 <p>Generate 3 test questions to verify your understanding.</p>
@@ -1090,11 +1593,54 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
               <button
                 type="button"
                 className="study-ai-btn"
-                onClick={() => onOpenSyncAI?.('What should I study or watch next after this lecture to master the subject?')}
+                onClick={() => setAiInitialPrompt('What should I study or watch next after this lecture to master the subject?')}
               >
                 <span>🗺️ What to Study Next?</span>
                 <p>Get recommendations on next topics or prerequisite review.</p>
               </button>
+            </div>
+
+            {/* Embedded SyncAI Interface */}
+            <div className="study-ai-chat-wrap">
+              <SyncAI
+                roomId={roomId}
+                roomName={roomName || roomSettings.name}
+                roomSettings={roomSettings}
+                currentUserId={currentUserId}
+                currentUsername={currentUsername}
+                currentUserRole={currentUserRole}
+                currentUserAvatarId={currentUserAvatarId}
+                participants={participants}
+                currentVideoId={currentVideoId}
+                currentVideoTitle={currentVideoTitle}
+                currentVideoDuration={duration}
+                currentPlaybackTime={currentPlaybackTime}
+                playState={playState}
+                playbackSpeed={playbackSpeed}
+                volume={volume}
+                isMuted={isMuted}
+                playlist={playlist}
+                watchHistory={watchHistory}
+                chatMessages={chatMessages}
+                activePoll={activePoll}
+                recentActivities={recentActivities}
+                onPlay={onPlay || (() => {})}
+                onPause={onPause || (() => {})}
+                onSeek={onSeek}
+                onSetPlaybackSpeed={onSetPlaybackSpeed || (() => {})}
+                onSetVolume={onSetVolume || (() => {})}
+                onToggleMute={onToggleMute || (() => {})}
+                onPlayVideo={onPlayVideo || (() => {})}
+                onNextVideo={onNextVideo || (() => {})}
+                onAddToPlaylist={onAddToPlaylist || (() => {})}
+                onMoveToTop={onMoveToTop}
+                onShufflePlaylist={onShufflePlaylist || (() => {})}
+                onClearPlaylist={onClearPlaylist || (() => {})}
+                onSendMessage={onSendMessage || (() => {})}
+                onNotify={onNotify}
+                initialPrompt={aiInitialPrompt}
+                onClearInitialPrompt={() => setAiInitialPrompt('')}
+              />
             </div>
           </div>
         )}

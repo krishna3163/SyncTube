@@ -113,9 +113,9 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
         )}
       </div>
 
-      {/* Center: Live Sync Quality Badge */}
+      {/* Center: Live Sync Quality Badge (Hidden in Study Mode) */}
       <div className="header-sync-center">
-        {showDiagnostics && (
+        {showDiagnostics && roomMode !== 'study' && (
           <SyncQualityBadge
             syncState={syncState}
             currentTime={currentTime}
@@ -127,7 +127,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
       {/* Right Cluster: Primary Invite + Media Actions + Quick Tools */}
       <div className="header-actions">
-        {onOpenInvite && (
+        {onOpenInvite && roomMode !== 'study' && (
           <button
             className="btn btn-primary header-invite-btn"
             onClick={onOpenInvite}

@@ -9,6 +9,17 @@ export interface StudyNote {
   text: string;
   createdAt: number;
   tag?: 'concept' | 'doubt' | 'formula' | 'general';
+  screenshotDataUrl?: string;
+}
+
+export interface CapturedSlide {
+  id: string;
+  timestampSeconds: number;
+  timestampFormatted: string;
+  videoTitle: string;
+  dataUrl: string;
+  createdAt: number;
+  noteText?: string;
 }
 
 export interface StudyTodo {

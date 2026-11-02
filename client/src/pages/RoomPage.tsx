@@ -1715,7 +1715,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   return (
     <div
-      className={`room-page-root ${isTheaterMode ? 'theater-dimmed' : ''}`}
+      className={`room-page-root ${isTheaterMode ? 'theater-dimmed' : ''} ${isStudyMode ? 'study-mode-active' : ''}`}
       data-room-theme={roomSettings.theme}
       style={{ '--room-accent': roomSettings.accentColor } as React.CSSProperties}
     >
@@ -2162,6 +2162,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             <StudySuite
               roomId={roomId}
               roomName={roomSettings.name}
+              roomSettings={roomSettings}
+              currentUserId={userId}
+              currentUsername={username}
+              currentUserRole={userRole}
+              currentUserAvatarId={userSettings.avatarId}
+              participants={participants}
               currentVideoId={videoId}
               currentVideoTitle={
                 syncState?.mediaIdentity?.title ||
@@ -2170,16 +2176,28 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               }
               currentPlaybackTime={currentTime}
               duration={duration}
-              onSeek={handleSeek}
+              playState={syncState?.playState || 'paused'}
+              playbackSpeed={playbackSpeed}
+              volume={volume}
+              isMuted={isMuted}
+              playlist={playlist}
+              watchHistory={watchHistory}
+              chatMessages={chatMessages}
+              activePoll={activePoll}
+              recentActivities={activities}
+              onPlay={handlePlay}
               onPause={handlePause}
-              onOpenSyncAI={(prompt) => {
-                setRoomMode('party');
-                setActiveSidebarTab('ai');
-                if (prompt) {
-                  setPendingAiPrompt(prompt);
-                  onNotify(`✨ Switched to SyncAI for: "${prompt}"`, 'info');
-                }
-              }}
+              onSeek={handleSeek}
+              onSetPlaybackSpeed={handleSetPlaybackSpeed}
+              onSetVolume={handleSetVolume}
+              onToggleMute={handleToggleMute}
+              onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
+              onNextVideo={handleNextVideo}
+              onAddToPlaylist={handleAddToPlaylist}
+              onMoveToTop={handleMoveToTop}
+              onShufflePlaylist={handleShufflePlaylist}
+              onClearPlaylist={handleClearPlaylist}
+              onSendMessage={handleSendChat}
               onNotify={onNotify}
             />
           ) : (

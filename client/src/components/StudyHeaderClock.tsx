@@ -263,20 +263,6 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
           </div>
         )}
       </div>
-
-      <div className="study-clock-divider" />
-
-      {/* 3. Compact Room Code Copy Chip */}
-      <button
-        type="button"
-        className={`study-room-code-chip ${copiedCode ? 'copied' : ''}`}
-        onClick={onCopyRoomCode}
-        title="Copy room code"
-        aria-label={`Copy room code ${roomId}`}
-      >
-        <span>{roomId}</span>
-        {copiedCode ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-      </button>
     </div>
   );
 };
