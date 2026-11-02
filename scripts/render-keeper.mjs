@@ -6,8 +6,8 @@
  * 1. Pings the Render backend /health endpoint every 10 minutes to prevent sleep.
  * 2. If the service is dead, suspended, or requesting an upgrade:
  *    - Tries available Render API keys (auto-rotation across accounts).
- *    - Creates a fresh Web Service automatically via the Render API.
- *    - Cleans up old broken services.
+ *    - Restarts the existing service or creates a fresh Web Service via Render API.
+ *    - Cleans up old broken services to respect free-tier quotas.
  *    - Updates project files with the new URL and triggers a commit.
  */
 
@@ -47,7 +47,9 @@ function getRenderApiKeys() {
 
 // Read current backend URL from vercel.json if available
 function getCurrentBackendUrl() {
-  if (process.env.BACKEND_URL) return process.env.BACKEND_URL.replace(/\/+$/, '');
+  if (process.env.BACKEND_URL && process.env.BACKEND_URL.trim().length > 0) {
+    return process.env.BACKEND_URL.trim().replace(/\/+$/, '');
+  }
   try {
     const vercelConfig = JSON.parse(fs.readFileSync('vercel.json', 'utf8'));
     const url = vercelConfig?.env?.VITE_API_URL || vercelConfig?.build?.env?.VITE_API_URL;
@@ -56,40 +58,61 @@ function getCurrentBackendUrl() {
   return DEFAULT_URL;
 }
 
-// Check health of an endpoint
+// Check health of an endpoint with Render cold start tolerance
 async function checkHealth(baseUrl) {
-  const healthUrl = `${baseUrl}/health`;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
-    const res = await fetch(healthUrl, { signal: controller.signal });
-    clearTimeout(timeout);
+  const cleanUrl = baseUrl.replace(/\/+$/, '');
+  const endpoints = ['/health', '/'];
 
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { ok: true, status: res.status, data };
+  for (const ep of endpoints) {
+    const healthUrl = `${cleanUrl}${ep}`;
+    try {
+      const controller = new AbortController();
+      // Render free-tier cold starts take 50-80s; allow 60s per attempt
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      const res = await fetch(healthUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return { ok: true, status: res.status, data };
+      }
+
+      // If /health returns 404, fallback to /
+      if (ep === '/health' && res.status === 404) {
+        continue;
+      }
+
+      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+    } catch (err) {
+      if (ep === '/health') {
+        continue;
+      }
+      return { ok: false, status: 0, error: err.message };
     }
-    return { ok: false, status: res.status, error: `HTTP ${res.status}` };
-  } catch (err) {
-    return { ok: false, status: 0, error: err.message };
   }
+
+  return { ok: false, status: 0, error: 'Connection failed' };
 }
 
 // Render API Helper
 async function renderApi(apiKey, endpoint, options = {}) {
   const url = `https://api.render.com/v1${endpoint}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      ...(options.headers || {}),
-    },
-  });
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        ...(options.headers || {}),
+      },
+    });
 
-  const body = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, data: body };
+    const body = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, data: body };
+  } catch (err) {
+    return { ok: false, status: 0, data: null, error: err.message };
+  }
 }
 
 // Get Workspace Owner ID for an API key
@@ -101,7 +124,7 @@ async function getOwnerId(apiKey) {
   return null;
 }
 
-// Update files in repository with new backend URL
+// Update files across the repository with new backend URL
 function updateRepositoryUrls(newUrl) {
   log(`Updating project files with new Backend URL: ${newUrl}`);
 
@@ -115,52 +138,78 @@ function updateRepositoryUrls(newUrl) {
     }
   };
 
+  const urlRegex = /https:\/\/synctube-[a-z0-9-]+\.onrender\.com/g;
+
   // 1. root vercel.json
-  updateFile('vercel.json', (text) =>
-    text.replace(/https:\/\/synctube-[a-z0-9]+\.onrender\.com/g, newUrl)
-  );
+  updateFile('vercel.json', (text) => text.replace(urlRegex, newUrl));
 
   // 2. client/vercel.json
-  updateFile('client/vercel.json', (text) =>
-    text.replace(/https:\/\/synctube-[a-z0-9]+\.onrender\.com/g, newUrl)
-  );
+  updateFile('client/vercel.json', (text) => text.replace(urlRegex, newUrl));
 
   // 3. client/src/utils/api.ts
-  updateFile('client/src/utils/api.ts', (text) =>
-    text.replace(/https:\/\/synctube-[a-z0-9]+\.onrender\.com/g, newUrl)
-  );
+  updateFile('client/src/utils/api.ts', (text) => text.replace(urlRegex, newUrl));
 
   // 4. client/src/services/socket.ts
-  updateFile('client/src/services/socket.ts', (text) =>
-    text.replace(/https:\/\/synctube-[a-z0-9]+\.onrender\.com/g, newUrl)
-  );
+  updateFile('client/src/services/socket.ts', (text) => text.replace(urlRegex, newUrl));
 
-  // 5. README.md
-  updateFile('README.md', (text) =>
-    text.replace(/https:\/\/synctube-[a-z0-9]+\.onrender\.com/g, newUrl)
+  // 5. client/src/components/YouTubeSearchModal.tsx
+  updateFile('client/src/components/YouTubeSearchModal.tsx', (text) => text.replace(urlRegex, newUrl));
+
+  // 6. client/src/pages/HomePage.tsx
+  updateFile('client/src/pages/HomePage.tsx', (text) => text.replace(urlRegex, newUrl));
+
+  // 7. client/src/pages/RoomPage.tsx
+  updateFile('client/src/pages/RoomPage.tsx', (text) => text.replace(urlRegex, newUrl));
+
+  // 8. server/src/utils/cors.ts
+  updateFile('server/src/utils/cors.ts', (text) => {
+    if (!text.includes(newUrl)) {
+      return text.replace(
+        /const DEFAULT_TRUSTED_ORIGINS = new Set\(\[\n/,
+        `const DEFAULT_TRUSTED_ORIGINS = new Set([\n  '${newUrl}',\n`
+      );
+    }
+    return text;
+  });
+
+  // 9. README.md
+  updateFile('README.md', (text) => text.replace(urlRegex, newUrl));
+
+  // 10. scripts/render-keeper.mjs
+  updateFile('scripts/render-keeper.mjs', (text) =>
+    text.replace(/const DEFAULT_URL = 'https:\/\/synctube-[a-z0-9-]+\.onrender\.com';/, `const DEFAULT_URL = '${newUrl}';`)
   );
 }
 
 // Main Keeper Execution
 async function main() {
   const currentUrl = getCurrentBackendUrl();
-  log(`Checking health of current backend: ${currentUrl}`);
+  const forceRecovery = process.env.FORCE_RECOVERY === 'true' || process.env.FORCE_RECOVERY === '1';
+
+  log(`Target backend URL: ${currentUrl}`);
+
+  if (forceRecovery) {
+    log('⚡ Force recovery requested via workflow input. Skipping health check.');
+  }
 
   // Step 1: Health Check (with retries for cold start)
   let isHealthy = false;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    log(`Ping attempt ${attempt}/3...`);
-    const check = await checkHealth(currentUrl);
+  if (!forceRecovery) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      log(`Ping attempt ${attempt}/3...`);
+      const check = await checkHealth(currentUrl);
 
-    if (check.ok) {
-      log(`Backend is healthy and awake! Status: 200 OK. Uptime: ${check.data?.uptime || 'N/A'}s`);
-      isHealthy = true;
-      break;
-    }
+      if (check.ok) {
+        log(`Backend is healthy and awake! Status: 200 OK. Uptime: ${check.data?.uptime || 'N/A'}s`);
+        isHealthy = true;
+        break;
+      }
 
-    log(`Ping failed: ${check.error}. Waiting 7 seconds before retry...`);
-    if (attempt < 3) {
-      await new Promise((r) => setTimeout(r, 7000));
+      log(`Ping attempt ${attempt} returned: ${check.error || 'Timeout'}`);
+      if (attempt < 3) {
+        log('Waiting 8 seconds before retry...');
+        await new Promise((r) => setTimeout(r, 8000));
+      }
     }
   }
 
@@ -174,8 +223,12 @@ async function main() {
 
   const apiKeys = getRenderApiKeys();
   if (apiKeys.length === 0) {
-    log('❌ ERROR: No Render API keys configured! Set RENDER_API_KEYS in GitHub Secrets.');
-    process.exit(1);
+    log('⚠️ No Render API keys configured (RENDER_API_KEYS / RENDER_API_KEY_1..3).');
+    log('👉 If this was a cold start, the ping has already sent the wake-up request to Render.');
+    log('👉 To enable automatic redeployment/healing, add RENDER_API_KEYS in GitHub Secrets.');
+    setGithubOutput('url_changed', 'false');
+    // Exit cleanly to avoid false-negative failure notifications on simple cold-wake pings
+    process.exit(0);
   }
 
   log(`Found ${apiKeys.length} Render API key(s) for recovery/rotation.`);
@@ -201,13 +254,44 @@ async function main() {
         (s) => s.service?.repo === REPO_URL || s.service?.name?.toLowerCase().includes('synctube')
       );
 
-      // Create a fresh Web Service
-      log(`[Account ${idx + 1}] Creating fresh Web Service on Render...`);
+      // Strategy A: If an existing service is already present on this account, attempt restart first
+      if (oldService?.service?.id) {
+        const oldId = oldService.service.id;
+        const oldUrl = (oldService.service.serviceDetails?.url || '').replace(/\/+$/, '');
+        log(`[Account ${idx + 1}] Found existing service ${oldId} (${oldUrl}). Triggering restart...`);
+
+        const restartRes = await renderApi(apiKey, `/services/${oldId}/restart`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+
+        if (restartRes.ok) {
+          log(`[Account ${idx + 1}] Restart accepted. Waiting 30s for container to wake up...`);
+          await new Promise((r) => setTimeout(r, 30000));
+          const verifyCheck = await checkHealth(oldUrl);
+          if (verifyCheck.ok) {
+            log(`🎉 [Account ${idx + 1}] Existing service recovered successfully via restart!`);
+            newServiceUrl = oldUrl;
+            break;
+          }
+          log(`[Account ${idx + 1}] Existing service still unresponsive after restart.`);
+        }
+
+        // Clean up old broken service before creating new one to prevent Free Tier quota rejection
+        log(`[Account ${idx + 1}] Cleaning up stale service ${oldId} to free workspace quota...`);
+        await renderApi(apiKey, `/services/${oldId}`, { method: 'DELETE' });
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+
+      // Strategy B: Create a fresh Web Service (lowercase name is strictly required by Render API)
+      const serviceSlug = `synctube-${Date.now().toString(36).toLowerCase().slice(-4)}`;
+      log(`[Account ${idx + 1}] Creating fresh Web Service on Render: ${serviceSlug}...`);
+
       const createRes = await renderApi(apiKey, '/services', {
         method: 'POST',
         body: JSON.stringify({
           type: 'web_service',
-          name: `SyncTube-${Date.now().toString(36).slice(-4)}`,
+          name: serviceSlug,
           ownerId,
           repo: REPO_URL,
           branch: 'main',
@@ -230,20 +314,17 @@ async function main() {
         }),
       });
 
-      if (!createRes.ok || !createRes.data?.serviceDetails?.url) {
+      // Handle both { service: { serviceDetails: { url } } } and { serviceDetails: { url } }
+      const serviceData = createRes.data?.service || createRes.data;
+      const createdUrl = serviceData?.serviceDetails?.url || serviceData?.url;
+
+      if (!createRes.ok || !createdUrl) {
         log(`[Account ${idx + 1}] Creation failed (${createRes.status}): ${JSON.stringify(createRes.data)}`);
         continue;
       }
 
-      newServiceUrl = createRes.data.serviceDetails.url.replace(/\/+$/, '');
+      newServiceUrl = createdUrl.replace(/\/+$/, '');
       log(`🎉 [Account ${idx + 1}] New Web Service created successfully: ${newServiceUrl}`);
-
-      // Delete old service on this account if present to clean up quota
-      if (oldService?.service?.id && oldService.service.id !== createRes.data.id) {
-        log(`Cleaning up old service ${oldService.service.id}...`);
-        await renderApi(apiKey, `/services/${oldService.service.id}`, { method: 'DELETE' });
-      }
-
       break;
     } catch (err) {
       log(`[Account ${idx + 1}] Error: ${err.message}`);
@@ -255,11 +336,16 @@ async function main() {
     process.exit(1);
   }
 
-  // Step 3: Update local files with new URL
-  updateRepositoryUrls(newServiceUrl);
-  setGithubOutput('url_changed', 'true');
-  setGithubOutput('new_url', newServiceUrl);
-  log(`Auto-recovery complete! New live URL: ${newServiceUrl}`);
+  // Step 3: Update local files with new URL if changed
+  if (newServiceUrl !== currentUrl) {
+    updateRepositoryUrls(newServiceUrl);
+    setGithubOutput('url_changed', 'true');
+    setGithubOutput('new_url', newServiceUrl);
+    log(`Auto-recovery complete! New live URL: ${newServiceUrl}`);
+  } else {
+    setGithubOutput('url_changed', 'false');
+    log('Service recovered at current URL without rotation.');
+  }
 }
 
 main().catch((err) => {

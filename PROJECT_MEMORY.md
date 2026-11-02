@@ -377,5 +377,24 @@ Users have two immediate ways to toggle features like buttons:
   - `npm run test:client`: 9/9 test suites passed (38/38 tests passing).
   - `npm run build`: Production builds for both server and client succeeded cleanly (exit code 0).
 
+### Entry 11: 2026-11-02 — Fix Render Keep-Alive & Auto-Healer Workflow and Script
+- **Author**: Antigravity Assistant (Pair programmer with Krishna)
+- **Objective**:
+  1. Fix false-positive workflow failures in `.github/workflows/render-keeper.yml` and `scripts/render-keeper.mjs`.
+  2. Increase health-check cold-start tolerance from 25s to 60s per attempt to accommodate Render free-tier container spinning times (50-80s).
+  3. Support `/` path fallback if `/health` returns 404.
+  4. Fix Render API v1 `POST /services` response parsing by handling both wrapped `{ service: { serviceDetails: { url } } }` and direct `{ serviceDetails: { url } }` structures.
+  5. Enforce lowercase alphanumeric service naming (`synctube-[slug]`) to satisfy Render API validation.
+  6. Introduce restart strategy (`POST /v1/services/{id}/restart`) before recreation to avoid unnecessary URL rotation or free tier single-service quota collisions.
+  7. Delete stale services before creating replacement to prevent 400 workspace quota rejections.
+  8. Update `getCurrentBackendUrl()` to check `vercel.json` if `BACKEND_URL` is empty, and update all project endpoints consistently.
+- **Files Touched**:
+  - `scripts/render-keeper.mjs`: Rewrote health checks, Render API parsing, restart handling, and quota-safe rotation.
+  - `.github/workflows/render-keeper.yml`: Set default `BACKEND_URL` fallback to empty string to honor repo configs.
+  - `PROJECT_MEMORY.md`: Logged Entry 11 ledger update.
+- **Status & Verification**:
+  - `node scripts/render-keeper.mjs` executed and verified: 200 OK received in 464ms (Backend healthy & awake).
+  - Both server (17/17 files, 110/110 tests) and client (9/9 files, 38/38 tests) test suites passing 100%.
+
 *(Future AI assistants: Append your changes above this line, keeping exact dates and files touched).*
 
