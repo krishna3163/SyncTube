@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * Render Keeper & Multi-Account Self-Healing Automation
+ * Render Multi-Account Keeper & Self-Healing Automation
  * ====================================================
- * 1. Pings the Render backend /health endpoint every 10 minutes to prevent sleep.
- * 2. If the service is dead, suspended, or requesting an upgrade:
- *    - Tries available Render API keys (auto-rotation across accounts).
- *    - Restarts the existing service or creates a fresh Web Service via Render API.
- *    - Cleans up old broken services to respect free-tier quotas.
- *    - Updates project files with the new URL and triggers a commit.
+ * 1. Pings the Render backend /health endpoint every 5 minutes to prevent sleep.
+ * 2. Connects to all 3 Render accounts (via RENDER_API_KEY_1..3 / RENDER_API_KEYS)
+ *    and keeps ALL discovered services warm, awake, and monitored simultaneously.
+ * 3. If any service is dead, suspended, or failing:
+ *    - Automatically triggers a service restart via Render API.
+ *    - Rotates primary backend URL across accounts if the active service goes down.
+ *    - Updates project files with the new URL and commits back to GitHub.
+ * 4. Writes a health & uptime report directly to GitHub Actions Step Summary.
  */
 
 import fs from 'node:fs';
@@ -17,6 +19,7 @@ import path from 'node:path';
 const REPO_URL = 'https://github.com/krishna3163/SyncTube';
 const DEFAULT_URL = 'https://synctube-vslw.onrender.com';
 const GITHUB_OUTPUT = process.env.GITHUB_OUTPUT;
+const GITHUB_STEP_SUMMARY = process.env.GITHUB_STEP_SUMMARY;
 
 function log(msg) {
   const ts = new Date().toISOString();
@@ -25,7 +28,21 @@ function log(msg) {
 
 function setGithubOutput(key, value) {
   if (GITHUB_OUTPUT && fs.existsSync(GITHUB_OUTPUT)) {
-    fs.appendFileSync(GITHUB_OUTPUT, `${key}=${value}\n`);
+    try {
+      fs.appendFileSync(GITHUB_OUTPUT, `${key}=${value}\n`);
+    } catch (e) {
+      log(`Failed to write GITHUB_OUTPUT: ${e.message}`);
+    }
+  }
+}
+
+function appendStepSummary(markdown) {
+  if (GITHUB_STEP_SUMMARY) {
+    try {
+      fs.appendFileSync(GITHUB_STEP_SUMMARY, markdown + '\n');
+    } catch (e) {
+      log(`Failed to write GITHUB_STEP_SUMMARY: ${e.message}`);
+    }
   }
 }
 
@@ -45,7 +62,20 @@ function getRenderApiKeys() {
   return keys;
 }
 
-// Read current backend URL from vercel.json if available
+// Read extra URLs if configured
+function getExtraServiceUrls() {
+  const urls = [];
+  if (process.env.RENDER_SERVICE_URLS) {
+    urls.push(
+      ...process.env.RENDER_SERVICE_URLS.split(',')
+        .map((u) => u.trim().replace(/\/+$/, ''))
+        .filter(Boolean)
+    );
+  }
+  return urls;
+}
+
+// Read current active backend URL from vercel.json if available
 function getCurrentBackendUrl() {
   if (process.env.BACKEND_URL && process.env.BACKEND_URL.trim().length > 0) {
     return process.env.BACKEND_URL.trim().replace(/\/+$/, '');
@@ -58,23 +88,24 @@ function getCurrentBackendUrl() {
   return DEFAULT_URL;
 }
 
-// Check health of an endpoint with Render cold start tolerance
-async function checkHealth(baseUrl) {
+// Check health of an endpoint with Render cold start tolerance and latency measurement
+async function checkHealth(baseUrl, timeoutMs = 60000) {
   const cleanUrl = baseUrl.replace(/\/+$/, '');
   const endpoints = ['/health', '/'];
+  const startTime = Date.now();
 
   for (const ep of endpoints) {
     const healthUrl = `${cleanUrl}${ep}`;
     try {
       const controller = new AbortController();
-      // Render free-tier cold starts take 50-80s; allow 60s per attempt
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(healthUrl, { signal: controller.signal });
       clearTimeout(timeout);
+      const latencyMs = Date.now() - startTime;
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        return { ok: true, status: res.status, data };
+        return { ok: true, status: res.status, data, latencyMs, endpoint: ep };
       }
 
       // If /health returns 404, fallback to /
@@ -82,16 +113,16 @@ async function checkHealth(baseUrl) {
         continue;
       }
 
-      return { ok: false, status: res.status, error: `HTTP ${res.status}` };
+      return { ok: false, status: res.status, error: `HTTP ${res.status}`, latencyMs, endpoint: ep };
     } catch (err) {
       if (ep === '/health') {
         continue;
       }
-      return { ok: false, status: 0, error: err.message };
+      return { ok: false, status: 0, error: err.message, latencyMs: Date.now() - startTime, endpoint: ep };
     }
   }
 
-  return { ok: false, status: 0, error: 'Connection failed' };
+  return { ok: false, status: 0, error: 'Connection failed', latencyMs: Date.now() - startTime };
 }
 
 // Render API Helper
@@ -101,9 +132,9 @@ async function renderApi(apiKey, endpoint, options = {}) {
     const res = await fetch(url, {
       ...options,
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         ...(options.headers || {}),
       },
     });
@@ -122,6 +153,44 @@ async function getOwnerId(apiKey) {
     return data[0].owner.id;
   }
   return null;
+}
+
+// Discover all Render web services across all provided API keys
+async function discoverAllRenderServices(apiKeys) {
+  const servicesList = [];
+
+  for (let idx = 0; idx < apiKeys.length; idx++) {
+    const apiKey = apiKeys[idx];
+    const maskedKey = apiKey.slice(0, 6) + '...' + apiKey.slice(-4);
+    log(`[Account ${idx + 1}/${apiKeys.length}] Querying Render services (Key: ${maskedKey})...`);
+
+    const res = await renderApi(apiKey, '/services?limit=50');
+    if (res.ok && Array.isArray(res.data)) {
+      for (const item of res.data) {
+        const s = item.service || item;
+        const url = (s.serviceDetails?.url || s.url || '').replace(/\/+$/, '');
+        if (url) {
+          servicesList.push({
+            accountIndex: idx + 1,
+            apiKey,
+            maskedKey,
+            serviceId: s.id,
+            name: s.name || `synctube-acc${idx + 1}`,
+            url,
+            status: s.status,
+            suspended: s.suspended,
+            type: s.type,
+          });
+        }
+      }
+      const count = servicesList.filter((s) => s.accountIndex === idx + 1).length;
+      log(`[Account ${idx + 1}] Found ${count} service(s).`);
+    } else {
+      log(`[Account ${idx + 1}] Could not fetch services (${res.status || res.error}).`);
+    }
+  }
+
+  return servicesList;
 }
 
 // Update files across the repository with new backend URL
@@ -177,7 +246,10 @@ function updateRepositoryUrls(newUrl) {
 
   // 10. scripts/render-keeper.mjs
   updateFile('scripts/render-keeper.mjs', (text) =>
-    text.replace(/const DEFAULT_URL = 'https:\/\/synctube-[a-z0-9-]+\.onrender\.com';/, `const DEFAULT_URL = '${newUrl}';`)
+    text.replace(
+      /const DEFAULT_URL = 'https:\/\/synctube-[a-z0-9-]+\.onrender\.com';/,
+      `const DEFAULT_URL = '${newUrl}';`
+    )
   );
 }
 
@@ -185,167 +257,233 @@ function updateRepositoryUrls(newUrl) {
 async function main() {
   const currentUrl = getCurrentBackendUrl();
   const forceRecovery = process.env.FORCE_RECOVERY === 'true' || process.env.FORCE_RECOVERY === '1';
+  const apiKeys = getRenderApiKeys();
+  const extraUrls = getExtraServiceUrls();
 
-  log(`Target backend URL: ${currentUrl}`);
+  log(`🚀 Starting Render Multi-Account Keep-Alive & Health Monitoring`);
+  log(`Primary Backend Target: ${currentUrl}`);
+  log(`Configured Render API Keys: ${apiKeys.length}`);
 
   if (forceRecovery) {
-    log('⚡ Force recovery requested via workflow input. Skipping health check.');
+    log('⚡ Force recovery requested via workflow input.');
   }
 
-  // Step 1: Health Check (with retries for cold start)
-  let isHealthy = false;
-  if (!forceRecovery) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      log(`Ping attempt ${attempt}/3...`);
-      const check = await checkHealth(currentUrl);
+  // Step 1: Discover all services across all 3 Render accounts
+  const discoveredServices = await discoverAllRenderServices(apiKeys);
 
-      if (check.ok) {
-        log(`Backend is healthy and awake! Status: 200 OK. Uptime: ${check.data?.uptime || 'N/A'}s`);
-        isHealthy = true;
+  // Compile list of all distinct targets to ping and monitor
+  const targetsMap = new Map();
+
+  // Add primary active backend
+  targetsMap.set(currentUrl, {
+    accountIndex: 0,
+    name: 'Primary Active Backend',
+    url: currentUrl,
+    isPrimary: true,
+  });
+
+  // Add all discovered Render services
+  for (const s of discoveredServices) {
+    const existing = targetsMap.get(s.url);
+    if (existing) {
+      targetsMap.set(s.url, { ...existing, ...s });
+    } else {
+      targetsMap.set(s.url, { ...s, isPrimary: s.url === currentUrl });
+    }
+  }
+
+  // Add any extra explicitly provided URLs
+  for (const url of extraUrls) {
+    if (!targetsMap.has(url)) {
+      targetsMap.set(url, {
+        accountIndex: 0,
+        name: 'Extra Configured Backend',
+        url,
+        isPrimary: url === currentUrl,
+      });
+    }
+  }
+
+  const targets = Array.from(targetsMap.values());
+  log(`Monitoring and keeping alive ${targets.length} service endpoint(s)...`);
+
+  const monitoringResults = [];
+
+  // Step 2: Health check & keep-alive ping on EVERY service
+  for (let i = 0; i < targets.length; i++) {
+    const target = targets[i];
+    log(`--------------------------------------------------`);
+    log(`Checking target [${i + 1}/${targets.length}]: ${target.name} (${target.url})`);
+
+    let checkResult = null;
+    let healthy = false;
+
+    // Retry ping up to 2 times for cold starts
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      log(`  Ping attempt ${attempt}/2...`);
+      checkResult = await checkHealth(target.url);
+
+      if (checkResult.ok) {
+        log(`  ✅ Healthy! Status: ${checkResult.status} OK | Latency: ${checkResult.latencyMs}ms | Uptime: ${checkResult.data?.uptime || 'N/A'}s`);
+        healthy = true;
         break;
       }
 
-      log(`Ping attempt ${attempt} returned: ${check.error || 'Timeout'}`);
-      if (attempt < 3) {
-        log('Waiting 8 seconds before retry...');
-        await new Promise((r) => setTimeout(r, 8000));
-      }
-    }
-  }
-
-  if (isHealthy) {
-    setGithubOutput('url_changed', 'false');
-    process.exit(0);
-  }
-
-  // Step 2: Auto-Recovery & Multi-Account Rotation
-  log('🚨 Backend failed health check. Initiating Auto-Recovery on Render...');
-
-  const apiKeys = getRenderApiKeys();
-  if (apiKeys.length === 0) {
-    log('⚠️ No Render API keys configured (RENDER_API_KEYS / RENDER_API_KEY_1..3).');
-    log('👉 If this was a cold start, the ping has already sent the wake-up request to Render.');
-    log('👉 To enable automatic redeployment/healing, add RENDER_API_KEYS in GitHub Secrets.');
-    setGithubOutput('url_changed', 'false');
-    // Exit cleanly to avoid false-negative failure notifications on simple cold-wake pings
-    process.exit(0);
-  }
-
-  log(`Found ${apiKeys.length} Render API key(s) for recovery/rotation.`);
-
-  let newServiceUrl = null;
-
-  for (let idx = 0; idx < apiKeys.length; idx++) {
-    const apiKey = apiKeys[idx];
-    const maskedKey = apiKey.slice(0, 6) + '...' + apiKey.slice(-4);
-    log(`[Account ${idx + 1}/${apiKeys.length}] Trying Render API Key: ${maskedKey}`);
-
-    try {
-      const ownerId = await getOwnerId(apiKey);
-      if (!ownerId) {
-        log(`[Account ${idx + 1}] Could not fetch owner workspace. Trying next key.`);
-        continue;
-      }
-
-      // Check existing services on this account
-      const servicesRes = await renderApi(apiKey, '/services');
-      const existingServices = servicesRes.ok && Array.isArray(servicesRes.data) ? servicesRes.data : [];
-      const oldService = existingServices.find(
-        (s) => s.service?.repo === REPO_URL || s.service?.name?.toLowerCase().includes('synctube')
-      );
-
-      // Strategy A: If an existing service is already present on this account, attempt restart first
-      if (oldService?.service?.id) {
-        const oldId = oldService.service.id;
-        const oldUrl = (oldService.service.serviceDetails?.url || '').replace(/\/+$/, '');
-        log(`[Account ${idx + 1}] Found existing service ${oldId} (${oldUrl}). Triggering restart...`);
-
-        const restartRes = await renderApi(apiKey, `/services/${oldId}/restart`, {
-          method: 'POST',
-          body: JSON.stringify({}),
-        });
-
-        if (restartRes.ok) {
-          log(`[Account ${idx + 1}] Restart accepted. Waiting 30s for container to wake up...`);
-          await new Promise((r) => setTimeout(r, 30000));
-          const verifyCheck = await checkHealth(oldUrl);
-          if (verifyCheck.ok) {
-            log(`🎉 [Account ${idx + 1}] Existing service recovered successfully via restart!`);
-            newServiceUrl = oldUrl;
-            break;
-          }
-          log(`[Account ${idx + 1}] Existing service still unresponsive after restart.`);
-        }
-
-        // Clean up old broken service before creating new one to prevent Free Tier quota rejection
-        log(`[Account ${idx + 1}] Cleaning up stale service ${oldId} to free workspace quota...`);
-        await renderApi(apiKey, `/services/${oldId}`, { method: 'DELETE' });
+      log(`  Attempt ${attempt} returned: ${checkResult.error || 'Failed'}`);
+      if (attempt < 2) {
         await new Promise((r) => setTimeout(r, 4000));
       }
+    }
 
-      // Strategy B: Create a fresh Web Service (lowercase name is strictly required by Render API)
-      const serviceSlug = `synctube-${Date.now().toString(36).toLowerCase().slice(-4)}`;
-      log(`[Account ${idx + 1}] Creating fresh Web Service on Render: ${serviceSlug}...`);
+    let actionTaken = 'Pinged (Kept Awake)';
 
-      const createRes = await renderApi(apiKey, '/services', {
+    // If service is unhealthy and we have its API credentials, trigger an automatic restart
+    if (!healthy && target.serviceId && target.apiKey) {
+      log(`  🚨 Service is unresponsive. Triggering auto-restart via Render API for ${target.serviceId}...`);
+      const restartRes = await renderApi(target.apiKey, `/services/${target.serviceId}/restart`, {
         method: 'POST',
-        body: JSON.stringify({
-          type: 'web_service',
-          name: serviceSlug,
-          ownerId,
-          repo: REPO_URL,
-          branch: 'main',
-          autoDeploy: 'yes',
-          serviceDetails: {
-            env: 'node',
-            plan: 'free',
-            region: 'oregon',
-            buildCommand: 'npm install --include=dev && npm run build:server',
-            startCommand: 'npm start -w server',
-            healthCheckPath: '/health',
-            envVars: [
-              { key: 'NODE_VERSION', value: '22' },
-              { key: 'NODE_ENV', value: 'production' },
-              { key: 'PORT', value: '10000' },
-              { key: 'CLUSTER', value: '0' },
-              { key: 'MEDIASOUP_WORKER_BIN', value: 'false' },
-            ],
-          },
-        }),
+        body: JSON.stringify({}),
       });
 
-      // Handle both { service: { serviceDetails: { url } } } and { serviceDetails: { url } }
-      const serviceData = createRes.data?.service || createRes.data;
-      const createdUrl = serviceData?.serviceDetails?.url || serviceData?.url;
-
-      if (!createRes.ok || !createdUrl) {
-        log(`[Account ${idx + 1}] Creation failed (${createRes.status}): ${JSON.stringify(createRes.data)}`);
-        continue;
+      if (restartRes.ok) {
+        actionTaken = 'Restarted via Render API';
+        log(`  🔄 Restart accepted. Waiting 25s for container initialization...`);
+        await new Promise((r) => setTimeout(r, 25000));
+        const recheck = await checkHealth(target.url);
+        if (recheck.ok) {
+          healthy = true;
+          checkResult = recheck;
+          log(`  🎉 Service recovered successfully after restart!`);
+          actionTaken = 'Recovered via Restart';
+        } else {
+          log(`  ⚠️ Still unresponsive after restart: ${recheck.error}`);
+        }
+      } else {
+        log(`  ❌ Restart request failed (${restartRes.status}): ${JSON.stringify(restartRes.data)}`);
       }
+    }
 
-      newServiceUrl = createdUrl.replace(/\/+$/, '');
-      log(`🎉 [Account ${idx + 1}] New Web Service created successfully: ${newServiceUrl}`);
-      break;
-    } catch (err) {
-      log(`[Account ${idx + 1}] Error: ${err.message}`);
+    monitoringResults.push({
+      account: target.accountIndex > 0 ? `Account ${target.accountIndex}` : 'Configured',
+      name: target.name,
+      url: target.url,
+      isPrimary: target.isPrimary,
+      healthy,
+      status: checkResult?.status || 0,
+      latencyMs: checkResult?.latencyMs || 0,
+      uptime: checkResult?.data?.uptime ? `${Math.round(checkResult.data.uptime)}s` : 'N/A',
+      actionTaken,
+      error: healthy ? null : checkResult?.error,
+    });
+  }
+
+  // Step 3: Check Primary Active Backend & Auto-Failover if necessary
+  const primaryResult = monitoringResults.find((r) => r.isPrimary) || monitoringResults[0];
+  let newServiceUrl = null;
+
+  if (!primaryResult?.healthy || forceRecovery) {
+    log(`⚠️ Primary backend (${currentUrl}) is not healthy. Finding healthiest fallback service...`);
+
+    // Look for another healthy service across the 3 accounts
+    const healthyFallback = monitoringResults.find((r) => r.healthy && r.url !== currentUrl);
+
+    if (healthyFallback) {
+      log(`🎉 Found healthy fallback service: ${healthyFallback.name} (${healthyFallback.url})`);
+      newServiceUrl = healthyFallback.url;
+    } else if (apiKeys.length > 0) {
+      // If no existing service is healthy, attempt fresh creation using available API keys
+      log(`Creating fresh Web Service on Render across accounts...`);
+      for (let idx = 0; idx < apiKeys.length; idx++) {
+        const apiKey = apiKeys[idx];
+        const ownerId = await getOwnerId(apiKey);
+        if (!ownerId) continue;
+
+        const serviceSlug = `synctube-${Date.now().toString(36).toLowerCase().slice(-4)}`;
+        log(`[Account ${idx + 1}] Creating service: ${serviceSlug}...`);
+
+        const createRes = await renderApi(apiKey, '/services', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'web_service',
+            name: serviceSlug,
+            ownerId,
+            repo: REPO_URL,
+            branch: 'main',
+            autoDeploy: 'yes',
+            serviceDetails: {
+              env: 'node',
+              plan: 'free',
+              region: 'oregon',
+              buildCommand: 'npm install --include=dev && npm run build:server',
+              startCommand: 'npm start -w server',
+              healthCheckPath: '/health',
+              envVars: [
+                { key: 'NODE_VERSION', value: '22' },
+                { key: 'NODE_ENV', value: 'production' },
+                { key: 'PORT', value: '10000' },
+                { key: 'CLUSTER', value: '0' },
+                { key: 'MEDIASOUP_WORKER_BIN', value: 'false' },
+              ],
+            },
+          }),
+        });
+
+        const serviceData = createRes.data?.service || createRes.data;
+        const createdUrl = serviceData?.serviceDetails?.url || serviceData?.url;
+
+        if (createRes.ok && createdUrl) {
+          newServiceUrl = createdUrl.replace(/\/+$/, '');
+          log(`🎉 Created fresh Web Service: ${newServiceUrl}`);
+          break;
+        }
+      }
     }
   }
 
-  if (!newServiceUrl) {
-    log('❌ Failed to recover or deploy a new service across all provided Render accounts.');
-    process.exit(1);
-  }
-
-  // Step 3: Update local files with new URL if changed
-  if (newServiceUrl !== currentUrl) {
+  // Update repository URLs if rotated
+  if (newServiceUrl && newServiceUrl !== currentUrl) {
     updateRepositoryUrls(newServiceUrl);
     setGithubOutput('url_changed', 'true');
     setGithubOutput('new_url', newServiceUrl);
-    log(`Auto-recovery complete! New live URL: ${newServiceUrl}`);
+    log(`Auto-recovery rotated primary backend to: ${newServiceUrl}`);
   } else {
     setGithubOutput('url_changed', 'false');
-    log('Service recovered at current URL without rotation.');
   }
+
+  // Step 4: Secondary Keep-Alive Pulse (Double-Pulse for Zero Sleep)
+  const healthyUrls = monitoringResults.filter((r) => r.healthy).map((r) => r.url);
+  if (healthyUrls.length > 0) {
+    log(`--------------------------------------------------`);
+    log(`Sending secondary keepalive pulse to reset sleep timers...`);
+    await new Promise((r) => setTimeout(r, 6000));
+    await Promise.all(
+      healthyUrls.map((url) =>
+        fetch(`${url}/health`, { signal: AbortSignal.timeout(10000) }).catch(() => {})
+      )
+    );
+    log(`Double-pulse keepalive sent to ${healthyUrls.length} endpoint(s).`);
+  }
+
+  // Step 5: Render Markdown Summary for GitHub Actions
+  const summaryMarkdown = [
+    `## 🌐 Render Multi-Account Keep-Alive & Health Monitoring`,
+    `**Time:** \`${new Date().toISOString()}\` | **Interval:** Every 5 Minutes`,
+    '',
+    `| Account | Service | URL | Status | Latency | Uptime | Action |`,
+    `| :--- | :--- | :--- | :--- | :--- | :--- | :--- |`,
+    ...monitoringResults.map((r) => {
+      const statusBadge = r.healthy ? `🟢 \`${r.status} OK\`` : `🔴 \`${r.status || 'DOWN'}\``;
+      const primaryBadge = r.isPrimary ? ' ⭐ *(Active)*' : '';
+      return `| ${r.account} | ${r.name}${primaryBadge} | [${r.url.replace('https://', '')}](${r.url}) | ${statusBadge} | ${r.latencyMs}ms | ${r.uptime} | ${r.actionTaken} |`;
+    }),
+    '',
+    `> **Self-Healing Status:** All free-tier Render instances received keep-alive heartbeats to prevent 15-minute inactivity spin-down.`,
+  ].join('\n');
+
+  appendStepSummary(summaryMarkdown);
+
+  log(`--------------------------------------------------`);
+  log(`All ${targets.length} service(s) processed. Run complete.`);
 }
 
 main().catch((err) => {

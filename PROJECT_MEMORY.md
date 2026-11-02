@@ -396,5 +396,21 @@ Users have two immediate ways to toggle features like buttons:
   - `node scripts/render-keeper.mjs` executed and verified: 200 OK received in 464ms (Backend healthy & awake).
   - Both server (17/17 files, 110/110 tests) and client (9/9 files, 38/38 tests) test suites passing 100%.
 
+### Entry 12: 2026-11-02 — 5-Minute Health Monitoring & Multi-Account Render Keep-Alive Automation
+- **Author**: Antigravity Assistant (Pair programmer with Krishna)
+- **Objective**:
+  1. Upgrade GitHub Actions keep-alive workflow (`.github/workflows/render-keeper.yml`) schedule from 10 minutes to every 5 minutes (`*/5 * * * *`) to guarantee free-tier Render instances never enter the 15-minute inactivity spindown.
+  2. Implement multi-account discovery and concurrent keep-alive in `scripts/render-keeper.mjs` across all 3 Render accounts (`RENDER_API_KEY_1`, `RENDER_API_KEY_2`, `RENDER_API_KEY_3`, and `RENDER_API_KEYS`).
+  3. Instead of exiting on the first healthy backend, actively discover and ping EVERY web service across all 3 Render accounts to keep all backup instances warm and standby-ready.
+  4. Automatically detect unresponsive or suspended instances and trigger self-healing via `POST /v1/services/{id}/restart`.
+  5. Send double-pulse keep-alive heartbeats to firmly reset container sleep counters.
+  6. Generate detailed real-time health tables in GitHub Actions Step Summary (`GITHUB_STEP_SUMMARY`) displaying service URLs, status codes, latency, and uptime.
+- **Files Touched**:
+  - `.github/workflows/render-keeper.yml`: Configured 5-minute cron schedule and timeout parameters.
+  - `scripts/render-keeper.mjs`: Rewritten for multi-service discovery, concurrent pings, auto-restart, and Step Summary reporting.
+  - `PROJECT_MEMORY.md`: Logged Entry 12 ledger update.
+- **Status & Verification**:
+  - `node scripts/render-keeper.mjs` executed locally and verified: 200 OK received, double-pulse keepalive sent, clean exit code 0.
+
 *(Future AI assistants: Append your changes above this line, keeping exact dates and files touched).*
 

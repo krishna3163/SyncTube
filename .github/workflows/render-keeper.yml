@@ -2,8 +2,8 @@ name: Render Keep-Alive & Auto-Healer
 
 on:
   schedule:
-    # Run every 10 minutes to prevent Render free-tier sleep
-    - cron: '*/10 * * * *'
+    # Run every 5 minutes to continuously monitor, ping, and prevent Render free-tier sleep
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       force_recovery:
@@ -14,8 +14,9 @@ on:
 
 jobs:
   keep-alive:
-    name: Check Health & Keep Awake
+    name: Check Health & Keep Awake (3 Render Accounts)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
 
@@ -28,13 +29,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run Render Keeper & Self-Healing
+      - name: Run Render Keeper & Multi-Account Self-Healing
         id: keeper
         env:
           RENDER_API_KEYS: ${{ secrets.RENDER_API_KEYS || secrets.RENDER_API_KEY }}
           RENDER_API_KEY_1: ${{ secrets.RENDER_API_KEY_1 }}
           RENDER_API_KEY_2: ${{ secrets.RENDER_API_KEY_2 }}
           RENDER_API_KEY_3: ${{ secrets.RENDER_API_KEY_3 }}
+          RENDER_SERVICE_URLS: ${{ vars.RENDER_SERVICE_URLS || secrets.RENDER_SERVICE_URLS || '' }}
           BACKEND_URL: ${{ vars.BACKEND_URL || '' }}
           FORCE_RECOVERY: ${{ inputs.force_recovery }}
         run: node scripts/render-keeper.mjs
