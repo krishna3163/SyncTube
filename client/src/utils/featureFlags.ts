@@ -10,6 +10,7 @@ export interface RoomFeatureFlags {
   playlist: boolean;
   actionRequests: boolean;
   activityFeed: boolean;
+  syncAi: boolean;
   browserHub: boolean;
   syncDiagnostics: boolean;
   theaterMode: boolean;
@@ -86,7 +87,7 @@ export const FEATURE_METADATA: Record<FeatureFlagKey, FeatureMetadata> = {
   browserHub: {
     key: 'browserHub',
     label: 'Direct Stream & Web Media Hub',
-    description: 'Launcher for direct MP4/HLS streams and remote browser',
+    description: 'Launcher for direct MP4/HLS streams and web media',
     category: 'media',
     isSafeToToggle: true,
   },
@@ -102,6 +103,13 @@ export const FEATURE_METADATA: Record<FeatureFlagKey, FeatureMetadata> = {
     label: 'Activity Audit Feed',
     description: 'Live timeline of room joins, video changes, and role events',
     category: 'system',
+    isSafeToToggle: true,
+  },
+  syncAi: {
+    key: 'syncAi',
+    label: 'SyncAI Room Assistant',
+    description: 'AI room assistant powered by Google AI Studio (Gemini)',
+    category: 'communication',
     isSafeToToggle: true,
   },
   syncDiagnostics: {
@@ -130,6 +138,7 @@ export const DEFAULT_FEATURE_FLAGS: RoomFeatureFlags = {
   playlist: true,
   actionRequests: true,
   activityFeed: true,
+  syncAi: true,
   browserHub: true,
   syncDiagnostics: true,
   theaterMode: false,

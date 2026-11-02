@@ -673,18 +673,21 @@ export const HomePage: React.FC<HomePageProps> = ({ userId, onEnterRoom, onNotif
             <span>{currentUser ? currentUser.username : 'Sign In'}</span>
           </button>
 
-          <button
-            type="button"
-            className="home-nav-extension-btn"
-            onClick={() => setIsExtensionModalOpen(true)}
-            title="Get SyncTube Chrome Extension v2.0"
-          >
-            <span className="ext-icon-wrap">
-              <Download size={13} />
-            </span>
-            <span>Extension</span>
-            <span className="ext-version-badge">v2.0</span>
-          </button>
+          {/* Extension button hidden for now as per user preference */}
+          {false && (
+            <button
+              type="button"
+              className="home-nav-extension-btn"
+              onClick={() => setIsExtensionModalOpen(true)}
+              title="Get SyncTube Chrome Extension v2.0"
+            >
+              <span className="ext-icon-wrap">
+                <Download size={13} />
+              </span>
+              <span>Extension</span>
+              <span className="ext-version-badge">v2.0</span>
+            </button>
+          )}
 
           <div
             className="home-header-profile"

@@ -82,7 +82,8 @@ import { getRoomIdentityToken, saveRoomIdentityToken } from '../utils/identity.j
 import { saveStoredParty } from '../utils/partyStorage.js';
 import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipantCharacterId } from '../utils/characterMemory.js';
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
-import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, Settings, LogOut } from 'lucide-react';
+import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, Settings, LogOut, Sparkles } from 'lucide-react';
+import { SyncAI } from '../components/SyncAI.js';
 import {
   playRequestAlertSound,
   playMessageReceiveSound,
@@ -126,7 +127,7 @@ interface RoomPageProps {
   onNotify: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
-type TabId = 'participants' | 'playlist' | 'chat' | 'search' | 'requests' | 'activity';
+type TabId = 'participants' | 'playlist' | 'chat' | 'search' | 'requests' | 'activity' | 'ai';
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'participants', label: 'Viewers', icon: Users },
@@ -135,6 +136,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: 'search', label: 'Search', icon: Search },
   { id: 'requests', label: 'Requests', icon: Bell },
   { id: 'activity', label: 'Activity', icon: Activity },
+  { id: 'ai', label: 'SyncAI', icon: Sparkles },
 ];
 
 
@@ -151,6 +153,17 @@ export const RoomPage: React.FC<RoomPageProps> = ({
   const [userRole, setUserRole] = useState<Role>('PARTICIPANT');
   const [participants, setParticipants] = useState<ParticipantPublic[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [watchHistory, setWatchHistory] = useState<{ videoId: string; title: string; timestamp: number }[]>([]);
+
+  useEffect(() => {
+    if (videoId) {
+      const title = syncState?.mediaIdentity?.title || playlist.find((p) => p.videoId === videoId)?.title || `YouTube Video (${videoId})`;
+      setWatchHistory((prev) => {
+        if (prev.length > 0 && prev[prev.length - 1].videoId === videoId) return prev;
+        return [...prev.slice(-19), { videoId, title, timestamp: Date.now() }];
+      });
+    }
+  }, [videoId, syncState?.mediaIdentity?.title]);
 
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
@@ -173,9 +186,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       if (tab.id === 'playlist' && !featureFlags.playlist) return false;
       if (tab.id === 'requests' && !featureFlags.actionRequests) return false;
       if (tab.id === 'activity' && !featureFlags.activityFeed) return false;
+      if (tab.id === 'ai' && !featureFlags.syncAi) return false;
       return true;
     });
-  }, [featureFlags.chat, featureFlags.playlist, featureFlags.actionRequests, featureFlags.activityFeed]);
+  }, [featureFlags.chat, featureFlags.playlist, featureFlags.actionRequests, featureFlags.activityFeed, featureFlags.syncAi]);
 
   // If the active tab gets toggled off, smoothly fallback to 'participants' without crashing
   useEffect(() => {
@@ -2243,6 +2257,50 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
             {activeSidebarTab === 'activity' && (
               <ActivityFeed activities={activities} />
+            )}
+
+            {activeSidebarTab === 'ai' && (
+              <SyncAI
+                roomId={roomId}
+                roomName={roomSettings.name}
+                roomSettings={roomSettings}
+                currentUserId={userId}
+                currentUsername={username}
+                currentUserRole={userRole}
+                currentUserAvatarId={userSettings.avatarId}
+                participants={participants}
+                currentVideoId={videoId}
+                currentVideoTitle={
+                  syncState?.mediaIdentity?.title ||
+                  playlist.find((p) => p.videoId === videoId)?.title ||
+                  (videoId ? detectClientMedia(videoId)?.title || 'Live Video' : undefined)
+                }
+                currentVideoDuration={duration}
+                currentPlaybackTime={currentTime}
+                playState={syncState?.playState || 'paused'}
+                playbackSpeed={playbackSpeed}
+                volume={volume}
+                isMuted={isMuted}
+                playlist={playlist}
+                watchHistory={watchHistory}
+                chatMessages={chatMessages}
+                activePoll={activePoll}
+                recentActivities={activities}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onSeek={handleSeek}
+                onSetPlaybackSpeed={handleSetPlaybackSpeed}
+                onSetVolume={handleSetVolume}
+                onToggleMute={handleToggleMute}
+                onPlayVideo={(newVid) => emitChangeVideo(newVid, true)}
+                onNextVideo={handleNextVideo}
+                onAddToPlaylist={handleAddToPlaylist}
+                onMoveToTop={handleMoveToTop}
+                onShufflePlaylist={handleShufflePlaylist}
+                onClearPlaylist={handleClearPlaylist}
+                onSendMessage={handleSendChat}
+                onNotify={onNotify}
+              />
             )}
           </div>
         </aside>

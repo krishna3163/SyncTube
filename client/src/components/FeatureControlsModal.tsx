@@ -54,6 +54,7 @@ const FEATURE_ICONS: Record<FeatureFlagKey, LucideIcon> = {
   browserHub: Tv,
   actionRequests: ShieldCheck,
   activityFeed: Activity,
+  syncAi: Sparkles,
   syncDiagnostics: Activity,
   autoResync: Zap,
 };
