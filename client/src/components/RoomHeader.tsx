@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal, Volume2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Tv, Copy, Check, LogOut, Settings, Share2, Search, Clapperboard, Activity, User, Globe, Film, SlidersHorizontal, Volume2, BookOpen, PartyPopper } from 'lucide-react';
 import { ConnectionStatus, SyncStatePayload, UserProfile } from '../types.js';
+import { RoomExperienceMode } from '../types/study.js';
 import { SyncQualityBadge } from './SyncQualityBadge.js';
 import { AnimeAvatarDisplay } from './AnimeAvatar.js';
+import { StudyHeaderClock } from './StudyHeaderClock.js';
 
 interface RoomHeaderProps {
   roomId: string;
@@ -20,6 +22,8 @@ interface RoomHeaderProps {
   currentUser?: UserProfile | null;
   isTheaterMode?: boolean;
   onToggleTheater?: () => void;
+  roomMode?: RoomExperienceMode;
+  onSelectRoomMode?: (mode: RoomExperienceMode) => void;
   syncState?: SyncStatePayload | null;
   currentTime?: number;
   onResync?: () => void;
@@ -41,11 +45,27 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
   currentUser,
   isTheaterMode,
   onToggleTheater,
+  roomMode = 'party',
+  onSelectRoomMode,
   syncState = null,
   currentTime = 0,
   onResync,
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
+        setIsModeMenuOpen(false);
+      }
+    };
+    if (isModeMenuOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [isModeMenuOpen]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomId);
@@ -56,7 +76,7 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
 
   return (
     <header className="app-header">
-      {/* Left Cluster: Brand & Room Code Chip */}
+      {/* Left Cluster: Brand & Room Code Chip OR Study Focus Clock */}
       <div className="header-left-cluster">
         <div className="brand" onClick={onLeaveRoom} title="SyncTube Home">
           <div className="brand-icon">
@@ -65,17 +85,32 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
           <span className="brand-title">SyncTube</span>
         </div>
 
-        <button
-          className={`header-room-chip ${copiedCode ? 'copied' : ''}`}
-          onClick={handleCopyCode}
-          title="Click to copy room code"
-          aria-label={`Copy room code ${roomId}`}
-        >
-          <span className="room-chip-dot" />
-          <span className="room-chip-label">Room</span>
-          <strong className="room-chip-code">{roomId}</strong>
-          {copiedCode ? <Check size={13} className="text-emerald animate-check-bounce" /> : <Copy size={13} />}
-        </button>
+        {roomMode === 'study' ? (
+          <StudyHeaderClock
+            roomId={roomId}
+            onCopyRoomCode={handleCopyCode}
+            copiedCode={copiedCode}
+            onPomodoroEnd={(mode) => {
+              if (mode === 'focus') {
+                onNotify('☕ Great focus session! Time for a 5-minute break.', 'success');
+              } else {
+                onNotify('📚 Break over! Ready for the next focus sprint.', 'info');
+              }
+            }}
+          />
+        ) : (
+          <button
+            className={`header-room-chip ${copiedCode ? 'copied' : ''}`}
+            onClick={handleCopyCode}
+            title="Click to copy room code"
+            aria-label={`Copy room code ${roomId}`}
+          >
+            <span className="room-chip-dot" />
+            <span className="room-chip-label">Room</span>
+            <strong className="room-chip-code">{roomId}</strong>
+            {copiedCode ? <Check size={13} className="text-emerald animate-check-bounce" /> : <Copy size={13} />}
+          </button>
+        )}
       </div>
 
       {/* Center: Live Sync Quality Badge */}
@@ -117,21 +152,85 @@ export const RoomHeader: React.FC<RoomHeaderProps> = ({
         )}
 
 
-        {/* Quick Tools Cluster */}
+        {/* Quick Tools Cluster with 3-Mode Switcher */}
         <div className="header-tools-group">
-          {onToggleTheater && (
+          {/* Mode Switcher: Party Mode (Default), Cinema Theater Mode, Study Mode */}
+          <div className="header-mode-dropdown-wrap" ref={modeMenuRef}>
             <button
-              className={`btn-icon header-tool-btn ${isTheaterMode ? 'active' : ''}`}
+              type="button"
+              className={`btn-icon header-tool-btn header-mode-btn ${roomMode === 'study' ? 'mode-study-active' : roomMode === 'cinema' ? 'mode-cinema-active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleTheater();
+                setIsModeMenuOpen(!isModeMenuOpen);
               }}
-              title={isTheaterMode ? 'Exit Cinema Theater Mode' : 'Cinema Theater Mode (Dim Lights)'}
-              aria-label="Toggle Theater Mode"
+              title={`Mode: ${roomMode === 'study' ? 'Study & Focus' : roomMode === 'cinema' ? 'Cinema Theater' : 'Party Mode (Default)'}. Click to switch.`}
+              aria-label="Toggle Mode Menu"
             >
-              <Clapperboard size={15} color={isTheaterMode ? 'var(--accent)' : 'currentColor'} />
+              {roomMode === 'study' ? (
+                <BookOpen size={15} color="#34d399" />
+              ) : roomMode === 'cinema' ? (
+                <Clapperboard size={15} color="#ffd21f" />
+              ) : (
+                <PartyPopper size={15} color="#f59e0b" />
+              )}
             </button>
-          )}
+
+            {isModeMenuOpen && (
+              <div className="header-mode-menu-dropdown animate-scale-in">
+                <div className="mode-menu-header">
+                  <span>Room Mode</span>
+                </div>
+
+                <button
+                  type="button"
+                  className={`mode-menu-option ${roomMode === 'party' ? 'active' : ''}`}
+                  onClick={() => {
+                    onSelectRoomMode?.('party');
+                    setIsModeMenuOpen(false);
+                    onNotify('🍿 Switched to Party Mode (Full Social Watch Party)', 'info');
+                  }}
+                >
+                  <PartyPopper size={15} className="text-amber-400" />
+                  <div className="mode-option-text">
+                    <strong>Party Mode (Default)</strong>
+                    <span>Live chat, queue, video call, and reactions</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`mode-menu-option ${roomMode === 'cinema' ? 'active' : ''}`}
+                  onClick={() => {
+                    onSelectRoomMode?.('cinema');
+                    setIsModeMenuOpen(false);
+                    onNotify('🎬 Switched to Cinema Mode (Dim Lights & Theater Stage)', 'info');
+                  }}
+                >
+                  <Clapperboard size={15} className="text-yellow-400" />
+                  <div className="mode-option-text">
+                    <strong>Cinema Theater Mode</strong>
+                    <span>Dim background lights & maximized player</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`mode-menu-option ${roomMode === 'study' ? 'active' : ''}`}
+                  onClick={() => {
+                    onSelectRoomMode?.('study');
+                    setIsModeMenuOpen(false);
+                    onNotify('📚 Switched to Study Mode: Distractions hidden, focus tools enabled!', 'success');
+                  }}
+                >
+                  <BookOpen size={15} className="text-emerald-400" />
+                  <div className="mode-option-text">
+                    <strong>Study & Focus Mode</strong>
+                    <span>Focus clock, timestamped notes, tasks & PDF</span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
 
           {onOpenDiagnostics && showDiagnostics && (
             <button

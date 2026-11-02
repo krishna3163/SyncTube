@@ -84,6 +84,8 @@ import { rememberParticipantCharacter, subscribeCharacterUpdates, getParticipant
 import { StreamEndedOverlay } from '../components/StreamEndedOverlay.js';
 import { LucideIcon, Users, ListMusic, Activity, MessageSquare, Bell, Check, X, Search, Film, Globe, RefreshCw, Radio, ChevronLeft, ChevronRight, Monitor, Share2, Volume2, SlidersHorizontal, Settings, LogOut, Sparkles } from 'lucide-react';
 import { SyncAI } from '../components/SyncAI.js';
+import { RoomExperienceMode } from '../types/study.js';
+import { StudySuite } from '../components/StudySuite.js';
 import {
   playRequestAlertSound,
   playMessageReceiveSound,
@@ -308,8 +310,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     setIsSettingsOpen(true);
   };
 
-  // New Features: Theater Mode, Invite Modal, YouTube Search Modal
+  // Room Modes: 'party' (default), 'cinema', 'study'
+  const [roomMode, setRoomMode] = useState<RoomExperienceMode>('party');
   const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
+  const isStudyMode = roomMode === 'study';
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [volume, setVolume] = useState<number>(100);
@@ -1532,9 +1536,53 @@ export const RoomPage: React.FC<RoomPageProps> = ({
     onNotify('⚙️ Cinema upgraded! New room atmosphere applied 🎪', 'success');
   };
 
+  const handleLeaveRoom = useCallback(() => {
+    if (roomMode === 'study') {
+      try {
+        const savedNotes = localStorage.getItem(`synctube_notes_${roomId}`);
+        const notesArr = savedNotes ? JSON.parse(savedNotes) : [];
+        const savedTasks = localStorage.getItem(`synctube_tasks_${roomId}`);
+        const tasksArr = savedTasks ? JSON.parse(savedTasks) : [];
+
+        if ((Array.isArray(notesArr) && notesArr.length > 0) || (Array.isArray(tasksArr) && tasksArr.length > 0)) {
+          let content = `# SyncTube Study Notes & Summary\n`;
+          content += `**Room:** ${roomSettings.name || roomId}\n`;
+          content += `**Date:** ${new Date().toLocaleString()}\n\n`;
+
+          if (notesArr.length > 0) {
+            content += `## 📝 Timestamped Notes\n\n`;
+            notesArr.forEach((n: any, idx: number) => {
+              content += `### ${idx + 1}. [${n.timestampFormatted || '00:00'}] ${n.videoTitle || 'Lecture'}\n${n.text}\n\n`;
+            });
+          }
+
+          if (tasksArr.length > 0) {
+            content += `## ✅ Study Tasks Completed\n\n`;
+            tasksArr.forEach((t: any) => {
+              content += `- [${t.completed ? 'x' : ' '}] ${t.text}\n`;
+            });
+          }
+
+          const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `SyncTube_Study_Notes_${roomId}_SessionEnd.md`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      } catch (err) {
+        console.error('Failed to auto-download study notes', err);
+      }
+    }
+    onLeaveRoom();
+  }, [roomMode, roomId, roomSettings.name, onLeaveRoom]);
+
   const handleDeleteRoom = () => {
     onNotify('🚪 The host closed the theater curtains! Watch party ended. See you next time! 🎬👋', 'error');
-    onLeaveRoom();
+    handleLeaveRoom();
   };
 
   // Participant Action Requests & Approvals
@@ -1692,7 +1740,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
       <RoomHeader
         roomId={roomId}
         connectionStatus={connectionStatus}
-        onLeaveRoom={onLeaveRoom}
+        onLeaveRoom={handleLeaveRoom}
         onNotify={onNotify}
         onOpenSettings={() => handleOpenSettings('room')}
         onOpenInvite={() => setIsInviteModalOpen(true)}
@@ -1703,6 +1751,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
         currentUser={currentUser}
         isTheaterMode={isTheaterMode || featureFlags.theaterMode}
         onToggleTheater={handleToggleTheaterMode}
+        roomMode={roomMode}
+        onSelectRoomMode={(mode) => {
+          setRoomMode(mode);
+          setIsTheaterMode(mode === 'cinema');
+        }}
         syncState={syncState}
         currentTime={currentTime}
         onResync={handleResync}
@@ -1954,7 +2007,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       handleSeek(0);
                       handlePlay(0);
                     }}
-                    onReturnHome={onLeaveRoom}
+                    onReturnHome={handleLeaveRoom}
                   />
                 )}
 
@@ -2005,7 +2058,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                       onSetPlaybackSpeed={userRole === 'HOST' || userRole === 'MODERATOR' ? handleSetPlaybackSpeed : undefined}
                       onRequestAction={handleRequestAction}
                       onOpenRequestsTab={() => setActiveSidebarTab('requests')}
-                      reactionControl={featureFlags.floatingReactions ? <FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded /> : undefined}
+                      reactionControl={featureFlags.floatingReactions && !isStudyMode ? <FloatingReactions socket={socket} username={username} avatarId={userSettings.avatarId} currentTime={currentTime} userRole={userRole} inline alwaysExpanded /> : undefined}
                       roomUptimeSeconds={roomUptimeSeconds}
                     />
                   </div>
@@ -2097,11 +2150,11 @@ export const RoomPage: React.FC<RoomPageProps> = ({
           />
         </div>
 
-        {/* Right Side: Sidebar with Participants, Playlist, and Activity */}
+        {/* Right Side: Sidebar with Participants, Playlist, and Activity OR Study Suite */}
         <aside className="sidebar">
 
-          {/* Zoom / Google Meet Style Voice & Video Call Stage above Tab Bar */}
-          {featureFlags.voiceVideoCall && (
+          {/* Zoom / Google Meet Style Voice & Video Call Stage above Tab Bar - hidden in Study Mode */}
+          {featureFlags.voiceVideoCall && !isStudyMode && (
             <SidebarCallStage
               currentUserId={userId}
               currentUsername={username}
@@ -2113,8 +2166,30 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             />
           )}
 
-          {/* Button-style Segmented Tab Bar with smooth horizontal navigation */}
-          <div className="sidebar-tab-wrapper">
+          {isStudyMode ? (
+            <StudySuite
+              roomId={roomId}
+              roomName={roomSettings.name}
+              currentVideoId={videoId}
+              currentVideoTitle={
+                syncState?.mediaIdentity?.title ||
+                playlist.find((p) => p.videoId === videoId)?.title ||
+                (videoId ? detectClientMedia(videoId)?.title || 'Lecture Video' : undefined)
+              }
+              currentPlaybackTime={currentTime}
+              duration={duration}
+              onSeek={handleSeek}
+              onOpenSyncAI={(prompt) => {
+                setRoomMode('party');
+                setActiveSidebarTab('ai');
+                if (prompt) onNotify(`✨ Switched to SyncAI for: "${prompt}"`, 'info');
+              }}
+              onNotify={onNotify}
+            />
+          ) : (
+            <>
+              {/* Button-style Segmented Tab Bar with smooth horizontal navigation */}
+              <div className="sidebar-tab-wrapper">
             {canScrollLeft && (
               <button
                 type="button"
@@ -2303,6 +2378,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               />
             )}
           </div>
+            </>
+          )}
         </aside>
       </main>
 
