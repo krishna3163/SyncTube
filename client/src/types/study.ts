@@ -23,11 +23,26 @@ export interface StudyRule {
   title: string;
   description: string;
   enabled: boolean;
-  triggerType: 'playback_duration' | 'time_interval' | 'video_ended' | 'pomodoro_end';
+  triggerType:
+    | 'playback_duration'
+    | 'time_interval'
+    | 'video_ended'
+    | 'pomodoro_end'
+    | 'countdown'
+    | 'clock_time'
+    | 'calendar_datetime'
+    | 'video_timestamp';
   intervalMinutes?: number;
+  countdownMinutes?: number;
+  targetTimestampMs?: number; // target wall-clock time for countdown / calendar
+  clockTime?: string; // e.g. "20:30" (HH:MM in 24h)
+  targetVideoTimestamp?: number; // timestamp in seconds in video
+  targetVideoTitle?: string;
   actionMessage: string;
   autoPauseVideo?: boolean;
   lastTriggered?: number;
+  isCustom?: boolean;
+  createdAt?: number;
 }
 
 export interface StudyPlan {

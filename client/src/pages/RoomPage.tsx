@@ -1951,7 +1951,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                             <span>Search YouTube</span>
                           </button>
                         )}
-                        {featureFlags.screenShare && (
+                        {featureFlags.screenShare && !isStudyMode && (
                           <button
                             type="button"
                             className="origin-secondary-action-btn"
@@ -1960,17 +1960,6 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                           >
                             <Monitor size={16} />
                             <span>Share Screen</span>
-                          </button>
-                        )}
-                        {featureFlags.browserHub && (
-                          <button
-                            type="button"
-                            className="origin-secondary-action-btn"
-                            onClick={() => setIsBrowserHubOpen(true)}
-                            title="Open Direct Stream & Web Media (MP4, HLS m3u8, Netflix, Prime)"
-                          >
-                            <Globe size={16} />
-                            <span>Direct Stream & Web Media</span>
                           </button>
                         )}
                       </div>
@@ -2110,45 +2099,47 @@ export const RoomPage: React.FC<RoomPageProps> = ({
             />
           </div>
 
-          {/* Live Stream Metadata Bar & Experience Info below stage (and below controls dock on phone view) */}
-          <StreamInfoBar
-            roomId={roomId}
-            title={
-              syncState?.mediaIdentity?.title ||
-              playlist.find((p) => p.videoId === videoId)?.title ||
-              (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
-            }
-            hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
-            hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
-            hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
-            userRole={userRole}
-            viewersCount={participants.length}
-            streamStartedAt={syncState?.createdAt || streamStartedAt}
-            category={streamCategory}
-            onSetCategory={handleSetCategory}
-            description={streamDescription || syncState?.description}
-            onUpdateDescription={handleUpdateDescription}
-            tags={roomTags}
-            onUpdateTags={handleUpdateTags}
-            likes={roomLikes}
-            hasLiked={hasLikedRoom}
-            onToggleLike={handleToggleRoomLike}
-            isHostRegistered={Boolean(
-              userRole === 'HOST' ||
-              participants.some((p) => p.role === 'HOST') ||
-              (currentUser?.id && currentUser?.email)
-            )}
-            hostFollowersCount={currentUser?.followersCount}
-            onOpenShare={() => setIsShareModalOpen(true)}
-            onOpenReport={() => setIsReportModalOpen(true)}
-            onNotify={onNotify}
-            thumbnailUrl={
-              playlist.find((p) => p.videoId === videoId)?.thumbnail ||
-              (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
-                ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
-                : undefined)
-            }
-          />
+          {/* Live Stream Metadata Bar & Experience Info below stage (hidden in Study Mode for distraction-free focus) */}
+          {!isStudyMode && (
+            <StreamInfoBar
+              roomId={roomId}
+              title={
+                syncState?.mediaIdentity?.title ||
+                playlist.find((p) => p.videoId === videoId)?.title ||
+                (videoId ? detectClientMedia(videoId)?.title || 'Live Cinema Stream' : `${participants.find((p) => p.role === 'HOST')?.username || username}'s Live Watch Party`)
+              }
+              hostUsername={participants.find((p) => p.role === 'HOST')?.username || (userRole === 'HOST' ? username : 'Host')}
+              hostAvatarId={participants.find((p) => p.role === 'HOST')?.avatarId || (userRole === 'HOST' ? userSettings.avatarId : undefined)}
+              hostRole={participants.find((p) => p.role === 'HOST')?.role || 'HOST'}
+              userRole={userRole}
+              viewersCount={participants.length}
+              streamStartedAt={syncState?.createdAt || streamStartedAt}
+              category={streamCategory}
+              onSetCategory={handleSetCategory}
+              description={streamDescription || syncState?.description}
+              onUpdateDescription={handleUpdateDescription}
+              tags={roomTags}
+              onUpdateTags={handleUpdateTags}
+              likes={roomLikes}
+              hasLiked={hasLikedRoom}
+              onToggleLike={handleToggleRoomLike}
+              isHostRegistered={Boolean(
+                userRole === 'HOST' ||
+                participants.some((p) => p.role === 'HOST') ||
+                (currentUser?.id && currentUser?.email)
+              )}
+              hostFollowersCount={currentUser?.followersCount}
+              onOpenShare={() => setIsShareModalOpen(true)}
+              onOpenReport={() => setIsReportModalOpen(true)}
+              onNotify={onNotify}
+              thumbnailUrl={
+                playlist.find((p) => p.videoId === videoId)?.thumbnail ||
+                (videoId && !videoId.startsWith('tb:') && !videoId.startsWith('tab:')
+                  ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+                  : undefined)
+              }
+            />
+          )}
         </div>
 
         {/* Right Side: Sidebar with Participants, Playlist, and Activity OR Study Suite */}
@@ -2180,6 +2171,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               currentPlaybackTime={currentTime}
               duration={duration}
               onSeek={handleSeek}
+              onPause={handlePause}
               onOpenSyncAI={(prompt) => {
                 setRoomMode('party');
                 setActiveSidebarTab('ai');
