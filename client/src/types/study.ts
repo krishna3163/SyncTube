@@ -37,3 +37,4 @@ export interface StudyPlan {
   pomodoroMinutes: number;
   breakMinutes: number;
 }
+

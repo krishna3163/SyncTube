@@ -86,6 +86,8 @@ export interface SyncAIProps {
   onClearPlaylist: () => void;
   onSendMessage: (text: string) => void;
   onNotify: (msg: string, type: 'info' | 'success' | 'error') => void;
+  initialPrompt?: string;
+  onClearInitialPrompt?: () => void;
 }
 
 interface MessageItem {
@@ -145,6 +147,8 @@ export const SyncAI: React.FC<SyncAIProps> = ({
   onClearPlaylist,
   onSendMessage,
   onNotify,
+  initialPrompt,
+  onClearInitialPrompt,
 }) => {
   const [apiKey, setApiKey] = useState<string>(() => getStoredGeminiApiKey());
   const [keyInput, setKeyInput] = useState<string>('');
@@ -154,11 +158,25 @@ export const SyncAI: React.FC<SyncAIProps> = ({
 
   const [inputPrompt, setInputPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [messages, setMessages] = useState<MessageItem[]>(() => [
-    {
-      id: 'welcome',
-      sender: 'ai',
-      text: `Hello ${currentUsername}! ✨ I'm SyncAI, your intelligent room companion powered by Google AI Studio (Gemini).
+
+  const storageKey = `synctube_ai_chat_${roomId}`;
+  const [messages, setMessages] = useState<MessageItem[]>(() => {
+    try {
+      const stored = localStorage.getItem(`synctube_ai_chat_${roomId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse stored SyncAI chat messages', e);
+    }
+    return [
+      {
+        id: 'welcome',
+        sender: 'ai',
+        text: `Hello ${currentUsername}! ✨ I'm SyncAI, your intelligent room companion powered by Google AI Studio (Gemini).
 
 I have full real-time awareness of:
 • 📺 Current playback state & timing
@@ -167,9 +185,10 @@ I have full real-time awareness of:
 • 👥 Viewers & room permissions (${currentUserRole})
 
 You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), summarize the chat, adjust video speed, seek forward/back, or add songs to play next!`,
-      timestamp: Date.now(),
-    },
-  ]);
+        timestamp: Date.now(),
+      },
+    ];
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +196,15 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // Persist messages whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch (e) {
+      console.warn('Failed to persist SyncAI chat to localStorage', e);
+    }
+  }, [messages, storageKey]);
 
   const handleSaveKey = () => {
     const trimmed = keyInput.trim();
@@ -201,6 +229,11 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
   };
 
   const handleClearChat = () => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
     setMessages([
       {
         id: 'reset',
@@ -319,6 +352,21 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
+
+  // Automatically execute or populate initial prompt when passed from other views (like Study Suite)
+  useEffect(() => {
+    if (initialPrompt && initialPrompt.trim()) {
+      const promptToRun = initialPrompt.trim();
+      onClearInitialPrompt?.();
+      if (!apiKey) {
+        setInputPrompt(promptToRun);
+        setIsEditingKey(true);
+        setApiError('Please enter your Google AI Studio API key to chat with SyncAI.');
+      } else {
+        handleSendMessage(promptToRun);
+      }
+    }
+  }, [initialPrompt, apiKey]);
 
   return (
     <div className="sync-ai-container">

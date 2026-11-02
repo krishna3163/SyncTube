@@ -122,3 +122,4 @@ export const StudyHeaderClock: React.FC<StudyHeaderClockProps> = ({
     </div>
   );
 };
+

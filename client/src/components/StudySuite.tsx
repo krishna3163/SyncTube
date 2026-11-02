@@ -686,3 +686,4 @@ export const StudySuite: React.FC<StudySuiteProps> = ({
     </div>
   );
 };
+

@@ -312,6 +312,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({
 
   // Room Modes: 'party' (default), 'cinema', 'study'
   const [roomMode, setRoomMode] = useState<RoomExperienceMode>('party');
+  const [pendingAiPrompt, setPendingAiPrompt] = useState<string>('');
   const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
   const isStudyMode = roomMode === 'study';
   const [isInviteModalOpen, setIsInviteModalOpen] = useState<boolean>(false);
@@ -2182,7 +2183,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({
               onOpenSyncAI={(prompt) => {
                 setRoomMode('party');
                 setActiveSidebarTab('ai');
-                if (prompt) onNotify(`✨ Switched to SyncAI for: "${prompt}"`, 'info');
+                if (prompt) {
+                  setPendingAiPrompt(prompt);
+                  onNotify(`✨ Switched to SyncAI for: "${prompt}"`, 'info');
+                }
               }}
               onNotify={onNotify}
             />
@@ -2375,6 +2379,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({
                 onClearPlaylist={handleClearPlaylist}
                 onSendMessage={handleSendChat}
                 onNotify={onNotify}
+                initialPrompt={pendingAiPrompt}
+                onClearInitialPrompt={() => setPendingAiPrompt('')}
               />
             )}
           </div>
