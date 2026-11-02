@@ -534,8 +534,8 @@ export async function sendPromptToGemini(
     },
   };
 
-  // Try gemini-2.0-flash first; if not found, fallback to gemini-1.5-flash
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  // Priority: Gemini 2.5 Flash, followed by Flash-Lite and latest production endpoints
+  const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-pro'];
   let lastError: Error | null = null;
   let responseData: any = null;
 

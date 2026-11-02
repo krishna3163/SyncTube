@@ -331,7 +331,7 @@ You can ask me to play any song (e.g. Hanumankind tracks, Bollywood, Lo-Fi), sum
           <div className="sync-ai-title-wrap">
             <div className="sync-ai-title-row">
               <span className="sync-ai-title">SyncAI</span>
-              <span className="sync-ai-badge">Gemini 2.0</span>
+              <span className="sync-ai-badge">Gemini 2.5</span>
             </div>
             <span className="sync-ai-status-text">
               {apiKey ? (
